@@ -21,8 +21,6 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  */
 @NonNullByDefault
 public class NumberUtils {
-    private final static Double UNDEF = new Double(-1);
-
     public static double round(Object o, int places) {
         double value = convert(o);
 
@@ -38,8 +36,7 @@ public class NumberUtils {
     }
 
     public static double convert(Object o) {
-        // ensure value not null
-        Double value = UNDEF;
+        Double value = null;
         if (o instanceof Integer) {
             value = (double) ((Integer) o).intValue();
         } else if (o instanceof String) {
