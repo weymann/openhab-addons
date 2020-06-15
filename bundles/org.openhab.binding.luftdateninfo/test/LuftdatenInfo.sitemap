@@ -1,0 +1,13 @@
+sitemap LuftdatenInfo label="LuftdatenInfo" {
+		Text item=PM_25 					label="Particulate Matter 2.5 [%s ug/m3]" 	
+		Text item=PM_100 					label="Particulate Matter 10 [%s ug/m3]" 	
+
+		Text item=TEMPERATURE				label="Temperature [%s °C]" 	
+		Text item=HUMIDITY 					label="Humidity [%s %%]" 	
+		Text item=PRESSURE 					label="Atmospheric Pressure [%s hpa]" 	
+		Text item=PRESSURE_SEA				label="Atmospheric Pressure sea [%s hpa]" 	
+
+		Text item=NOISE_EQ 					label="Noise avg [%s dbA]" 	
+		Text item=NOISE_MIN					label="Noise min [%s dbA]" 	
+		Text item=NOISE_MAX					label="Noise max [%s dbA]" 	
+}

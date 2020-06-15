@@ -1,0 +1,11 @@
+Number PM_25	      "PM2.5 [%.0f ug/m3]"                 { channel="luftdateninfo:particulate:pm_sensor:pm25"  } 
+Number PM_100	      "PM10 [%.0f ug/m3]"                  { channel="luftdateninfo:particulate:pm_sensor:pm100"  } 
+
+Number TEMPERATURE    "Temperature [%.0f °]"               { channel="luftdateninfo:conditions:cond_sensor:temperature"  } 
+Number HUMIDITY	      "Humidity [%.0f %%]"                 { channel="luftdateninfo:conditions:cond_sensor:humidity"  } 
+Number PRESSURE	      "Atmospheric Pressure [%.0f hpa]"    { channel="luftdateninfo:conditions:cond_sensor:pressure"  } 
+Number PRESSURE_SEA	  "Pressure sea level [%.0f hpa]"      { channel="luftdateninfo:conditions:cond_sensor:pressure-sea"  } 
+
+Number NOISE_EQ	      "Noise EQ [%.0f dbA]"                { channel="luftdateninfo:noise:noise_sensor:noise-eq"  } 
+Number NOISE_MIN	  "Noise min [%.0f dbA]"               { channel="luftdateninfo:noise:noise_sensor:noise-min"  } 
+Number NOISE_MAX	  "Noise max [%.0f dbA]"               { channel="luftdateninfo:noise:noise_sensor:noise-max"  } 
