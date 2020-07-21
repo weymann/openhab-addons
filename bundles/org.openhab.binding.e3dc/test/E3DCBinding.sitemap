@@ -1,0 +1,77 @@
+sitemap E3DCBinding label="E3DC Binding Sitemap" {
+  Frame label="Info" {
+    Text    item=E3DC_ModbusId                  label="Modbus-ID [%s]"
+    Text    item=E3DC_ModbusFirmware            label="Modbus Firmware [%s]"
+    Text    item=E3DC_SupportedRegisters        label="Registers [%s]"
+    Text    item=E3DC_Manufacturer              label="Manufacturer [%s]"
+    Text    item=E3DC_ModelName                 label="Model Name [%s]"
+    Text    item=E3DC_Firmware                  label="Firmware [%s]"
+    Text    item=E3DC_SerialNumber              label="Serial Number[%s]"
+  }
+  
+  Frame label="Power" {
+    Frame label="Producer" {
+      Text    item=E3DC_PVPower                 label="PV Power[%s]"
+      Text    item=E3DC_BatteryDischarge        label="Battery Discharge [%s]"
+      Text    item=E3DC_GridSupply              label="Grid Supply [%s]"
+      Text    item=E3DC_ExternalSupply          label="External Supply [%s]"
+    }
+    Frame label="Consumer" {
+      Text    item=E3DC_Household               label="Household [%s]"
+      Text    item=E3DC_BatteryCharge           label="Battery Charge [%s]"
+      Text    item=E3DC_GridConsumption         label="Grid Consumption [%s]"
+      Text    item=E3DC_WallboxConsumption      label="Wallbox [%s]"
+      Text    item=E3DC_WallboxPVConsumption    label="Wallbox PV[%s]"
+    }
+    Frame label="Measures" {
+      Text    item=E3DC_AutarkyLevel            label="Autarky [%s %%]"
+      Text    item=E3DC_SelfConsumptionLevel    label="Self Consumption [%s %%]"
+      Text    item=E3DC_BatterySOC              label="SOC [%s %%]"
+    }
+  }
+  
+  Frame label="Wallbox" {
+    Switch    item=E3DC_WB_Available            label="Available [%s]"
+    Switch    item=E3DC_WB_Sunmode              label="Sunmode [%s]"
+    Switch    item=E3DC_WB_ChargingAborted      label="Charging Aborted[%s]"
+    Switch    item=E3DC_WB_Charging             label="Charging [%s]"
+    Switch    item=E3DC_WB_JackLocked           label="Jack locked [%s]"
+    Switch    item=E3DC_WB_JackPlugged          label="Jack plugged [%s]"
+    Switch    item=E3DC_WB_SchukoOn             label="Schuko On [%s]"
+    Switch    item=E3DC_WB_SchukoPlugged        label="Schuko plugged [%s]"
+    Switch    item=E3DC_WB_SchukoLocked         label="Schuko locked [%s]"
+    Switch    item=E3DC_WB_Schuko_Relay16A      label="Schuko Relay 16A [%s]"
+    Switch    item=E3DC_WB_Relay16A             label="Relay 16A [%s]"
+    Switch    item=E3DC_WB_Relay32A             label="Relay 32A [%s]"
+    Switch    item=E3DC_WB_3PhaseLoading        label="3-Phase loading [%s]"
+  }
+  
+  Frame label="String Details" {
+    Frame label="String 1" {
+      Text    item=E3DC_String1V                label="Volt [%s]"
+      Text    item=E3DC_String1A                label="Ampere [%s]"
+      Text    item=E3DC_String1W                label="Watt [%s]"
+    }
+    Frame label="String 2" {
+      Text    item=E3DC_String2V                label="Volt [%s]"
+      Text    item=E3DC_String2A                label="Ampere [%s]"
+      Text    item=E3DC_String2W                label="Watt [%s]"
+    }
+    Frame label="String 3" {
+      Text    item=E3DC_String3V                label="Volt [%s]"
+      Text    item=E3DC_String3A                label="Ampere [%s]"
+      Text    item=E3DC_String3W                label="Watt [%s]"
+    }
+  }
+  
+  Frame label="EMS" {
+    Text      item=E3DC_EMS_Status                  label="Status [%s]"
+    Switch    item=E3DC_EMS_BatteryLoadingLock      label="Batter Loading Lock [%s]"
+    Switch    item=E3DC_EMS_BatteryUnloadingLock    label="Batter Unloading Lock [%s]"
+    Switch    item=E3DC_EMS_EmergencyPowerPossible  label="Emergency Power Possible [%s]"
+    Switch    item=E3DC_EMS_WeatherPredictedLoading label="Weather Predicted Loading [%s]"
+    Switch    item=E3DC_EMS_RegulationStatus        label="Regulation [%s]"
+    Switch    item=E3DC_EMS_LoadingLockTime         label="Loading Lock Times [%s]"
+    Switch    item=E3DC_EMS_UnloadingLockTime       label="Unloading Lock Times [%s]"
+  }
+}
