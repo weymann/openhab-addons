@@ -31,7 +31,7 @@ Switch    E3DC_WB_SchukoLocked          "E3DC WB Schuko Locked" (e3dc)  { channe
 Switch    E3DC_WB_Schuko_Relay16A       "E3DC WB Schuko 16A Relay"  (e3dc) { channel="e3dc:e3dc-wallbox:plant:wallboxblock:wb-schuko-relay-16a" }
 Switch    E3DC_WB_Relay16A              "E3DC WB 16A Relay"      (e3dc) { channel="e3dc:e3dc-wallbox:plant:wallboxblock:wb-relay-16a" }
 Switch    E3DC_WB_Relay32A              "E3DC WB 32A Relay"      (e3dc) { channel="e3dc:e3dc-wallbox:plant:wallboxblock:wb-relay-32a" }
-Switch    E3DC_WB_3PhaseLoading         "E3DC WB 3-Phase Loading"   (e3dc)  { channel="e3dc:e3dc-wallbox:plant:wallboxblock:wb-3phase" }
+Switch    E3DC_WB_1PhaseLoading         "E3DC WB 1-Phase Loading"   (e3dc)  { channel="e3dc:e3dc-wallbox:plant:wallboxblock:wb-1phase" }
 
 Number    E3DC_String1V                 "E3DC String 1 Volt"    (e3dc)  { channel="e3dc:e3dc-strings:plant:stringblock:string1-dc-voltage" }
 Number    E3DC_String2V                 "E3DC String 2 Volt"    (e3dc)  { channel="e3dc:e3dc-strings:plant:stringblock:string2-dc-voltage" }
