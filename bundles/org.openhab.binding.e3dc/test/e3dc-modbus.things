@@ -1,5 +1,5 @@
-Bridge modbus:tcp:device "AAA E3DC Modbus TCP" [ host="192.168.178.56", port=502, id=1 ] {
-	Bridge e3dc powerplant "AAA E3DC Power Plant" [ ] {
-    	 Thing e3dc-wallbox wallbox 			"AAA E3DC Wallbox"				[ wallboxId=0]
+Bridge modbus:tcp:device "E3DC Modbus TCP" [ host="192.168.178.56", port=502, id=1 ] {
+	Bridge e3dc powerplant "E3DC Power Plant" [ refresh=2500 ] {
+    	 Thing e3dc-wallbox wallbox0		"E3DC Wallbox"				[ wallboxId=0]
     }
 }

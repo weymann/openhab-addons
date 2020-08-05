@@ -1,4 +1,4 @@
-sitemap E3DCBinding label="E3DC Binding Sitemap" {
+sitemap E3DC label="E3DC Binding Sitemap" {
   Frame label="Info" {
     Text    item=E3DC_ModbusId                  label="Modbus-ID [%s]"
     Text    item=E3DC_ModbusFirmware            label="Modbus Firmware [%s]"
@@ -41,7 +41,7 @@ sitemap E3DCBinding label="E3DC Binding Sitemap" {
     Switch    item=E3DC_WB_Schuko_Relay16A      label="Schuko Relay 16A [%s]"
     Switch    item=E3DC_WB_Relay16A             label="Relay 16A [%s]"
     Switch    item=E3DC_WB_Relay32A             label="Relay 32A [%s]"
-    Switch    item=E3DC_WB_1PhaseLoading        label="1-Phase loading [%s]"
+    Switch    item=E3DC_WB_1PhaseCharging       label="1-Phase charging [%s]"
   }
   
     Frame label="String 1 Details" {
@@ -61,13 +61,13 @@ sitemap E3DCBinding label="E3DC Binding Sitemap" {
     }
   
   Frame label="EMS" {
-    Text      item=E3DC_EMS_Status                  label="Status [%s]"
-    Switch    item=E3DC_EMS_BatteryLoadingLock      label="Batter Loading Lock [%s]"
-    Switch    item=E3DC_EMS_BatteryUnloadingLock    label="Batter Unloading Lock [%s]"
-    Switch    item=E3DC_EMS_EmergencyPowerPossible  label="Emergency Power Possible [%s]"
-    Switch    item=E3DC_EMS_WeatherPredictedLoading label="Weather Predicted Loading [%s]"
-    Switch    item=E3DC_EMS_RegulationStatus        label="Regulation [%s]"
-    Switch    item=E3DC_EMS_LoadingLockTime         label="Loading Lock Times [%s]"
-    Switch    item=E3DC_EMS_UnloadingLockTime       label="Unloading Lock Times [%s]"
+    Text      item=E3DC_EMS_Status                      label="Status [%s]"
+    Switch    item=E3DC_EMS_BatteryChargingLock         label="Battery Charging Lock [%s]"
+    Switch    item=E3DC_EMS_BatteryDischargingLock      label="Battery Discharging Lock [%s]"
+    Switch    item=E3DC_EMS_EmergencyPowerPossible      label="Emergency Power Possible [%s]"
+    Switch    item=E3DC_EMS_WeatherPredictedCharging    label="Weather Predicted Charging [%s]"
+    Switch    item=E3DC_EMS_RegulationStatus            label="Regulation [%s]"
+    Switch    item=E3DC_EMS_ChargeLockTime              label="Charge Lock Times [%s]"
+    Switch    item=E3DC_EMS_DischargeLockTime           label="Discharge Lock Times [%s]"
   }
 }
