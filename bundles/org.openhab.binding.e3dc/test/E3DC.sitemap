@@ -10,22 +10,22 @@ sitemap E3DC label="E3DC Binding Sitemap" {
   }
   
     Frame label="Power Producer" {
-      Text    item=E3DC_PVPower                 label="PV Power[%s]"
-      Text    item=E3DC_BatteryDischarge        label="Battery Discharge [%s]"
-      Text    item=E3DC_GridSupply              label="Power from Grid [%s]"
-      Text    item=E3DC_ExternalSupply          label="External Supply [%s]"
+      Text    item=E3DC_PVPower                 label="PV Power [%d %unit%]"
+      Text    item=E3DC_BatteryDischarge        label="Battery Discharge [%d %unit%]"
+      Text    item=E3DC_GridSupply              label="Power from Grid [%d %unit%]"
+      Text    item=E3DC_ExternalSupply          label="External Supply [%d %unit%]"
     }
     Frame label="Power Consumer" {
-      Text    item=E3DC_Household               label="Household [%s]"
-      Text    item=E3DC_BatteryCharge           label="Battery Charge [%s]"
-      Text    item=E3DC_GridConsumption         label="Power to Grid [%s]"
-      Text    item=E3DC_WallboxConsumption      label="Wallbox [%s]"
-      Text    item=E3DC_WallboxPVConsumption    label="Wallbox PV[%s]"
+      Text    item=E3DC_Household               label="Household [%d %unit%]"
+      Text    item=E3DC_BatteryCharge           label="Battery Charge [%d %unit%]"
+      Text    item=E3DC_GridConsumption         label="Power to Grid [%d %unit%]"
+      Text    item=E3DC_WallboxConsumption      label="Wallbox [%d %unit%]"
+      Text    item=E3DC_WallboxPVConsumption    label="Wallbox PV [%d %unit%]"
     }
     Frame label="Power Measures" {
-      Text    item=E3DC_AutarkyLevel            label="Autarky [%s %%]"
-      Text    item=E3DC_SelfConsumptionLevel    label="Self Consumption [%s %%]"
-      Text    item=E3DC_BatterySOC              label="SOC [%s %%]"
+      Text    item=E3DC_AutarkyLevel            label="Autarky [%d %%]"
+      Text    item=E3DC_SelfConsumptionLevel    label="Self Consumption [%d %%]"
+      Text    item=E3DC_BatterySOC              label="SOC [%d %%]"
     }
   
   Frame label="Wallbox" {
@@ -45,19 +45,19 @@ sitemap E3DC label="E3DC Binding Sitemap" {
   }
   
     Frame label="String 1 Details" {
-      Text    item=E3DC_String1V                label="Volt [%s]"
-      Text    item=E3DC_String1A                label="Ampere [%s]"
-      Text    item=E3DC_String1W                label="Watt [%s]"
+      Text    item=E3DC_String1V                label="Volt [%d %unit%]"
+      Text    item=E3DC_String1A                label="Ampere [%.2f %unit%]"
+      Text    item=E3DC_String1W                label="Watt [%d %unit%]"
     }
     Frame label="String 2 Details" {
-      Text    item=E3DC_String2V                label="Volt [%s]"
-      Text    item=E3DC_String2A                label="Ampere [%s]"
-      Text    item=E3DC_String2W                label="Watt [%s]"
+      Text    item=E3DC_String2V                label="Volt [%d %unit%]"
+      Text    item=E3DC_String2A                label="Ampere [%.2f %unit%]"
+      Text    item=E3DC_String2W                label="Watt [%d %unit%]"
     }
     Frame label="String 3 Details" {
-      Text    item=E3DC_String3V                label="Volt [%s]"
-      Text    item=E3DC_String3A                label="Ampere [%s]"
-      Text    item=E3DC_String3W                label="Watt [%s]"
+      Text    item=E3DC_String3V                label="Volt [%d %unit%]"
+      Text    item=E3DC_String3A                label="Ampere [%.2f %unit%]"
+      Text    item=E3DC_String3W                label="Watt [%d %unit%]"
     }
   
   Frame label="EMS" {
