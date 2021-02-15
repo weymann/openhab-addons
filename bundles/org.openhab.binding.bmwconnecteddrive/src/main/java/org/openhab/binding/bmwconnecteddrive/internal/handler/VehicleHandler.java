@@ -61,6 +61,8 @@ import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 
+import com.google.gson.JsonSyntaxException;
+
 /**
  * The {@link VehicleHandler} is responsible for handling commands, which are
  * sent to one of the channels.
@@ -116,55 +118,31 @@ public class VehicleHandler extends VehicleChannelHandler {
     @SuppressWarnings("serial")
     private static final Map<String, ProfileKey> chargeEnableChannelKeys = new HashMap<>() {
         {
+            VehicleChannelHandler.timedChannels.forEach((key, channel) -> {
+                put(channel.timer + CHARGE_ENABLED, key);
+            });
             put(CHARGE_PROFILE_CLIMATE, ProfileKey.CLIMATE);
-            put(CHARGE_TIMER1_ENABLED, ProfileKey.TIMER1);
-            put(CHARGE_TIMER2_ENABLED, ProfileKey.TIMER2);
-            put(CHARGE_TIMER3_ENABLED, ProfileKey.TIMER3);
-            put(CHARGE_OVERRIDE_ENABLED, ProfileKey.OVERRIDE);
         }
     };
 
     @SuppressWarnings("serial")
     private static final Map<String, ChargeKeyHour> chargeTimeChannelKeys = new HashMap<>() {
         {
-            put(CHARGE_WINDOW_START_HOUR, new ChargeKeyHour(ProfileKey.WINDOWSTART, true));
-            put(CHARGE_WINDOW_START_MINUTE, new ChargeKeyHour(ProfileKey.WINDOWSTART, false));
-            put(CHARGE_WINDOW_END_HOUR, new ChargeKeyHour(ProfileKey.WINDOWEND, true));
-            put(CHARGE_WINDOW_END_MINUTE, new ChargeKeyHour(ProfileKey.WINDOWEND, false));
-            put(CHARGE_TIMER1_DEPARTURE_HOUR, new ChargeKeyHour(ProfileKey.TIMER1, true));
-            put(CHARGE_TIMER1_DEPARTURE_MINUTE, new ChargeKeyHour(ProfileKey.TIMER1, false));
-            put(CHARGE_TIMER2_DEPARTURE_HOUR, new ChargeKeyHour(ProfileKey.TIMER2, true));
-            put(CHARGE_TIMER2_DEPARTURE_MINUTE, new ChargeKeyHour(ProfileKey.TIMER2, false));
-            put(CHARGE_TIMER3_DEPARTURE_HOUR, new ChargeKeyHour(ProfileKey.TIMER3, true));
-            put(CHARGE_TIMER3_DEPARTURE_MINUTE, new ChargeKeyHour(ProfileKey.TIMER3, false));
-            put(CHARGE_OVERRIDE_DEPARTURE_HOUR, new ChargeKeyHour(ProfileKey.OVERRIDE, true));
-            put(CHARGE_OVERRIDE_DEPARTURE_MINUTE, new ChargeKeyHour(ProfileKey.OVERRIDE, false));
+            VehicleChannelHandler.timedChannels.forEach((key, channel) -> {
+                put(channel.time + CHARGE_HOUR, new ChargeKeyHour(key, true));
+                put(channel.time + CHARGE_MINUTE, new ChargeKeyHour(key, false));
+            });
         }
     };
+
     @SuppressWarnings("serial")
     private static final Map<String, ChargeKeyDay> chargeDayChannelKeys = new HashMap<>() {
         {
-            put(CHARGE_TIMER1_DAY_MON, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.MONDAY));
-            put(CHARGE_TIMER1_DAY_TUE, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.TUESDAY));
-            put(CHARGE_TIMER1_DAY_WED, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.WEDNESDAY));
-            put(CHARGE_TIMER1_DAY_THU, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.THURSDAY));
-            put(CHARGE_TIMER1_DAY_FRI, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.FRIDAY));
-            put(CHARGE_TIMER1_DAY_SAT, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.SATURDAY));
-            put(CHARGE_TIMER1_DAY_SUN, new ChargeKeyDay(ProfileKey.TIMER1, DayOfWeek.SUNDAY));
-            put(CHARGE_TIMER2_DAY_MON, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.MONDAY));
-            put(CHARGE_TIMER2_DAY_TUE, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.TUESDAY));
-            put(CHARGE_TIMER2_DAY_WED, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.WEDNESDAY));
-            put(CHARGE_TIMER2_DAY_THU, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.THURSDAY));
-            put(CHARGE_TIMER2_DAY_FRI, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.FRIDAY));
-            put(CHARGE_TIMER2_DAY_SAT, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.SATURDAY));
-            put(CHARGE_TIMER2_DAY_SUN, new ChargeKeyDay(ProfileKey.TIMER2, DayOfWeek.SUNDAY));
-            put(CHARGE_TIMER3_DAY_MON, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.MONDAY));
-            put(CHARGE_TIMER3_DAY_TUE, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.TUESDAY));
-            put(CHARGE_TIMER3_DAY_WED, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.WEDNESDAY));
-            put(CHARGE_TIMER3_DAY_THU, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.THURSDAY));
-            put(CHARGE_TIMER3_DAY_FRI, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.FRIDAY));
-            put(CHARGE_TIMER3_DAY_SAT, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.SATURDAY));
-            put(CHARGE_TIMER3_DAY_SUN, new ChargeKeyDay(ProfileKey.TIMER3, DayOfWeek.SUNDAY));
+            VehicleChannelHandler.dayChannels.forEach((dayOfWeek, dayChannel) -> {
+                put(CHARGE_TIMER1 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER1, dayOfWeek));
+                put(CHARGE_TIMER2 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER2, dayOfWeek));
+                put(CHARGE_TIMER3 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER3, dayOfWeek));
+            });
         }
     };
 
@@ -245,7 +223,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                                 proxy.get().requestImage(configuration.get(), imageProperties, imageCallback);
                             }
                         }
-                        updateState(imageViewportChannel, StringType.valueOf(newViewport));
+                        updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT, StringType.valueOf(newViewport));
                     }
                 }
                 if (command instanceof DecimalType) {
@@ -260,7 +238,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                                 }
                             }
                         }
-                        updateState(imageSizeChannel, new DecimalType(newImageSize));
+                        updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE, new DecimalType(newImageSize));
                     }
                 }
             }
@@ -324,8 +302,10 @@ public class VehicleHandler extends VehicleChannelHandler {
                     imageProperties = new ImageProperties(configuration.get().imageViewport,
                             configuration.get().imageSize);
                 }
-                updateState(imageViewportChannel, StringType.valueOf((configuration.get().imageViewport)));
-                updateState(imageSizeChannel, new DecimalType((configuration.get().imageSize)));
+                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT,
+                        StringType.valueOf((configuration.get().imageViewport)));
+                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE,
+                        new DecimalType((configuration.get().imageSize)));
 
                 // check imperial setting is different to AutoDetect
                 if (!UNITS_AUTODETECT.equals(configuration.get().units)) {
@@ -421,20 +401,24 @@ public class VehicleHandler extends VehicleChannelHandler {
             logger.debug("### Vehicle Status ###");
 
             // Anonymous data for VIN and Position
-            VehicleStatusContainer container = Converter.getGson().fromJson(vehicleStatus,
-                    VehicleStatusContainer.class);
-            if (container != null) {
-                VehicleStatus status = container.vehicleStatus;
-                if (status != null) {
-                    status.vin = Constants.ANONYMOUS;
-                    if (status.position != null) {
-                        status.position.lat = -1;
-                        status.position.lon = -1;
-                        status.position.heading = -1;
+            try {
+                VehicleStatusContainer container = Converter.getGson().fromJson(vehicleStatus,
+                        VehicleStatusContainer.class);
+                if (container != null) {
+                    VehicleStatus status = container.vehicleStatus;
+                    if (status != null) {
+                        status.vin = Constants.ANONYMOUS;
+                        if (status.position != null) {
+                            status.position.lat = -1;
+                            status.position.lon = -1;
+                            status.position.heading = -1;
+                        }
                     }
                 }
+                logger.debug("{}", Converter.getGson().toJson(container));
+            } catch (JsonSyntaxException jse) {
+                logger.debug("{}", jse.getMessage());
             }
-            logger.debug("{}", Converter.getGson().toJson(container));
         }, () -> {
             logger.debug("### Vehicle Status Empty ###");
         });
@@ -460,21 +444,25 @@ public class VehicleHandler extends VehicleChannelHandler {
         }
         destinationCache.ifPresentOrElse(destination -> {
             logger.debug("### Charge Profile ###");
-            DestinationContainer container = Converter.getGson().fromJson(destination, DestinationContainer.class);
-            if (container != null) {
-                if (container.destinations != null) {
-                    container.destinations.forEach(entry -> {
-                        entry.lat = 0;
-                        entry.lon = 0;
-                        entry.city = Constants.ANONYMOUS;
-                        entry.street = Constants.ANONYMOUS;
-                        entry.streetNumber = Constants.ANONYMOUS;
-                        entry.country = Constants.ANONYMOUS;
-                    });
-                    logger.debug("{}", Converter.getGson().toJson(container));
+            try {
+                DestinationContainer container = Converter.getGson().fromJson(destination, DestinationContainer.class);
+                if (container != null) {
+                    if (container.destinations != null) {
+                        container.destinations.forEach(entry -> {
+                            entry.lat = 0;
+                            entry.lon = 0;
+                            entry.city = Constants.ANONYMOUS;
+                            entry.street = Constants.ANONYMOUS;
+                            entry.streetNumber = Constants.ANONYMOUS;
+                            entry.country = Constants.ANONYMOUS;
+                        });
+                        logger.debug("{}", Converter.getGson().toJson(container));
+                    }
+                } else {
+                    logger.debug("### Destinations Empty ###");
                 }
-            } else {
-                logger.debug("### Destinations Empty ###");
+            } catch (JsonSyntaxException jse) {
+                logger.debug("{}", jse.getMessage());
             }
         }, () -> {
             logger.debug("### Charge Profile Empty ###");
@@ -514,7 +502,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                 && ExecutionState.EXECUTED.toString().equals(status)) {
             saveChargeProfileSent();
         }
-        updateState(remoteStateChannel, StringType.valueOf(Converter.toTitleCase(
+        updateChannel(CHANNEL_GROUP_REMOTE, REMOTE_STATE, StringType.valueOf(Converter.toTitleCase(
                 new StringBuilder(service == null ? "-" : service).append(" ").append(status).toString())));
     }
 
@@ -582,11 +570,12 @@ public class VehicleHandler extends VehicleChannelHandler {
         public void onResponse(@Nullable String content) {
             destinationCache = Optional.ofNullable(content);
             if (content != null) {
-                DestinationContainer dc = Converter.getGson().fromJson(content, DestinationContainer.class);
-                if (dc != null) {
-                    if (dc.destinations != null) {
+                try {
+                    DestinationContainer dc = Converter.getGson().fromJson(content, DestinationContainer.class);
+                    if (dc != null && dc.destinations != null) {
                         updateDestinations(dc.destinations);
                     }
+                } catch (JsonSyntaxException jse) {
                 }
             }
             removeCallback(this);
@@ -610,7 +599,7 @@ public class VehicleHandler extends VehicleChannelHandler {
             if (content.length > 0) {
                 imageCache = Optional.of(content);
                 String contentType = HttpUtil.guessContentTypeFromData(content);
-                updateState(imageChannel, new RawType(content, contentType));
+                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_FORMAT, new RawType(content, contentType));
             } else {
                 synchronized (imageProperties) {
                     imageProperties.failed();
@@ -638,12 +627,15 @@ public class VehicleHandler extends VehicleChannelHandler {
         public void onResponse(@Nullable String content) {
             if (content != null) {
                 allTripsCache = Optional.of(content);
-                AllTripsContainer atc = Converter.getGson().fromJson(content, AllTripsContainer.class);
-                if (atc != null) {
-                    AllTrips at = atc.allTrips;
-                    if (at != null) {
-                        updateAllTrips(at);
+                try {
+                    AllTripsContainer atc = Converter.getGson().fromJson(content, AllTripsContainer.class);
+                    if (atc != null) {
+                        AllTrips at = atc.allTrips;
+                        if (at != null) {
+                            updateAllTrips(at);
+                        }
                     }
+                } catch (JsonSyntaxException jse) {
                 }
             }
             removeCallback(this);
@@ -666,12 +658,15 @@ public class VehicleHandler extends VehicleChannelHandler {
         public void onResponse(@Nullable String content) {
             if (content != null) {
                 lastTripCache = Optional.of(content);
-                LastTripContainer lt = Converter.getGson().fromJson(content, LastTripContainer.class);
-                if (lt != null) {
-                    LastTrip trip = lt.lastTrip;
-                    if (trip != null) {
-                        updateLastTrip(trip);
+                try {
+                    LastTripContainer lt = Converter.getGson().fromJson(content, LastTripContainer.class);
+                    if (lt != null) {
+                        LastTrip trip = lt.lastTrip;
+                        if (trip != null) {
+                            updateLastTrip(trip);
+                        }
                     }
+                } catch (JsonSyntaxException jse) {
                 }
             }
             removeCallback(this);
@@ -714,16 +709,19 @@ public class VehicleHandler extends VehicleChannelHandler {
             if (content != null) {
                 setThingStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, Constants.EMPTY);
                 vehicleStatusCache = Optional.of(content);
-                VehicleStatusContainer status = Converter.getGson().fromJson(content, VehicleStatusContainer.class);
-                if (status != null) {
-                    VehicleStatus vStatus = status.vehicleStatus;
-                    if (vStatus == null) {
-                        return;
+                try {
+                    VehicleStatusContainer status = Converter.getGson().fromJson(content, VehicleStatusContainer.class);
+                    if (status != null) {
+                        VehicleStatus vStatus = status.vehicleStatus;
+                        if (vStatus == null) {
+                            return;
+                        }
+                        updateVehicleStatus(vStatus);
+                        updateCheckControls(vStatus.checkControlMessages);
+                        updateServices(vStatus.cbsData);
+                        updatePosition(vStatus.position);
                     }
-                    updateVehicleStatus(vStatus);
-                    updateCheckControls(vStatus.checkControlMessages);
-                    updateServices(vStatus.cbsData);
-                    updatePosition(vStatus.position);
+                } catch (JsonSyntaxException jse) {
                 }
             }
             removeCallback(this);
@@ -759,10 +757,13 @@ public class VehicleHandler extends VehicleChannelHandler {
         @Override
         public void onResponse(@Nullable String content) {
             if (content != null) {
-                VehicleAttributesContainer vac = Converter.getGson().fromJson(content,
-                        VehicleAttributesContainer.class);
-                if (vac != null) {
-                    vehicleStatusCallback.onResponse(vac.transform());
+                try {
+                    VehicleAttributesContainer vac = Converter.getGson().fromJson(content,
+                            VehicleAttributesContainer.class);
+                    if (vac != null) {
+                        vehicleStatusCallback.onResponse(vac.transform());
+                    }
+                } catch (JsonSyntaxException jse) {
                 }
             }
         }
@@ -790,13 +791,13 @@ public class VehicleHandler extends VehicleChannelHandler {
                 switch (id) {
                     case CHARGE_PROFILE_PREFERENCE:
                         profile.setPreference(stringCommand);
-                        updateState(chargeProfilePreference,
+                        updateChannel(CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_PREFERENCE,
                                 StringType.valueOf(Converter.toTitleCase(profile.getPreference())));
                         processed = true;
                         break;
                     case CHARGE_PROFILE_MODE:
                         profile.setMode(stringCommand);
-                        updateState(chargeProfileChargeMode,
+                        updateChannel(CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_MODE,
                                 StringType.valueOf(Converter.toTitleCase(profile.getMode())));
                         processed = true;
                         break;
@@ -865,10 +866,10 @@ public class VehicleHandler extends VehicleChannelHandler {
 
     public Optional<ChargeProfileWrapper> getChargeProfileWrapper() {
         return chargeProfileCache.flatMap(cache -> {
-            return ChargeProfileWrapper.fromJson(cache).flatMap(wrapper -> {
+            return ChargeProfileWrapper.fromJson(cache).map(wrapper -> {
                 logger.info("Charge Profile editing - start");
                 logger.info("{}", wrapper.getJson());
-                return Optional.of(wrapper);
+                return wrapper;
             }).or(() -> {
                 logger.info("cannot parse charging profile: {}", cache);
                 return Optional.empty();
