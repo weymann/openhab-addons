@@ -22,6 +22,7 @@ import org.openhab.core.thing.ThingTypeUID;
  * used across the whole binding.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Norbert Truchsess - edit & send of charge profile
  */
 @NonNullByDefault
 public class ConnectedDriveConstants {
@@ -55,6 +56,16 @@ public class ConnectedDriveConstants {
         public String toString() {
             return type;
         }
+    }
+
+    public enum ChargingMode {
+        IMMEDIATE_CHARGING,
+        DELAYED_CHARGING
+    }
+
+    public enum ChargingPreference {
+        NO_PRESELECTION,
+        CHARGING_WINDOW
     }
 
     public static final Set<String> FUEL_VEHICLES = Set.of(VehicleType.CONVENTIONAL.toString(),
@@ -106,6 +117,8 @@ public class ConnectedDriveConstants {
     public static final String SERVICE_MILEAGE = "service-mileage";
     public static final String CHECK_CONTROL = "check-control";
     public static final String CHARGE_STATUS = "charge";
+    public static final String CHARGE_END_REASON = "reason";
+    public static final String CHARGE_REMAINING = "remaining";
     public static final String LAST_UPDATE = "last-update";
 
     // Door Details
@@ -115,7 +128,7 @@ public class ConnectedDriveConstants {
     public static final String DOOR_PASSENGER_REAR = "passenger-rear";
     public static final String HOOD = "hood";
     public static final String TRUNK = "trunk";
-    public static final String WINDOW_DOOR_DRIVER_FORNT = "win-driver-front";
+    public static final String WINDOW_DOOR_DRIVER_FRONT = "win-driver-front";
     public static final String WINDOW_DOOR_DRIVER_REAR = "win-driver-rear";
     public static final String WINDOW_DOOR_PASSENGER_FRONT = "win-passenger-front";
     public static final String WINDOW_DOOR_PASSENGER_REAR = "win-passenger-rear";
@@ -125,17 +138,27 @@ public class ConnectedDriveConstants {
     // Charge Profile
     public static final String CHARGE_PROFILE_CLIMATE = "profile-climate";
     public static final String CHARGE_PROFILE_MODE = "profile-mode";
+    public static final String CHARGE_PROFILE_PREFERENCE = "profile-prefs";
     public static final String CHARGE_WINDOW_START = "window-start";
+    public static final String CHARGE_WINDOW_START_HOUR = "window-start-hour";
+    public static final String CHARGE_WINDOW_START_MINUTE = "window-start-minute";
     public static final String CHARGE_WINDOW_END = "window-end";
-    public static final String CHARGE_TIMER1_DEPARTURE = "timer1-departure";
-    public static final String CHARGE_TIMER1_DAYS = "timer1-days";
-    public static final String CHARGE_TIMER1_ENABLED = "timer1-enabled";
-    public static final String CHARGE_TIMER2_DEPARTURE = "timer2-departure";
-    public static final String CHARGE_TIMER2_DAYS = "timer2-days";
-    public static final String CHARGE_TIMER2_ENABLED = "timer2-enabled";
-    public static final String CHARGE_TIMER3_DEPARTURE = "timer3-departure";
-    public static final String CHARGE_TIMER3_ENABLED = "timer3-days";
-    public static final String CHARGE_TIMER3_DAYS = "timer3-enabled";
+    public static final String CHARGE_TIMER1 = "timer1";
+    public static final String CHARGE_TIMER2 = "timer2";
+    public static final String CHARGE_TIMER3 = "timer3";
+    public static final String CHARGE_OVERRIDE = "override";
+    public static final String CHARGE_HOUR = "-hour";
+    public static final String CHARGE_MINUTE = "-minute";
+    public static final String CHARGE_DEPARTURE = "-departure";
+    public static final String CHARGE_ENABLED = "-enabled";
+    public static final String CHARGE_DAYS = "-days";
+    public static final String CHARGE_DAY_MON = "-day-mon";
+    public static final String CHARGE_DAY_TUE = "-day-tue";
+    public static final String CHARGE_DAY_WED = "-day-wed";
+    public static final String CHARGE_DAY_THU = "-day-thu";
+    public static final String CHARGE_DAY_FRI = "-day-fri";
+    public static final String CHARGE_DAY_SAT = "-day-sat";
+    public static final String CHARGE_DAY_SUN = "-day-sun";
 
     // Range
     public static final String RANGE_HYBRID = "hybrid";
@@ -171,6 +194,8 @@ public class ConnectedDriveConstants {
     public static final String REMOTE_SERVICE_DOOR_UNLOCK = "unlock";
     public static final String REMOTE_SERVICE_HORN = "horn";
     public static final String REMOTE_SERVICE_AIR_CONDITIONING = "climate";
+    public static final String REMOTE_SERVICE_CHARGE_NOW = "charge-now";
+    public static final String REMOTE_SERVICE_CHARGING_CONTROL = "charge-control";
     public static final String REMOTE_SERVICE_COMMAND = "command";
     public static final String REMOTE_STATE = "state";
 }

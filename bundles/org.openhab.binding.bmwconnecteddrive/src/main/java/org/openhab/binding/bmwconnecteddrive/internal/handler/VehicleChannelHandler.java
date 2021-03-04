@@ -14,19 +14,20 @@ package org.openhab.binding.bmwconnecteddrive.internal.handler;
 
 import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
 
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.measure.quantity.Length;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.VehicleType;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.Destination;
-import org.openhab.binding.bmwconnecteddrive.internal.dto.charge.ChargeProfile;
-import org.openhab.binding.bmwconnecteddrive.internal.dto.charge.ChargingWindow;
-import org.openhab.binding.bmwconnecteddrive.internal.dto.charge.Timer;
-import org.openhab.binding.bmwconnecteddrive.internal.dto.charge.WeeklyPlanner;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.statistics.AllTrips;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.statistics.LastTrip;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.CBSMessage;
@@ -35,10 +36,15 @@ import org.openhab.binding.bmwconnecteddrive.internal.dto.status.Doors;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.Position;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.VehicleStatus;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.Windows;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils.TimedChannel;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Converter;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.VehicleStatusUtils;
 import org.openhab.core.library.types.DateTimeType;
+import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.PointType;
 import org.openhab.core.library.types.QuantityType;
@@ -51,7 +57,9 @@ import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.State;
 import org.openhab.core.types.StateOption;
+import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +68,7 @@ import org.slf4j.LoggerFactory;
  * sent to one of the channels.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Norbert Truchsess - edit & send of charge profile
  */
 @NonNullByDefault
 public class VehicleChannelHandler extends BaseThingHandler {
@@ -78,96 +87,6 @@ public class VehicleChannelHandler extends BaseThingHandler {
     protected String selectedDestination = Constants.UNDEF;
 
     protected BMWConnectedDriveOptionProvider optionProvider;
-
-    // Vehicle Status Channels
-    protected ChannelUID doors;
-    protected ChannelUID windows;
-    protected ChannelUID lock;
-    protected ChannelUID serviceNextDate;
-    protected ChannelUID serviceNextMileage;
-    protected ChannelUID checkControl;
-    protected ChannelUID lastUpdate;
-
-    protected ChannelUID serviceDate;
-    protected ChannelUID serviceMileage;
-    protected ChannelUID serviceName;
-
-    protected ChannelUID checkControlMileage;
-    protected ChannelUID checkControlName;
-
-    protected ChannelUID doorDriverFront;
-    protected ChannelUID doorDriverRear;
-    protected ChannelUID doorPassengerFront;
-    protected ChannelUID doorPassengerRear;
-    protected ChannelUID doorHood;
-    protected ChannelUID doorTrunk;
-
-    protected ChannelUID windowDriverFront;
-    protected ChannelUID windowDriverRear;
-    protected ChannelUID windowPassengerFront;
-    protected ChannelUID windowPassengerRear;
-    protected ChannelUID windowRear;
-    protected ChannelUID windowSunroof;
-
-    // Range channels
-    protected ChannelUID mileage;
-    protected ChannelUID remainingRangeHybrid;
-    protected ChannelUID remainingRangeElectric;
-    protected ChannelUID remainingSoc;
-    protected ChannelUID remainingRangeFuel;
-    protected ChannelUID remainingFuel;
-    protected ChannelUID rangeRadiusElectric;
-    protected ChannelUID rangeRadiusFuel;
-    protected ChannelUID rangeRadiusHybrid;
-
-    // Lifetime Efficiency Channels
-    protected ChannelUID lifeTimeAverageConsumption;
-    protected ChannelUID lifetimeAvgCombinedConsumption;
-    protected ChannelUID lifeTimeAverageRecuperation;
-    protected ChannelUID lifeTimeTotalDrivenDistance;
-    protected ChannelUID lifeTimeSingleLongestDistance;
-
-    // Last Trip Channels
-    protected ChannelUID tripDateTime;
-    protected ChannelUID tripDuration;
-    protected ChannelUID tripDistance;
-    protected ChannelUID tripDistanceSinceCharging;
-    protected ChannelUID tripAvgConsumption;
-    protected ChannelUID tripAvgCombinedConsumption;
-    protected ChannelUID tripAvgRecuperation;
-
-    // Location Channels
-    protected ChannelUID gpsLocation;
-    protected ChannelUID heading;
-
-    // Remote Services
-    protected ChannelUID remoteCommandChannel;
-    protected ChannelUID remoteStateChannel;
-
-    // Remote Services
-    protected ChannelUID destinationName;
-    protected ChannelUID destinationLocation;
-
-    // Charging
-    protected ChannelUID chargingStatus;
-    protected ChannelUID chargeProfileClimate;
-    protected ChannelUID chargeProfileChargeMode;
-    protected ChannelUID chargeWindowStart;
-    protected ChannelUID chargeWindowEnd;
-    protected ChannelUID timer1Departure;
-    protected ChannelUID timer1Enabled;
-    protected ChannelUID timer1Days;
-    protected ChannelUID timer2Departure;
-    protected ChannelUID timer2Enabled;
-    protected ChannelUID timer2Days;
-    protected ChannelUID timer3Departure;
-    protected ChannelUID timer3Enabled;
-    protected ChannelUID timer3Days;
-
-    // Image
-    protected ChannelUID imageChannel;
-    protected ChannelUID imageViewportChannel;
-    protected ChannelUID imageSizeChannel;
 
     // Data Caches
     protected Optional<String> vehicleStatusCache = Optional.empty();
@@ -188,94 +107,6 @@ public class VehicleChannelHandler extends BaseThingHandler {
         isElectric = type.equals(VehicleType.PLUGIN_HYBRID.toString())
                 || type.equals(VehicleType.ELECTRIC_REX.toString()) || type.equals(VehicleType.ELECTRIC.toString());
         isHybrid = hasFuel && isElectric;
-
-        // Vehicle Status channels
-        doors = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, DOORS);
-        windows = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, WINDOWS);
-        lock = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, LOCK);
-        serviceNextDate = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, SERVICE_DATE);
-        serviceNextMileage = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, SERVICE_MILEAGE);
-        checkControl = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, CHECK_CONTROL);
-        chargingStatus = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, CHARGE_STATUS);
-        lastUpdate = new ChannelUID(thing.getUID(), CHANNEL_GROUP_STATUS, LAST_UPDATE);
-
-        serviceDate = new ChannelUID(thing.getUID(), CHANNEL_GROUP_SERVICE, DATE);
-        serviceMileage = new ChannelUID(thing.getUID(), CHANNEL_GROUP_SERVICE, MILEAGE);
-        serviceName = new ChannelUID(thing.getUID(), CHANNEL_GROUP_SERVICE, NAME);
-
-        checkControlMileage = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHECK_CONTROL, MILEAGE);
-        checkControlName = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHECK_CONTROL, NAME);
-
-        doorDriverFront = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, DOOR_DRIVER_FRONT);
-        doorDriverRear = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, DOOR_DRIVER_REAR);
-        doorPassengerFront = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, DOOR_PASSENGER_FRONT);
-        doorPassengerRear = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, DOOR_PASSENGER_REAR);
-        doorHood = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, HOOD);
-        doorTrunk = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, TRUNK);
-
-        windowDriverFront = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, WINDOW_DOOR_DRIVER_FORNT);
-        windowDriverRear = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, WINDOW_DOOR_DRIVER_REAR);
-        windowPassengerFront = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, WINDOW_DOOR_PASSENGER_FRONT);
-        windowPassengerRear = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, WINDOW_DOOR_PASSENGER_REAR);
-        windowRear = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, WINDOW_REAR);
-        windowSunroof = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DOORS, SUNROOF);
-
-        // range Channels
-        mileage = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, MILEAGE);
-        remainingRangeHybrid = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_HYBRID);
-        remainingRangeElectric = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_ELECTRIC);
-        remainingRangeFuel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_FUEL);
-        remainingSoc = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, SOC);
-        remainingFuel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, REMAINING_FUEL);
-        rangeRadiusElectric = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_RADIUS_ELECTRIC);
-        rangeRadiusFuel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_RADIUS_FUEL);
-        rangeRadiusHybrid = new ChannelUID(thing.getUID(), CHANNEL_GROUP_RANGE, RANGE_RADIUS_HYBRID);
-
-        // Last Trip Channels
-        tripDateTime = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, DATE);
-        tripDuration = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, DURATION);
-        tripDistance = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, DISTANCE);
-        tripDistanceSinceCharging = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, DISTANCE_SINCE_CHARGING);
-        tripAvgConsumption = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, AVG_CONSUMPTION);
-        tripAvgCombinedConsumption = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, AVG_COMBINED_CONSUMPTION);
-        tripAvgRecuperation = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LAST_TRIP, AVG_RECUPERATION);
-
-        // Lifetime Channels
-        lifeTimeAverageConsumption = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LIFETIME, AVG_CONSUMPTION);
-        lifetimeAvgCombinedConsumption = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LIFETIME,
-                AVG_COMBINED_CONSUMPTION);
-        lifeTimeAverageRecuperation = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LIFETIME, AVG_RECUPERATION);
-        lifeTimeTotalDrivenDistance = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LIFETIME, TOTAL_DRIVEN_DISTANCE);
-        lifeTimeSingleLongestDistance = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LIFETIME, SINGLE_LONGEST_DISTANCE);
-
-        // Location Channels
-        gpsLocation = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LOCATION, GPS);
-        heading = new ChannelUID(thing.getUID(), CHANNEL_GROUP_LOCATION, HEADING);
-
-        // Charge Channels
-        chargeProfileClimate = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_CLIMATE);
-        chargeProfileChargeMode = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_MODE);
-        chargeWindowStart = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_WINDOW_START);
-        chargeWindowEnd = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_WINDOW_END);
-        timer1Departure = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER1_DEPARTURE);
-        timer1Enabled = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER1_ENABLED);
-        timer1Days = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER1_DAYS);
-        timer2Departure = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER2_DEPARTURE);
-        timer2Enabled = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER2_ENABLED);
-        timer2Days = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER2_DAYS);
-        timer3Departure = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER3_DEPARTURE);
-        timer3Enabled = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER3_DAYS);
-        timer3Days = new ChannelUID(thing.getUID(), CHANNEL_GROUP_CHARGE, CHARGE_TIMER3_ENABLED);
-
-        remoteCommandChannel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_REMOTE, REMOTE_SERVICE_COMMAND);
-        remoteStateChannel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_REMOTE, REMOTE_STATE);
-
-        destinationName = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DESTINATION, NAME);
-        destinationLocation = new ChannelUID(thing.getUID(), CHANNEL_GROUP_DESTINATION, GPS);
-
-        imageChannel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_FORMAT);
-        imageViewportChannel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT);
-        imageSizeChannel = new ChannelUID(thing.getUID(), CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE);
     }
 
     @Override
@@ -284,6 +115,14 @@ public class VehicleChannelHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
+    }
+
+    private void setOptions(final String group, final String id, List<StateOption> options) {
+        optionProvider.setStateOptions(new ChannelUID(thing.getUID(), group, id), options);
+    }
+
+    protected void updateChannel(final String group, final String id, final State state) {
+        updateState(new ChannelUID(thing.getUID(), group, id), state);
     }
 
     protected void updateCheckControls(List<CCMMessage> ccl) {
@@ -311,8 +150,8 @@ public class VehicleChannelHandler extends BaseThingHandler {
             }
             index++;
         }
-        setOptions(checkControlName, ccmDescriptionOptions);
-        setOptions(checkControlMileage, ccmMileageOptions);
+        setOptions(CHANNEL_GROUP_CHECK_CONTROL, NAME, ccmDescriptionOptions);
+        setOptions(CHANNEL_GROUP_CHECK_CONTROL, MILEAGE, ccmMileageOptions);
 
         // if current selected item isn't anymore in the list select first entry
         if (!isSelectedElementIn) {
@@ -324,15 +163,10 @@ public class VehicleChannelHandler extends BaseThingHandler {
         if (index >= 0 && index < checkControlList.size()) {
             CCMMessage ccEntry = checkControlList.get(index);
             selectedCC = ccEntry.ccmDescriptionShort;
-            updateState(checkControlName, StringType.valueOf(ccEntry.ccmDescriptionShort));
-            QuantityType<Length> qtLength = QuantityType.valueOf(Converter.round(ccEntry.ccmMileage),
-                    MetricPrefix.KILO(SIUnits.METRE));
-            if (imperial) {
-                updateState(checkControlMileage,
-                        QuantityType.valueOf(Converter.round(ccEntry.ccmMileage), ImperialUnits.MILE));
-            } else {
-                updateState(checkControlMileage, qtLength);
-            }
+            updateChannel(CHANNEL_GROUP_CHECK_CONTROL, NAME, StringType.valueOf(ccEntry.ccmDescriptionShort));
+            updateChannel(CHANNEL_GROUP_CHECK_CONTROL, MILEAGE,
+                    QuantityType.valueOf(Converter.round(ccEntry.ccmMileage),
+                            imperial ? ImperialUnits.MILE : MetricPrefix.KILO(SIUnits.METRE)));
         }
     }
 
@@ -362,9 +196,9 @@ public class VehicleChannelHandler extends BaseThingHandler {
             }
             index++;
         }
-        setOptions(serviceName, serviceNameOptions);
-        setOptions(serviceDate, serviceDateOptions);
-        setOptions(serviceMileage, serviceMileageOptions);
+        setOptions(CHANNEL_GROUP_SERVICE, NAME, serviceNameOptions);
+        setOptions(CHANNEL_GROUP_SERVICE, DATE, serviceDateOptions);
+        setOptions(CHANNEL_GROUP_SERVICE, MILEAGE, serviceMileageOptions);
 
         // if current selected item isn't anymore in the list select first entry
         if (!isSelectedElementIn) {
@@ -376,15 +210,13 @@ public class VehicleChannelHandler extends BaseThingHandler {
         if (index >= 0 && index < serviceList.size()) {
             CBSMessage serviceEntry = serviceList.get(index);
             selectedService = serviceEntry.cbsType;
-            updateState(serviceName, StringType.valueOf(Converter.toTitleCase(serviceEntry.getType())));
-            updateState(serviceDate, DateTimeType.valueOf(Converter.getLocalDateTime(serviceEntry.getDueDate())));
-            if (imperial) {
-                updateState(serviceMileage,
-                        QuantityType.valueOf(Converter.round(serviceEntry.cbsRemainingMileage), ImperialUnits.MILE));
-            } else {
-                updateState(serviceMileage, QuantityType.valueOf(Converter.round(serviceEntry.cbsRemainingMileage),
-                        MetricPrefix.KILO(SIUnits.METRE)));
-            }
+            updateChannel(CHANNEL_GROUP_SERVICE, NAME,
+                    StringType.valueOf(Converter.toTitleCase(serviceEntry.getType())));
+            updateChannel(CHANNEL_GROUP_SERVICE, DATE,
+                    DateTimeType.valueOf(Converter.getLocalDateTime(serviceEntry.getDueDate())));
+            updateChannel(CHANNEL_GROUP_SERVICE, MILEAGE,
+                    QuantityType.valueOf(Converter.round(serviceEntry.cbsRemainingMileage),
+                            imperial ? ImperialUnits.MILE : MetricPrefix.KILO(SIUnits.METRE)));
         }
     }
 
@@ -412,8 +244,8 @@ public class VehicleChannelHandler extends BaseThingHandler {
             }
             index++;
         }
-        setOptions(destinationName, destinationNameOptions);
-        setOptions(destinationLocation, destinationGPSOptions);
+        setOptions(CHANNEL_GROUP_DESTINATION, NAME, destinationNameOptions);
+        setOptions(CHANNEL_GROUP_DESTINATION, GPS, destinationGPSOptions);
 
         // if current selected item isn't anymore in the list select first entry
         if (!isSelectedElementIn) {
@@ -427,13 +259,9 @@ public class VehicleChannelHandler extends BaseThingHandler {
             // update selected Item
             selectedDestination = destinationEntry.getAddress();
             // update coordinates according to new set location
-            updateState(destinationName, StringType.valueOf(destinationEntry.getAddress()));
-            updateState(destinationLocation, PointType.valueOf(destinationEntry.getCoordinates()));
+            updateChannel(CHANNEL_GROUP_DESTINATION, NAME, StringType.valueOf(destinationEntry.getAddress()));
+            updateChannel(CHANNEL_GROUP_DESTINATION, GPS, PointType.valueOf(destinationEntry.getCoordinates()));
         }
-    }
-
-    private void setOptions(ChannelUID cuid, List<StateOption> options) {
-        optionProvider.setStateOptions(cuid, options);
     }
 
     protected void updateAllTrips(AllTrips allTrips) {
@@ -443,134 +271,163 @@ public class VehicleChannelHandler extends BaseThingHandler {
                 .valueOf(Converter.round(allTrips.chargecycleRange.userHigh), MetricPrefix.KILO(SIUnits.METRE));
         QuantityType<Length> qtDistanceSinceCharge = QuantityType.valueOf(
                 Converter.round(allTrips.chargecycleRange.userCurrentChargeCycle), MetricPrefix.KILO(SIUnits.METRE));
-        double avgConsumotion = allTrips.avgElectricConsumption.userAverage;
-        double avgCombinedConsumption = allTrips.avgCombinedConsumption.userAverage;
-        double avgRecuperation = allTrips.avgRecuperation.userAverage;
-        if (imperial) {
-            updateState(lifeTimeTotalDrivenDistance, Converter.getMiles(qtTotalElectric));
-            updateState(lifeTimeSingleLongestDistance, Converter.getMiles(qtLongestElectricRange));
-            updateState(tripDistanceSinceCharging, Converter.getMiles(qtDistanceSinceCharge));
 
-            // Conversion from kwh/100km to kwh/10mi has to be done manually
-            avgConsumotion *= Converter.MILES_TO_KM_RATIO;
-            avgCombinedConsumption *= Converter.MILES_TO_KM_RATIO;
-            avgRecuperation *= Converter.MILES_TO_KM_RATIO;
-        } else {
-            updateState(lifeTimeTotalDrivenDistance, qtTotalElectric);
-            updateState(lifeTimeSingleLongestDistance, qtLongestElectricRange);
-            updateState(tripDistanceSinceCharging, qtDistanceSinceCharge);
-        }
-        updateState(lifeTimeAverageConsumption,
+        updateChannel(CHANNEL_GROUP_LIFETIME, TOTAL_DRIVEN_DISTANCE,
+                imperial ? Converter.getMiles(qtTotalElectric) : qtTotalElectric);
+        updateChannel(CHANNEL_GROUP_LIFETIME, SINGLE_LONGEST_DISTANCE,
+                imperial ? Converter.getMiles(qtLongestElectricRange) : qtLongestElectricRange);
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, DISTANCE_SINCE_CHARGING,
+                imperial ? Converter.getMiles(qtDistanceSinceCharge) : qtDistanceSinceCharge);
+
+        // Conversion from kwh/100km to kwh/10mi has to be done manually
+        double avgConsumotion = imperial ? allTrips.avgElectricConsumption.userAverage * Converter.MILES_TO_KM_RATIO
+                : allTrips.avgElectricConsumption.userAverage;
+        double avgCombinedConsumption = imperial
+                ? allTrips.avgCombinedConsumption.userAverage * Converter.MILES_TO_KM_RATIO
+                : allTrips.avgCombinedConsumption.userAverage;
+        double avgRecuperation = imperial ? allTrips.avgRecuperation.userAverage * Converter.MILES_TO_KM_RATIO
+                : allTrips.avgRecuperation.userAverage;
+
+        updateChannel(CHANNEL_GROUP_LIFETIME, AVG_CONSUMPTION,
                 QuantityType.valueOf(Converter.round(avgConsumotion), Units.KILOWATT_HOUR));
-        updateState(lifetimeAvgCombinedConsumption,
+        updateChannel(CHANNEL_GROUP_LIFETIME, AVG_COMBINED_CONSUMPTION,
                 QuantityType.valueOf(Converter.round(avgCombinedConsumption), Units.LITRE));
-        updateState(lifeTimeAverageRecuperation,
+        updateChannel(CHANNEL_GROUP_LIFETIME, AVG_RECUPERATION,
                 QuantityType.valueOf(Converter.round(avgRecuperation), Units.KILOWATT_HOUR));
     }
 
     protected void updateLastTrip(LastTrip trip) {
         // Whyever the Last Trip DateTime is delivered without offest - so LocalTime
-        updateState(tripDateTime, DateTimeType.valueOf(Converter.getLocalDateTimeWithoutOffest(trip.date)));
-        updateState(tripDuration, QuantityType.valueOf(trip.duration, Units.MINUTE));
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, DATE,
+                DateTimeType.valueOf(Converter.getLocalDateTimeWithoutOffest(trip.date)));
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, DURATION, QuantityType.valueOf(trip.duration, Units.MINUTE));
+
         QuantityType<Length> qtTotalDistance = QuantityType.valueOf(Converter.round(trip.totalDistance),
                 MetricPrefix.KILO(SIUnits.METRE));
-        double avgConsumtption = trip.avgElectricConsumption;
-        double avgCombinedConsumption = trip.avgCombinedConsumption;
-        double avgRecuperation = trip.avgRecuperation;
-        if (imperial) {
-            updateState(tripDistance, Converter.getMiles(qtTotalDistance));
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, DISTANCE,
+                imperial ? Converter.getMiles(qtTotalDistance) : qtTotalDistance);
 
-            // Conversion from kwh/100km to kwh/10mi has to be done manually
-            avgConsumtption *= Converter.MILES_TO_KM_RATIO;
-            avgCombinedConsumption *= Converter.MILES_TO_KM_RATIO;
-            avgRecuperation *= Converter.MILES_TO_KM_RATIO;
-        } else {
-            updateState(tripDistance, qtTotalDistance);
-        }
-        updateState(tripAvgConsumption, QuantityType.valueOf(Converter.round(avgConsumtption), Units.KILOWATT_HOUR));
-        updateState(tripAvgCombinedConsumption,
+        // Conversion from kwh/100km to kwh/10mi has to be done manually
+        double avgConsumtption = imperial ? trip.avgElectricConsumption * Converter.MILES_TO_KM_RATIO
+                : trip.avgElectricConsumption;
+        double avgCombinedConsumption = imperial ? trip.avgCombinedConsumption * Converter.MILES_TO_KM_RATIO
+                : trip.avgCombinedConsumption;
+        double avgRecuperation = imperial ? trip.avgRecuperation * Converter.MILES_TO_KM_RATIO : trip.avgRecuperation;
+
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, AVG_CONSUMPTION,
+                QuantityType.valueOf(Converter.round(avgConsumtption), Units.KILOWATT_HOUR));
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, AVG_COMBINED_CONSUMPTION,
                 QuantityType.valueOf(Converter.round(avgCombinedConsumption), Units.LITRE));
-        updateState(tripAvgRecuperation, QuantityType.valueOf(Converter.round(avgRecuperation), Units.KILOWATT_HOUR));
+        updateChannel(CHANNEL_GROUP_LAST_TRIP, AVG_RECUPERATION,
+                QuantityType.valueOf(Converter.round(avgRecuperation), Units.KILOWATT_HOUR));
     }
 
-    protected void updateChargeProfile(ChargeProfile cp) {
-        WeeklyPlanner planner = cp.weeklyPlanner;
-        updateState(chargeProfileClimate, OnOffType.from(planner.climatizationEnabled));
-        updateState(chargeProfileChargeMode, StringType.valueOf(Converter.toTitleCase(planner.chargingMode)));
+    protected void updateChargeProfileFromContent(String content) {
+        ChargeProfileWrapper.fromJson(content).ifPresent(this::updateChargeProfile);
+    }
 
-        ChargingWindow cw = planner.preferredChargingWindow;
-        updateState(chargeWindowStart, StringType.valueOf(cw.startTime));
-        updateState(chargeWindowEnd, StringType.valueOf(cw.endTime));
+    protected void updateChargeProfile(ChargeProfileWrapper wrapper) {
+        updateChannel(CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_PREFERENCE,
+                StringType.valueOf(Converter.toTitleCase(wrapper.getPreference())));
+        updateChannel(CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_MODE,
+                StringType.valueOf(Converter.toTitleCase(wrapper.getMode())));
+        final Boolean climate = wrapper.isEnabled(ProfileKey.CLIMATE);
+        updateChannel(CHANNEL_GROUP_CHARGE, CHARGE_PROFILE_CLIMATE,
+                climate == null ? UnDefType.UNDEF : OnOffType.from(climate));
+        updateTimedState(wrapper, ProfileKey.WINDOWSTART);
+        updateTimedState(wrapper, ProfileKey.WINDOWEND);
+        updateTimedState(wrapper, ProfileKey.TIMER1);
+        updateTimedState(wrapper, ProfileKey.TIMER2);
+        updateTimedState(wrapper, ProfileKey.TIMER3);
+        updateTimedState(wrapper, ProfileKey.OVERRIDE);
+    }
 
-        Timer t1 = planner.timer1;
-        updateState(timer1Departure, StringType.valueOf(t1.departureTime));
-        updateState(timer1Enabled, OnOffType.from(t1.timerEnabled));
-        updateState(timer1Days, StringType.valueOf(t1.getDays()));
-
-        Timer t2 = planner.timer2;
-        updateState(timer2Departure, StringType.valueOf(t2.departureTime));
-        updateState(timer2Enabled, OnOffType.from(t2.timerEnabled));
-        updateState(timer2Days, StringType.valueOf(t2.getDays()));
-
-        Timer t3 = planner.timer3;
-        updateState(timer3Departure, StringType.valueOf(t3.departureTime));
-        updateState(timer3Enabled, OnOffType.from(t3.timerEnabled));
-        updateState(timer3Days, StringType.valueOf(t3.getDays()));
+    protected void updateTimedState(ChargeProfileWrapper profile, ProfileKey key) {
+        final TimedChannel timed = ChargeProfileUtils.getTimedChannel(key);
+        if (timed != null) {
+            final LocalTime time = profile.getTime(key);
+            updateChannel(CHANNEL_GROUP_CHARGE, timed.time, time == null ? UnDefType.UNDEF
+                    : new DateTimeType(ZonedDateTime.of(Constants.EPOCH_DAY, time, ZoneId.systemDefault())));
+            updateChannel(CHANNEL_GROUP_CHARGE, timed.time + CHARGE_HOUR,
+                    time == null ? UnDefType.UNDEF : new DecimalType(time.getHour()));
+            updateChannel(CHANNEL_GROUP_CHARGE, timed.time + CHARGE_MINUTE,
+                    time == null ? UnDefType.UNDEF : new DecimalType(time.getMinute()));
+            if (timed.timer != null) {
+                final Boolean enabled = profile.isEnabled(key);
+                updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + CHARGE_ENABLED,
+                        enabled == null ? UnDefType.UNDEF : OnOffType.from(enabled));
+                if (timed.hasDays) {
+                    final Set<DayOfWeek> days = profile.getDays(key);
+                    updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + CHARGE_DAYS,
+                            days == null ? UnDefType.UNDEF : StringType.valueOf(ChargeProfileUtils.formatDays(days)));
+                    EnumSet.allOf(DayOfWeek.class).forEach(day -> {
+                        updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + ChargeProfileUtils.getDaysChannel(day),
+                                days == null ? UnDefType.UNDEF : OnOffType.from(days.contains(day)));
+                    });
+                }
+            }
+        }
     }
 
     protected void updateDoors(Doors doorState) {
-        updateState(doorDriverFront, StringType.valueOf(Converter.toTitleCase(doorState.doorDriverFront)));
-        updateState(doorDriverRear, StringType.valueOf(Converter.toTitleCase(doorState.doorDriverRear)));
-        updateState(doorPassengerFront, StringType.valueOf(Converter.toTitleCase(doorState.doorPassengerFront)));
-        updateState(doorPassengerRear, StringType.valueOf(Converter.toTitleCase(doorState.doorPassengerRear)));
-        updateState(doorTrunk, StringType.valueOf(Converter.toTitleCase(doorState.trunk)));
-        updateState(doorHood, StringType.valueOf(Converter.toTitleCase(doorState.hood)));
+        updateChannel(CHANNEL_GROUP_DOORS, DOOR_DRIVER_FRONT,
+                StringType.valueOf(Converter.toTitleCase(doorState.doorDriverFront)));
+        updateChannel(CHANNEL_GROUP_DOORS, DOOR_DRIVER_REAR,
+                StringType.valueOf(Converter.toTitleCase(doorState.doorDriverRear)));
+        updateChannel(CHANNEL_GROUP_DOORS, DOOR_PASSENGER_FRONT,
+                StringType.valueOf(Converter.toTitleCase(doorState.doorPassengerFront)));
+        updateChannel(CHANNEL_GROUP_DOORS, DOOR_PASSENGER_REAR,
+                StringType.valueOf(Converter.toTitleCase(doorState.doorPassengerRear)));
+        updateChannel(CHANNEL_GROUP_DOORS, TRUNK, StringType.valueOf(Converter.toTitleCase(doorState.trunk)));
+        updateChannel(CHANNEL_GROUP_DOORS, HOOD, StringType.valueOf(Converter.toTitleCase(doorState.hood)));
     }
 
     protected void updateWindows(Windows windowState) {
-        updateState(windowDriverFront, StringType.valueOf(Converter.toTitleCase(windowState.windowDriverFront)));
-        updateState(windowDriverRear, StringType.valueOf(Converter.toTitleCase(windowState.windowDriverRear)));
-        updateState(windowPassengerFront, StringType.valueOf(Converter.toTitleCase(windowState.windowPassengerFront)));
-        updateState(windowPassengerRear, StringType.valueOf(Converter.toTitleCase(windowState.windowPassengerRear)));
-        updateState(windowRear, StringType.valueOf(Converter.toTitleCase(windowState.rearWindow)));
-        updateState(windowSunroof, StringType.valueOf(Converter.toTitleCase(windowState.sunroof)));
+        updateChannel(CHANNEL_GROUP_DOORS, WINDOW_DOOR_DRIVER_FRONT,
+                StringType.valueOf(Converter.toTitleCase(windowState.windowDriverFront)));
+        updateChannel(CHANNEL_GROUP_DOORS, WINDOW_DOOR_DRIVER_REAR,
+                StringType.valueOf(Converter.toTitleCase(windowState.windowDriverRear)));
+        updateChannel(CHANNEL_GROUP_DOORS, WINDOW_DOOR_PASSENGER_FRONT,
+                StringType.valueOf(Converter.toTitleCase(windowState.windowPassengerFront)));
+        updateChannel(CHANNEL_GROUP_DOORS, WINDOW_DOOR_PASSENGER_REAR,
+                StringType.valueOf(Converter.toTitleCase(windowState.windowPassengerRear)));
+        updateChannel(CHANNEL_GROUP_DOORS, WINDOW_REAR,
+                StringType.valueOf(Converter.toTitleCase(windowState.rearWindow)));
+        updateChannel(CHANNEL_GROUP_DOORS, SUNROOF, StringType.valueOf(Converter.toTitleCase(windowState.sunroof)));
     }
 
     protected void updatePosition(Position pos) {
-        updateState(gpsLocation, PointType.valueOf(pos.getCoordinates()));
-        updateState(heading, QuantityType.valueOf(pos.heading, Units.DEGREE_ANGLE));
+        updateChannel(CHANNEL_GROUP_LOCATION, GPS, PointType.valueOf(pos.getCoordinates()));
+        updateChannel(CHANNEL_GROUP_LOCATION, HEADING, QuantityType.valueOf(pos.heading, Units.DEGREE_ANGLE));
     }
 
     protected void updateVehicleStatus(VehicleStatus vStatus) {
         // Vehicle Status
-        updateState(lock, StringType.valueOf(Converter.toTitleCase(vStatus.doorLockState)));
+        updateChannel(CHANNEL_GROUP_STATUS, LOCK, StringType.valueOf(Converter.toTitleCase(vStatus.doorLockState)));
 
         // Service Updates
-        String nextServiceDate = VehicleStatusUtils.getNextServiceDate(vStatus);
-        updateState(serviceNextDate, DateTimeType.valueOf(Converter.getLocalDateTime(nextServiceDate)));
-        double nextServiceMileage = VehicleStatusUtils.getNextServiceMileage(vStatus);
-        if (imperial) {
-            updateState(serviceNextMileage,
-                    QuantityType.valueOf(Converter.round(nextServiceMileage), ImperialUnits.MILE));
-        } else {
-            updateState(serviceNextMileage,
-                    QuantityType.valueOf(Converter.round(nextServiceMileage), MetricPrefix.KILO(SIUnits.METRE)));
-        }
+        updateChannel(CHANNEL_GROUP_STATUS, SERVICE_DATE,
+                DateTimeType.valueOf(Converter.getLocalDateTime(VehicleStatusUtils.getNextServiceDate(vStatus))));
+
+        updateChannel(CHANNEL_GROUP_STATUS, SERVICE_MILEAGE,
+                QuantityType.valueOf(Converter.round(VehicleStatusUtils.getNextServiceMileage(vStatus)),
+                        imperial ? ImperialUnits.MILE : MetricPrefix.KILO(SIUnits.METRE)));
         // CheckControl Active?
-        updateState(checkControl,
+        updateChannel(CHANNEL_GROUP_STATUS, CHECK_CONTROL,
                 StringType.valueOf(Converter.toTitleCase(VehicleStatusUtils.checkControlActive(vStatus))));
         // last update Time
-        updateState(lastUpdate,
+        updateChannel(CHANNEL_GROUP_STATUS, LAST_UPDATE,
                 DateTimeType.valueOf(Converter.getLocalDateTime(VehicleStatusUtils.getUpdateTime(vStatus))));
 
         Doors doorState = Converter.getGson().fromJson(Converter.getGson().toJson(vStatus), Doors.class);
         Windows windowState = Converter.getGson().fromJson(Converter.getGson().toJson(vStatus), Windows.class);
         if (doorState != null) {
-            updateState(doors, StringType.valueOf(VehicleStatusUtils.checkClosed(doorState)));
+            updateChannel(CHANNEL_GROUP_STATUS, DOORS, StringType.valueOf(VehicleStatusUtils.checkClosed(doorState)));
             updateDoors(doorState);
         }
         if (windowState != null) {
-            updateState(windows, StringType.valueOf(VehicleStatusUtils.checkClosed(windowState)));
+            updateChannel(CHANNEL_GROUP_STATUS, WINDOWS,
+                    StringType.valueOf(VehicleStatusUtils.checkClosed(windowState)));
             updateWindows(windowState);
         }
 
@@ -583,63 +440,66 @@ public class VehicleChannelHandler extends BaseThingHandler {
                     MetricPrefix.KILO(SIUnits.METRE));
             QuantityType<Length> qtElectricRadius = QuantityType.valueOf(
                     Converter.guessRangeRadius(vStatus.remainingRangeElectric), MetricPrefix.KILO(SIUnits.METRE));
-            if (imperial) {
-                updateState(remainingRangeElectric, Converter.getMiles(qtElectricRange));
-                updateState(rangeRadiusElectric, Converter.getMiles(qtElectricRadius));
-            } else {
-                updateState(remainingRangeElectric, qtElectricRange);
-                updateState(rangeRadiusElectric, qtElectricRadius);
-            }
+
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_ELECTRIC,
+                    imperial ? Converter.getMiles(qtElectricRange) : qtElectricRange);
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_RADIUS_ELECTRIC,
+                    imperial ? Converter.getMiles(qtElectricRadius) : qtElectricRadius);
         }
         if (hasFuel) {
             totalRange += vStatus.remainingRangeFuel;
-            QuantityType<Length> qtFuealRange = QuantityType.valueOf(vStatus.remainingRangeFuel,
+            QuantityType<Length> qtFuelRange = QuantityType.valueOf(vStatus.remainingRangeFuel,
                     MetricPrefix.KILO(SIUnits.METRE));
             QuantityType<Length> qtFuelRadius = QuantityType
                     .valueOf(Converter.guessRangeRadius(vStatus.remainingRangeFuel), MetricPrefix.KILO(SIUnits.METRE));
-            if (imperial) {
-                updateState(remainingRangeFuel, Converter.getMiles(qtFuealRange));
-                updateState(rangeRadiusFuel, Converter.getMiles(qtFuelRadius));
-            } else {
-                updateState(remainingRangeFuel, qtFuealRange);
-                updateState(rangeRadiusFuel, qtFuelRadius);
-            }
+
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_FUEL, imperial ? Converter.getMiles(qtFuelRange) : qtFuelRange);
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_RADIUS_FUEL,
+                    imperial ? Converter.getMiles(qtFuelRadius) : qtFuelRadius);
         }
         if (isHybrid) {
             QuantityType<Length> qtHybridRange = QuantityType.valueOf(totalRange, MetricPrefix.KILO(SIUnits.METRE));
             QuantityType<Length> qtHybridRadius = QuantityType.valueOf(Converter.guessRangeRadius(totalRange),
                     MetricPrefix.KILO(SIUnits.METRE));
-            if (imperial) {
-                updateState(remainingRangeHybrid, Converter.getMiles(qtHybridRange));
-                updateState(rangeRadiusHybrid, Converter.getMiles(qtHybridRadius));
-            } else {
-                updateState(remainingRangeHybrid, qtHybridRange);
-                updateState(rangeRadiusHybrid, qtHybridRadius);
-            }
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_HYBRID,
+                    imperial ? Converter.getMiles(qtHybridRange) : qtHybridRange);
+            updateChannel(CHANNEL_GROUP_RANGE, RANGE_RADIUS_HYBRID,
+                    imperial ? Converter.getMiles(qtHybridRadius) : qtHybridRadius);
         }
 
-        if (imperial) {
-            updateState(mileage, QuantityType.valueOf(vStatus.mileage, ImperialUnits.MILE));
-        } else {
-            updateState(mileage, QuantityType.valueOf(vStatus.mileage, MetricPrefix.KILO(SIUnits.METRE)));
-        }
+        updateChannel(CHANNEL_GROUP_RANGE, MILEAGE, QuantityType.valueOf(vStatus.mileage,
+                imperial ? ImperialUnits.MILE : MetricPrefix.KILO(SIUnits.METRE)));
         if (isElectric) {
-            updateState(remainingSoc, QuantityType.valueOf(vStatus.chargingLevelHv, Units.PERCENT));
+            updateChannel(CHANNEL_GROUP_RANGE, SOC, QuantityType.valueOf(vStatus.chargingLevelHv, Units.PERCENT));
         }
         if (hasFuel) {
-            updateState(remainingFuel, QuantityType.valueOf(vStatus.remainingFuel, Units.LITRE));
+            updateChannel(CHANNEL_GROUP_RANGE, REMAINING_FUEL,
+                    QuantityType.valueOf(vStatus.remainingFuel, Units.LITRE));
         }
 
         // Charge Values
         if (isElectric) {
             if (vStatus.chargingStatus != null) {
                 if (Constants.INVALID.equals(vStatus.chargingStatus)) {
-                    updateState(chargingStatus,
+                    updateChannel(CHANNEL_GROUP_STATUS, CHARGE_STATUS,
                             StringType.valueOf(Converter.toTitleCase(vStatus.lastChargingEndReason)));
                 } else {
                     // State INVALID is somehow misleading. Instead show the Last Charging End Reason
-                    updateState(chargingStatus, StringType.valueOf(Converter.toTitleCase(vStatus.chargingStatus)));
+                    updateChannel(CHANNEL_GROUP_STATUS, CHARGE_STATUS,
+                            StringType.valueOf(Converter.toTitleCase(vStatus.chargingStatus)));
                 }
+            } else {
+                updateChannel(CHANNEL_GROUP_STATUS, CHARGE_STATUS, UnDefType.NULL);
+            }
+            if (vStatus.chargingTimeRemaining != null) {
+                try {
+                    updateChannel(CHANNEL_GROUP_STATUS, CHARGE_REMAINING,
+                            QuantityType.valueOf(vStatus.chargingTimeRemaining, Units.MINUTE));
+                } catch (NumberFormatException nfe) {
+                    updateChannel(CHANNEL_GROUP_STATUS, CHARGE_REMAINING, UnDefType.UNDEF);
+                }
+            } else {
+                updateChannel(CHANNEL_GROUP_STATUS, CHARGE_REMAINING, UnDefType.NULL);
             }
         }
     }

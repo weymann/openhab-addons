@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConfiguration;
 import org.openhab.binding.bmwconnecteddrive.internal.discovery.VehicleDiscovery;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.NetworkError;
@@ -38,6 +39,8 @@ import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonSyntaxException;
 
 /**
  * The {@link ConnectedDriveBridgeHandler} is responsible for handling commands, which are
@@ -70,32 +73,27 @@ public class ConnectedDriveBridgeHandler extends BaseBridgeHandler implements St
         troubleshootFingerprint = Optional.empty();
         updateStatus(ThingStatus.UNKNOWN);
         configuration = Optional.of(getConfigAs(ConnectedDriveConfiguration.class));
-        if (configuration.isPresent()) {
-            proxy = Optional.of(new ConnectedDriveProxy(httpClientFactory, configuration.get()));
+        configuration.ifPresentOrElse(config -> {
+            proxy = Optional.of(new ConnectedDriveProxy(httpClientFactory, config));
             // give the system some time to create all predefined Vehicles
             initializerJob = Optional.of(scheduler.schedule(this::requestVehicles, 5, TimeUnit.SECONDS));
-        } else {
+        }, () -> {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
-        }
+        });
     }
 
     @Override
     public void dispose() {
-        if (initializerJob.isPresent()) {
-            initializerJob.get().cancel(true);
-        }
+        initializerJob.ifPresent(job -> job.cancel(true));
     }
 
     public void requestVehicles() {
-        if (proxy.isPresent()) {
-            proxy.get().requestVehicles(this);
-        }
+        proxy.ifPresent(prox -> prox.requestVehicles(this));
     }
 
     public String getDiscoveryFingerprint() {
-        if (troubleshootFingerprint.isPresent()) {
-            VehiclesContainer container = Converter.getGson().fromJson(troubleshootFingerprint.get(),
-                    VehiclesContainer.class);
+        return troubleshootFingerprint.map(fingerprint -> {
+            VehiclesContainer container = Converter.getGson().fromJson(fingerprint, VehiclesContainer.class);
             if (container != null) {
                 if (container.vehicles != null) {
                     if (container.vehicles.isEmpty()) {
@@ -116,13 +114,11 @@ public class ConnectedDriveBridgeHandler extends BaseBridgeHandler implements St
                         });
                         return Converter.getGson().toJson(container);
                     }
-                } else {
-                    // Vehicles is empty so deliver fingerprint as it is
-                    return troubleshootFingerprint.get();
                 }
             }
-        }
-        return Constants.INVALID;
+            // Not a VehiclesContainer or Vehicles is empty so deliver fingerprint as it is
+            return fingerprint;
+        }).orElse(Constants.INVALID);
     }
 
     private void logFingerPrint() {
@@ -136,33 +132,37 @@ public class ConnectedDriveBridgeHandler extends BaseBridgeHandler implements St
      * There's only the Vehicles response available
      */
     @Override
-    public void onResponse(Optional<String> response) {
+    public void onResponse(@Nullable String response) {
         boolean firstResponse = troubleshootFingerprint.isEmpty();
-        if (response.isPresent()) {
-            troubleshootFingerprint = response;
-            VehiclesContainer container = Converter.getGson().fromJson(response.get(), VehiclesContainer.class);
+        if (response != null) {
             updateStatus(ThingStatus.ONLINE);
-            if (discoveryService.isPresent()) {
-                if (container != null) {
-                    if (container.vehicles != null) {
-                        discoveryService.get().onResponse(container);
-                        container.vehicles.forEach(entry -> {
-                            entry.vin = ANONYMOUS;
-                            entry.breakdownNumber = ANONYMOUS;
-                            if (entry.dealer != null) {
-                                Dealer d = entry.dealer;
-                                d.city = ANONYMOUS;
-                                d.country = ANONYMOUS;
-                                d.name = ANONYMOUS;
-                                d.phone = ANONYMOUS;
-                                d.postalCode = ANONYMOUS;
-                                d.street = ANONYMOUS;
-                            }
-                        });
+            troubleshootFingerprint = discoveryService.map(discovery -> {
+                try {
+                    VehiclesContainer container = Converter.getGson().fromJson(response, VehiclesContainer.class);
+                    if (container != null) {
+                        if (container.vehicles != null) {
+                            discovery.onResponse(container);
+                            container.vehicles.forEach(entry -> {
+                                entry.vin = ANONYMOUS;
+                                entry.breakdownNumber = ANONYMOUS;
+                                if (entry.dealer != null) {
+                                    Dealer d = entry.dealer;
+                                    d.city = ANONYMOUS;
+                                    d.country = ANONYMOUS;
+                                    d.name = ANONYMOUS;
+                                    d.phone = ANONYMOUS;
+                                    d.postalCode = ANONYMOUS;
+                                    d.street = ANONYMOUS;
+                                }
+                            });
+                        }
+                        return Converter.getGson().toJson(container);
                     }
+                } catch (JsonSyntaxException jse) {
                 }
-                troubleshootFingerprint = Optional.of(Converter.getGson().toJson(container));
-            }
+                // Unparseable or not a VehiclesContainer:
+                return response;
+            });
         } else {
             troubleshootFingerprint = Optional.of(Constants.EMPTY_VEHICLES);
         }

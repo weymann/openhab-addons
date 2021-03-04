@@ -51,7 +51,7 @@ import org.slf4j.LoggerFactory;
 public class VehicleTests {
     private final Logger logger = LoggerFactory.getLogger(VehicleHandler.class);
 
-    private static final int STATUS_ELECTRIC = 8;
+    private static final int STATUS_ELECTRIC = 9;
     private static final int STATUS_CONV = 7;
     private static final int RANGE_HYBRID = 9;
     private static final int RANGE_CONV = 4;
@@ -97,7 +97,7 @@ public class VehicleTests {
     private boolean testVehicle(String statusContent, int callbacksExpected,
             Optional<Map<String, State>> concreteChecks) {
         assertNotNull(statusContent);
-        cch.vehicleStatusCallback.onResponse(Optional.of(statusContent));
+        cch.vehicleStatusCallback.onResponse(statusContent);
         verify(tc, times(callbacksExpected)).stateUpdated(channelCaptor.capture(), stateCaptor.capture());
         allChannels = channelCaptor.getAllValues();
         allStates = stateCaptor.getAllValues();

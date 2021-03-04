@@ -16,9 +16,10 @@ package org.openhab.binding.bmwconnecteddrive.internal.dto.charge;
  * The {@link WeeklyPlanner} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Norbert Truchsess - edit & send of charge profile
  */
 public class WeeklyPlanner {
-    public boolean climatizationEnabled; // ": true,
+    public Boolean climatizationEnabled; // ": true,
     public String chargingMode;// ": "IMMEDIATE_CHARGING",
     public String chargingPreferences; // ": "CHARGING_WINDOW",
     public Timer timer1; // : {

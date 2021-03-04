@@ -14,18 +14,16 @@ package org.openhab.binding.bmwconnecteddrive.internal.dto.charge;
 
 import java.util.List;
 
-import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
-
 /**
  * The {@link Timer} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Norbert Truchsess - edit & send of charge profile
  */
 public class Timer {
     public String departureTime;// ": "05:00",
-    public boolean timerEnabled;// ": false,
+    public Boolean timerEnabled;// ": false,
     public List<String> weekdays;
-
     /**
      * "MONDAY",
      * "TUESDAY",
@@ -34,18 +32,4 @@ public class Timer {
      * "FRIDAY"
      * ] '
      */
-    public String getDays() {
-        if (weekdays == null) {
-            return Constants.UNDEF;
-        }
-        StringBuilder days = new StringBuilder();
-        weekdays.forEach(entry -> {
-            if (days.length() == 0) {
-                days.append(Constants.DAYS.get(entry));
-            } else {
-                days.append(Constants.COMMA).append(Constants.DAYS.get(entry));
-            }
-        });
-        return days.toString();
-    }
 }

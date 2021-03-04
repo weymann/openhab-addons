@@ -12,8 +12,6 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.handler;
 
-import java.util.Optional;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
@@ -24,5 +22,5 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 @NonNullByDefault
 public interface ByteResponseCallback extends ResponseCallback {
 
-    public void onResponse(Optional<byte[]> result);
+    public void onResponse(byte[] result);
 }

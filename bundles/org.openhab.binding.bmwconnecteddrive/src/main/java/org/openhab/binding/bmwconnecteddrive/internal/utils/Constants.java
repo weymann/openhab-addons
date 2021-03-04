@@ -12,6 +12,10 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.utils;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,6 +26,7 @@ import org.openhab.core.types.UnDefType;
  * The {@link Constants} General Constant Definitions
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Norbert Truchsess - contributor
  */
 @NonNullByDefault
 public class Constants {
@@ -37,6 +42,7 @@ public class Constants {
     public static final String UNDEF = UnDefType.UNDEF.toFullString();
     public static final String UTC_APPENDIX = "-01T12:00:00";
     public static final String NULL_DATE = "1900-01-01T00:00:00";
+    public static final String NULL_TIME = "00:00";
     public static final int INT_UNDEF = -1;
 
     // Services to query
@@ -58,21 +64,27 @@ public class Constants {
     public static final String EMPTY = "";
     public static final String COMMA = ",";
     public static final String QUESTION = "?";
+    public static final String COLON = ":";
 
     public static final String ANONYMOUS = "Anonymous";
     public static final int MILES_TO_FEET_FACTOR = 5280;
     public static final String EMPTY_VEHICLES = "{}";
 
+    // Time Constants for DateTime channels
+    public static final LocalDate EPOCH_DAY = LocalDate.ofEpochDay(0);
+    public static final DateTimeFormatter TIME_FORMATER = DateTimeFormatter.ofPattern("HH:mm");
+    public static final LocalTime NULL_LOCAL_TIME = LocalTime.parse(NULL_TIME, TIME_FORMATER);
+
     @SuppressWarnings("serial")
-    public static final Map<String, String> DAYS = new HashMap<String, String>() {
+    public static final Map<DayOfWeek, String> DAYS = new HashMap<>() {
         {
-            put("MONDAY", "Mon");
-            put("TUESDAY", "Tue");
-            put("WEDNESDAY", "Wed");
-            put("THURSDAY", "Thu");
-            put("FRIDAY", "Fri");
-            put("SATURDAY", "Sat");
-            put("SUNDAY", "Sun");
+            put(DayOfWeek.MONDAY, "Mon");
+            put(DayOfWeek.TUESDAY, "Tue");
+            put(DayOfWeek.WEDNESDAY, "Wed");
+            put(DayOfWeek.THURSDAY, "Thu");
+            put(DayOfWeek.FRIDAY, "Fri");
+            put(DayOfWeek.SATURDAY, "Sat");
+            put(DayOfWeek.SUNDAY, "Sun");
         }
     };
 }
