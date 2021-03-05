@@ -20,9 +20,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -39,10 +37,12 @@ import org.openhab.binding.bmwconnecteddrive.internal.dto.status.Position;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.VehicleStatus;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.Windows;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils.TimedChannel;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Converter;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.RemoteServiceUtils;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.VehicleStatusUtils;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.DecimalType;
@@ -89,44 +89,6 @@ public class VehicleChannelHandler extends BaseThingHandler {
 
     protected BMWConnectedDriveOptionProvider optionProvider;
 
-    // Charging
-    protected static class TimedChannel {
-        TimedChannel(final String time, final String timer, final boolean hasDays) {
-            this.time = time;
-            this.timer = timer;
-            this.hasDays = hasDays;
-        }
-
-        final String time;
-        final String timer;
-        final boolean hasDays;
-    }
-
-    @SuppressWarnings("serial")
-    protected static final Map<ProfileKey, TimedChannel> timedChannels = new HashMap<>() {
-        {
-            put(ProfileKey.WINDOWSTART, new TimedChannel(CHARGE_WINDOW_START, null, false));
-            put(ProfileKey.WINDOWEND, new TimedChannel(CHARGE_WINDOW_END, null, false));
-            put(ProfileKey.TIMER1, new TimedChannel(CHARGE_TIMER1 + CHARGE_DEPARTURE, CHARGE_TIMER1, true));
-            put(ProfileKey.TIMER2, new TimedChannel(CHARGE_TIMER2 + CHARGE_DEPARTURE, CHARGE_TIMER2, true));
-            put(ProfileKey.TIMER3, new TimedChannel(CHARGE_TIMER3 + CHARGE_DEPARTURE, CHARGE_TIMER3, true));
-            put(ProfileKey.OVERRIDE, new TimedChannel(CHARGE_OVERRIDE + CHARGE_DEPARTURE, CHARGE_OVERRIDE, false));
-        }
-    };
-
-    @SuppressWarnings("serial")
-    protected static final Map<DayOfWeek, String> dayChannels = new HashMap<>() {
-        {
-            put(DayOfWeek.MONDAY, CHARGE_DAY_MON);
-            put(DayOfWeek.TUESDAY, CHARGE_DAY_TUE);
-            put(DayOfWeek.WEDNESDAY, CHARGE_DAY_WED);
-            put(DayOfWeek.THURSDAY, CHARGE_DAY_THU);
-            put(DayOfWeek.FRIDAY, CHARGE_DAY_FRI);
-            put(DayOfWeek.SATURDAY, CHARGE_DAY_SAT);
-            put(DayOfWeek.SUNDAY, CHARGE_DAY_SUN);
-        }
-    };
-
     // Data Caches
     protected Optional<String> vehicleStatusCache = Optional.empty();
     protected Optional<String> lastTripCache = Optional.empty();
@@ -146,6 +108,8 @@ public class VehicleChannelHandler extends BaseThingHandler {
         isElectric = type.equals(VehicleType.PLUGIN_HYBRID.toString())
                 || type.equals(VehicleType.ELECTRIC_REX.toString()) || type.equals(VehicleType.ELECTRIC.toString());
         isHybrid = hasFuel && isElectric;
+
+        setOptions(CHANNEL_GROUP_REMOTE, REMOTE_SERVICE_COMMAND, RemoteServiceUtils.getOptions(isElectric));
     }
 
     @Override
@@ -362,7 +326,7 @@ public class VehicleChannelHandler extends BaseThingHandler {
     }
 
     protected void updateChargeProfileFromContent(String content) {
-        ChargeProfileWrapper.fromJson(content).ifPresent(wrapper -> updateChargeProfile(wrapper));
+        ChargeProfileWrapper.fromJson(content).ifPresent(this::updateChargeProfile);
     }
 
     protected void updateChargeProfile(ChargeProfileWrapper wrapper) {
@@ -382,7 +346,7 @@ public class VehicleChannelHandler extends BaseThingHandler {
     }
 
     protected void updateTimedState(ChargeProfileWrapper profile, ProfileKey key) {
-        final TimedChannel timed = timedChannels.get(key);
+        final TimedChannel timed = ChargeProfileUtils.getTimedChannel(key);
         if (timed != null) {
             final LocalTime time = profile.getTime(key);
             updateChannel(CHANNEL_GROUP_CHARGE, timed.time, time == null ? UnDefType.UNDEF
@@ -400,7 +364,7 @@ public class VehicleChannelHandler extends BaseThingHandler {
                     updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + CHARGE_DAYS,
                             days == null ? UnDefType.UNDEF : StringType.valueOf(ChargeProfileUtils.formatDays(days)));
                     EnumSet.allOf(DayOfWeek.class).forEach(day -> {
-                        updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + dayChannels.get(day),
+                        updateChannel(CHANNEL_GROUP_CHARGE, timed.timer + ChargeProfileUtils.getDaysChannel(day),
                                 days == null ? UnDefType.UNDEF : OnOffType.from(days.contains(day)));
                     });
                 }

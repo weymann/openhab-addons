@@ -12,20 +12,24 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.handler;
 
+import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
+
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.util.MultiMap;
+import org.openhab.binding.bmwconnecteddrive.internal.VehicleConfiguration;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.NetworkError;
-import org.openhab.binding.bmwconnecteddrive.internal.dto.remote.ExecutionStatus;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.remote.ExecutionStatusContainer;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Converter;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.HTTPConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.JsonSyntaxException;
 
 /**
  * The {@link RemoteServiceHandler} handles executions of remote services towards your Vehicle
@@ -47,44 +51,38 @@ public class RemoteServiceHandler implements StringResponseCallback {
     private int counter = 0;
 
     public enum ExecutionState {
-        READY("READY"),
-        INITIATED("INITIATED"),
-        PENDING("PENDING"),
-        DELIVERED("DELIVERED"),
-        EXECUTED("EXECUTED"),
-        ERROR("ERROR");
-
-        private final String state;
-
-        ExecutionState(String s) {
-            state = s;
-        }
-
-        @Override
-        public String toString() {
-            return state;
-        }
+        READY,
+        INITIATED,
+        PENDING,
+        DELIVERED,
+        EXECUTED,
+        ERROR,
     }
 
     public enum RemoteService {
-        LIGHT_FLASH("LIGHT_FLASH"),
-        VEHICLE_FINDER("VEHICLE_FINDER"),
-        DOOR_LOCK("DOOR_LOCK"),
-        DOOR_UNLOCK("DOOR_UNLOCK"),
-        HORN("HORN_BLOW"),
-        AIR_CONDITIONING("CLIMATE_NOW"),
-        CHARGE_NOW("CHARGE_NOW"),
-        CHARGING_CONTROL("CHARGING_CONTROL");
+        LIGHT_FLASH(REMOTE_SERVICE_LIGHT_FLASH, "Flash Lights"),
+        VEHICLE_FINDER(REMOTE_SERVICE_VEHICLE_FINDER, "Vehicle Finder"),
+        DOOR_LOCK(REMOTE_SERVICE_DOOR_LOCK, "Door Lock"),
+        DOOR_UNLOCK(REMOTE_SERVICE_DOOR_UNLOCK, "Door Unlock"),
+        HORN_BLOW(REMOTE_SERVICE_HORN, "Horn Blow"),
+        CLIMATE_NOW(REMOTE_SERVICE_AIR_CONDITIONING, "Climate Control"),
+        CHARGE_NOW(REMOTE_SERVICE_CHARGE_NOW, "Start Charging"),
+        CHARGING_CONTROL(REMOTE_SERVICE_CHARGING_CONTROL, "Send Charging Profile");
 
-        private final String service;
+        private final String command;
+        private final String label;
 
-        RemoteService(String s) {
-            service = s;
+        RemoteService(final String command, final String label) {
+            this.command = command;
+            this.label = label;
         }
 
-        @Override
-        public String toString() {
-            return service;
+        public String getCommand() {
+            return command;
+        }
+
+        public String getLabel() {
+            return label;
         }
     }
 
@@ -99,9 +97,9 @@ public class RemoteServiceHandler implements StringResponseCallback {
         handler = vehicleHandler;
         proxy = connectedDriveProxy;
         if (handler.getConfiguration().isPresent()) {
-            serviceExecutionAPI = proxy.baseUrl + handler.getConfiguration().get().vin + proxy.serviceExecutionAPI;
-            serviceExecutionStateAPI = proxy.baseUrl + handler.getConfiguration().get().vin
-                    + proxy.serviceExecutionStateAPI;
+            final VehicleConfiguration config = handler.getConfiguration().get();
+            serviceExecutionAPI = proxy.baseUrl + config.vin + proxy.serviceExecutionAPI;
+            serviceExecutionStateAPI = proxy.baseUrl + config.vin + proxy.serviceExecutionStateAPI;
         } else {
             serviceExecutionAPI = Constants.INVALID;
             serviceExecutionStateAPI = Constants.INVALID;
@@ -115,10 +113,10 @@ public class RemoteServiceHandler implements StringResponseCallback {
                 // only one service executing
                 return false;
             }
-            serviceExecuting = Optional.of(service.toString());
+            serviceExecuting = Optional.of(service.name());
         }
         final MultiMap<String> dataMap = new MultiMap<String>();
-        dataMap.add(SERVICE_TYPE, service.toString());
+        dataMap.add(SERVICE_TYPE, service.name());
         if (data.length > 0) {
             dataMap.add(DATA, data[0]);
         }
@@ -127,55 +125,62 @@ public class RemoteServiceHandler implements StringResponseCallback {
     }
 
     public void getState() {
-        serviceExecuting.ifPresentOrElse(service -> {
-            if (counter >= GIVEUP_COUNTER) {
-                logger.warn("Giving up updating state for {} after {} times", service, GIVEUP_COUNTER);
-                reset();
-                // immediately refresh data
-                handler.getData();
-            }
-            counter++;
-            final MultiMap<String> dataMap = new MultiMap<String>();
-            dataMap.add(SERVICE_TYPE, serviceExecuting.get());
-            proxy.get(serviceExecutionStateAPI, dataMap, this);
-        }, () -> {
-            logger.warn("No Service executed to get state");
-        });
+        synchronized (this) {
+            serviceExecuting.ifPresentOrElse(service -> {
+                if (counter >= GIVEUP_COUNTER) {
+                    logger.warn("Giving up updating state for {} after {} times", service, GIVEUP_COUNTER);
+                    reset();
+                    // immediately refresh data
+                    handler.getData();
+                }
+                counter++;
+                final MultiMap<String> dataMap = new MultiMap<String>();
+                dataMap.add(SERVICE_TYPE, service);
+                proxy.get(serviceExecutionStateAPI, dataMap, this);
+            }, () -> {
+                logger.warn("No Service executed to get state");
+            });
+        }
     }
 
     @Override
     public void onResponse(@Nullable String result) {
         if (result != null) {
-            ExecutionStatusContainer esc = Converter.getGson().fromJson(result, ExecutionStatusContainer.class);
-            if (esc != null) {
-                ExecutionStatus execStatus = esc.executionStatus;
-                handler.updateRemoteExecutionStatus(serviceExecuting.get(), execStatus.status);
-                if (!ExecutionState.EXECUTED.toString().equals(execStatus.status)) {
-                    handler.getScheduler().schedule(this::getState, STATE_UPDATE_SEC, TimeUnit.SECONDS);
-                } else {
-                    // refresh loop ends - update of status handled in the normal refreshInterval. Earlier update
-                    // doesn't
-                    // show better results!
-                    reset();
+            try {
+                ExecutionStatusContainer esc = Converter.getGson().fromJson(result, ExecutionStatusContainer.class);
+                if (esc != null && esc.executionStatus != null) {
+                    String status = esc.executionStatus.status;
+                    synchronized (this) {
+                        handler.updateRemoteExecutionStatus(serviceExecuting.orElse(null), status);
+                        if (ExecutionState.EXECUTED.name().equals(status)) {
+                            // refresh loop ends - update of status handled in the normal refreshInterval. Earlier
+                            // update
+                            // doesn't
+                            // show better results!
+                            reset();
+                            return;
+                        }
+                    }
                 }
+            } catch (JsonSyntaxException jse) {
+                logger.debug("RemoteService response is unparseable: {} {}", result, jse.getMessage());
             }
-        } else {
-            // schedule even if no result is present until retries exceeded
-            handler.getScheduler().schedule(this::getState, STATE_UPDATE_SEC, TimeUnit.SECONDS);
         }
+        // schedule even if no result is present until retries exceeded
+        handler.getScheduler().schedule(this::getState, STATE_UPDATE_SEC, TimeUnit.SECONDS);
     }
 
     @Override
     public void onError(NetworkError error) {
-        handler.updateRemoteExecutionStatus(serviceExecuting.get(), new StringBuilder(ExecutionState.ERROR.toString())
-                .append(Constants.SPACE).append(Integer.toString(error.status)).toString());
-        reset();
+        synchronized (this) {
+            handler.updateRemoteExecutionStatus(serviceExecuting.orElse(null),
+                    ExecutionState.ERROR.name() + Constants.SPACE + Integer.toString(error.status));
+            reset();
+        }
     }
 
     private void reset() {
-        synchronized (this) {
-            serviceExecuting = Optional.empty();
-            counter = 0;
-        }
+        serviceExecuting = Optional.empty();
+        counter = 0;
     }
 }

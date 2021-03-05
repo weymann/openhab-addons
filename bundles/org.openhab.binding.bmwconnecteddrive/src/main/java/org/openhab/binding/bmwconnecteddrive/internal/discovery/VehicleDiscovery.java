@@ -12,7 +12,8 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.discovery;
 
-import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.SUPPORTED_THING_SET;
+import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.*;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
@@ -22,10 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.discovery.VehiclesContainer;
 import org.openhab.binding.bmwconnecteddrive.internal.handler.ConnectedDriveBridgeHandler;
-import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Converter;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.config.discovery.AbstractDiscoveryService;
@@ -72,22 +71,21 @@ public class VehicleDiscovery extends AbstractDiscoveryService implements Discov
                         }
 
                         // Services & Support
-                        properties.put("servicesActivated", getObject(vehicle, Constants.ACTIVATED));
-                        String servicesSupported = getObject(vehicle, Constants.SUPPORTED);
-                        String servicesNotSupported = getObject(vehicle, Constants.NOT_SUPPORTED);
+                        properties.put("servicesActivated", getObject(vehicle, ACTIVATED));
+                        String servicesSupported = getObject(vehicle, SUPPORTED);
+                        String servicesNotSupported = getObject(vehicle, NOT_SUPPORTED);
                         if (vehicle.statisticsAvailable) {
-                            servicesSupported += Constants.STATISTICS;
+                            servicesSupported += STATISTICS;
                         } else {
-                            servicesNotSupported += Constants.STATISTICS;
+                            servicesNotSupported += STATISTICS;
                         }
-                        properties.put(Constants.SERVICES_SUPPORTED, servicesSupported);
+                        properties.put(SERVICES_SUPPORTED, servicesSupported);
                         properties.put("servicesNotSupported", servicesNotSupported);
                         properties.put("supportBreakdownNumber", vehicle.breakdownNumber);
 
                         // Vehicle Properties
                         if (vehicle.supportedChargingModes != null) {
-                            properties.put("vehicleChargeModes",
-                                    String.join(Constants.SPACE, vehicle.supportedChargingModes));
+                            properties.put("vehicleChargeModes", String.join(SPACE, vehicle.supportedChargingModes));
                         }
                         if (vehicle.hasAlarmSystem) {
                             properties.put("vehicleAlarmSystem", "Available");
@@ -108,8 +106,8 @@ public class VehicleDiscovery extends AbstractDiscoveryService implements Discov
                         final AtomicBoolean foundVehicle = new AtomicBoolean(false);
                         bridge.getThing().getThings().forEach(vehicleThing -> {
                             Configuration c = vehicleThing.getConfiguration();
-                            if (c.containsKey("vin")) {
-                                String thingVIN = c.get("vin").toString();
+                            if (c.containsKey(CONFIG_VIN)) {
+                                String thingVIN = c.get(CONFIG_VIN).toString();
                                 if (vehicle.vin.equals(thingVIN)) {
                                     vehicleThing.setProperties(properties);
                                     foundVehicle.set(true);
@@ -120,17 +118,16 @@ public class VehicleDiscovery extends AbstractDiscoveryService implements Discov
                         // Vehicle not found -> trigger discovery
                         if (!foundVehicle.get()) {
                             // Properties needed for functional THing
-                            properties.put("vin", vehicle.vin);
-                            properties.put("refreshInterval",
-                                    Integer.toString(ConnectedDriveConstants.DEFAULT_REFRESH_INTERVAL));
-                            properties.put("units", ConnectedDriveConstants.UNITS_AUTODETECT);
-                            properties.put("imageSize", Integer.toString(ConnectedDriveConstants.DEFAULT_IMAGE_SIZE));
-                            properties.put("imageViewport", ConnectedDriveConstants.DEFAULT_IMAGE_VIEWPORT);
+                            properties.put(CONFIG_VIN, vehicle.vin);
+                            properties.put("refreshInterval", Integer.toString(DEFAULT_REFRESH_INTERVAL));
+                            properties.put("units", UNITS_AUTODETECT);
+                            properties.put("imageSize", Integer.toString(DEFAULT_IMAGE_SIZE));
+                            properties.put("imageViewport", DEFAULT_IMAGE_VIEWPORT);
 
                             String vehicleLabel = vehicle.brand + " " + vehicle.model;
                             Map<String, Object> convertedProperties = new HashMap<String, Object>(properties);
                             thingDiscovered(DiscoveryResultBuilder.create(uid).withBridge(bridgeUID)
-                                    .withRepresentationProperty("vin").withLabel(vehicleLabel)
+                                    .withRepresentationProperty(CONFIG_VIN).withLabel(vehicleLabel)
                                     .withProperties(convertedProperties).build());
                         }
                     }
@@ -153,7 +150,7 @@ public class VehicleDiscovery extends AbstractDiscoveryService implements Discov
             try {
                 Object value = field.get(dto);
                 if (compare.equals(value)) {
-                    buf.append(Converter.capitalizeFirst(field.getName()) + Constants.SPACE);
+                    buf.append(Converter.capitalizeFirst(field.getName()) + SPACE);
                 }
             } catch (IllegalArgumentException | IllegalAccessException e) {
                 logger.debug("Field {} not found {}", compare, e.getMessage());

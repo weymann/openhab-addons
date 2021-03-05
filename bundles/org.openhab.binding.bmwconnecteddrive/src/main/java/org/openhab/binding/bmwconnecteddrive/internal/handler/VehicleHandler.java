@@ -14,12 +14,9 @@ package org.openhab.binding.bmwconnecteddrive.internal.handler;
 
 import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
 
-import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,11 +38,15 @@ import org.openhab.binding.bmwconnecteddrive.internal.dto.status.VehicleStatus;
 import org.openhab.binding.bmwconnecteddrive.internal.dto.status.VehicleStatusContainer;
 import org.openhab.binding.bmwconnecteddrive.internal.handler.RemoteServiceHandler.ExecutionState;
 import org.openhab.binding.bmwconnecteddrive.internal.handler.RemoteServiceHandler.RemoteService;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils.ChargeKeyDay;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileUtils.ChargeKeyHour;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Constants;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.Converter;
 import org.openhab.binding.bmwconnecteddrive.internal.utils.ImageProperties;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.RemoteServiceUtils;
 import org.openhab.core.io.net.http.HttpUtil;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
@@ -95,57 +96,6 @@ public class VehicleHandler extends VehicleChannelHandler {
     private Optional<ChargeProfileWrapper> chargeProfileEdit = Optional.empty();
     private Optional<String> chargeProfileSent = Optional.empty();
 
-    private static class ChargeKeyHour {
-        ChargeKeyHour(final ProfileKey key, final boolean isHour) {
-            this.key = key;
-            this.isHour = isHour;
-        }
-
-        final ProfileKey key;
-        final boolean isHour;
-    }
-
-    private static class ChargeKeyDay {
-        ChargeKeyDay(final ProfileKey key, final DayOfWeek day) {
-            this.key = key;
-            this.day = day;
-        }
-
-        final ProfileKey key;
-        final DayOfWeek day;
-    }
-
-    @SuppressWarnings("serial")
-    private static final Map<String, ProfileKey> chargeEnableChannelKeys = new HashMap<>() {
-        {
-            VehicleChannelHandler.timedChannels.forEach((key, channel) -> {
-                put(channel.timer + CHARGE_ENABLED, key);
-            });
-            put(CHARGE_PROFILE_CLIMATE, ProfileKey.CLIMATE);
-        }
-    };
-
-    @SuppressWarnings("serial")
-    private static final Map<String, ChargeKeyHour> chargeTimeChannelKeys = new HashMap<>() {
-        {
-            VehicleChannelHandler.timedChannels.forEach((key, channel) -> {
-                put(channel.time + CHARGE_HOUR, new ChargeKeyHour(key, true));
-                put(channel.time + CHARGE_MINUTE, new ChargeKeyHour(key, false));
-            });
-        }
-    };
-
-    @SuppressWarnings("serial")
-    private static final Map<String, ChargeKeyDay> chargeDayChannelKeys = new HashMap<>() {
-        {
-            VehicleChannelHandler.dayChannels.forEach((dayOfWeek, dayChannel) -> {
-                put(CHARGE_TIMER1 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER1, dayOfWeek));
-                put(CHARGE_TIMER2 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER2, dayOfWeek));
-                put(CHARGE_TIMER3 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER3, dayOfWeek));
-            });
-        }
-    };
-
     public VehicleHandler(Thing thing, BMWConnectedDriveOptionProvider op, String type, boolean imperial) {
         super(thing, op, type, imperial);
     }
@@ -160,16 +110,13 @@ public class VehicleHandler extends VehicleChannelHandler {
                 lastTripCache.ifPresent(lastTrip -> lastTripCallback.onResponse(lastTrip));
             } else if (CHANNEL_GROUP_LIFETIME.equals(group)) {
                 allTripsCache.ifPresent(allTrips -> allTripsCallback.onResponse(allTrips));
-            } else if (CHANNEL_GROUP_LAST_TRIP.equals(group)) {
-                lastTripCache.ifPresent(lastTrip -> lastTripCallback.onResponse(lastTrip));
-            } else if (CHANNEL_GROUP_LAST_TRIP.equals(group)) {
-                lastTripCache.ifPresent(lastTrip -> lastTripCallback.onResponse(lastTrip));
+            } else if (CHANNEL_GROUP_DESTINATION.equals(group)) {
+                destinationCache.ifPresent(destination -> destinationCallback.onResponse(destination));
             } else if (CHANNEL_GROUP_STATUS.equals(group)) {
                 vehicleStatusCache.ifPresent(vehicleStatus -> vehicleStatusCallback.onResponse(vehicleStatus));
             } else if (CHANNEL_GROUP_CHARGE.equals(group)) {
-                chargeProfileEdit.ifPresentOrElse(profileEdit -> updateChargeProfile(profileEdit),
-                        () -> chargeProfileCache
-                                .ifPresent(profileCache -> updateChargeProfileFromContent(profileCache)));
+                chargeProfileEdit.ifPresentOrElse(this::updateChargeProfile,
+                        () -> chargeProfileCache.ifPresent(this::updateChargeProfileFromContent));
             } else if (CHANNEL_GROUP_VEHICLE_IMAGE.equals(group)) {
                 imageCache.ifPresent(image -> imageCallback.onResponse(image));
             }
@@ -178,28 +125,19 @@ public class VehicleHandler extends VehicleChannelHandler {
             // Executing Remote Services
             if (command instanceof StringType) {
                 String serviceCommand = ((StringType) command).toFullString();
-                if (remote.isPresent()) {
+                remote.ifPresent(remot -> {
                     switch (serviceCommand) {
                         case REMOTE_SERVICE_LIGHT_FLASH:
-                            remote.get().execute(RemoteService.LIGHT_FLASH);
-                            break;
                         case REMOTE_SERVICE_AIR_CONDITIONING:
-                            remote.get().execute(RemoteService.AIR_CONDITIONING);
-                            break;
                         case REMOTE_SERVICE_DOOR_LOCK:
-                            remote.get().execute(RemoteService.DOOR_LOCK);
-                            break;
                         case REMOTE_SERVICE_DOOR_UNLOCK:
-                            remote.get().execute(RemoteService.DOOR_UNLOCK);
-                            break;
                         case REMOTE_SERVICE_HORN:
-                            remote.get().execute(RemoteService.HORN);
-                            break;
                         case REMOTE_SERVICE_VEHICLE_FINDER:
-                            remote.get().execute(RemoteService.VEHICLE_FINDER);
-                            break;
                         case REMOTE_SERVICE_CHARGE_NOW:
-                            remote.get().execute(RemoteService.CHARGE_NOW);
+                            RemoteServiceUtils.getRemoteService(serviceCommand)
+                                    .ifPresentOrElse(service -> remot.execute(service), () -> {
+                                        logger.info("Remote service execution {} unknown", serviceCommand);
+                                    });
                             break;
                         case REMOTE_SERVICE_CHARGING_CONTROL:
                             sendChargeProfile(chargeProfileEdit);
@@ -208,11 +146,11 @@ public class VehicleHandler extends VehicleChannelHandler {
                             logger.info("Remote service execution {} unknown", serviceCommand);
                             break;
                     }
-                }
+                });
             }
         } else if (CHANNEL_GROUP_VEHICLE_IMAGE.equals(group)) {
             // Image Change
-            if (configuration.isPresent()) {
+            configuration.ifPresent(config -> {
                 if (command instanceof StringType) {
                     if (channelUID.getIdWithoutGroup().equals(IMAGE_VIEWPORT)) {
                         String newViewport = command.toString();
@@ -220,7 +158,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                             if (!imageProperties.viewport.equals(newViewport)) {
                                 imageProperties = new ImageProperties(newViewport, imageProperties.size);
                                 imageCache = Optional.empty();
-                                proxy.get().requestImage(configuration.get(), imageProperties, imageCallback);
+                                proxy.ifPresent(prox -> prox.requestImage(config, imageProperties, imageCallback));
                             }
                         }
                         updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT, StringType.valueOf(newViewport));
@@ -234,14 +172,14 @@ public class VehicleHandler extends VehicleChannelHandler {
                                 if (imageProperties.size != newImageSize) {
                                     imageProperties = new ImageProperties(imageProperties.viewport, newImageSize);
                                     imageCache = Optional.empty();
-                                    proxy.get().requestImage(configuration.get(), imageProperties, imageCallback);
+                                    proxy.ifPresent(prox -> prox.requestImage(config, imageProperties, imageCallback));
                                 }
                             }
                         }
                         updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE, new DecimalType(newImageSize));
                     }
                 }
-            }
+            });
         } else if (CHANNEL_GROUP_DESTINATION.equals(group)) {
             if (command instanceof StringType) {
                 int index = Converter.getIndex(command.toFullString());
@@ -278,20 +216,19 @@ public class VehicleHandler extends VehicleChannelHandler {
     public void initialize() {
         callbackCounter = Optional.of(new ArrayList<ResponseCallback>());
         updateStatus(ThingStatus.UNKNOWN);
-        configuration = Optional.of(getConfigAs(VehicleConfiguration.class));
-        if (configuration.isPresent()) {
+        final VehicleConfiguration config = getConfigAs(VehicleConfiguration.class);
+        if (config != null) {
+            configuration = Optional.of(config);
             scheduler.execute(() -> {
                 Bridge bridge = getBridge();
                 if (bridge != null) {
                     BridgeHandler handler = bridge.getHandler();
                     if (handler != null) {
                         bridgeHandler = Optional.of(((ConnectedDriveBridgeHandler) handler));
-                        proxy = bridgeHandler.get().getProxy();
-                        if (proxy.isPresent()) {
-                            remote = Optional.of(proxy.get().getRemoteServiceHandler(this));
-                        }
+                        proxy = ((ConnectedDriveBridgeHandler) handler).getProxy();
+                        remote = proxy.map(prox -> prox.getRemoteServiceHandler(this));
                     } else {
-                        logger.debug("Brdige Handler null");
+                        logger.debug("Bridge Handler null");
                     }
                 } else {
                     logger.debug("Bridge null");
@@ -299,21 +236,18 @@ public class VehicleHandler extends VehicleChannelHandler {
 
                 // get Image after init with config values
                 synchronized (imageProperties) {
-                    imageProperties = new ImageProperties(configuration.get().imageViewport,
-                            configuration.get().imageSize);
+                    imageProperties = new ImageProperties(config.imageViewport, config.imageSize);
                 }
-                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT,
-                        StringType.valueOf((configuration.get().imageViewport)));
-                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE,
-                        new DecimalType((configuration.get().imageSize)));
+                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_VIEWPORT, StringType.valueOf((config.imageViewport)));
+                updateChannel(CHANNEL_GROUP_VEHICLE_IMAGE, IMAGE_SIZE, new DecimalType((config.imageSize)));
 
                 // check imperial setting is different to AutoDetect
-                if (!UNITS_AUTODETECT.equals(configuration.get().units)) {
-                    imperial = UNITS_IMPERIAL.equals(configuration.get().units);
+                if (!UNITS_AUTODETECT.equals(config.units)) {
+                    imperial = UNITS_IMPERIAL.equals(config.units);
                 }
 
                 // start update schedule
-                startSchedule(configuration.get().refreshInterval);
+                startSchedule(config.refreshInterval);
             });
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR);
@@ -321,21 +255,19 @@ public class VehicleHandler extends VehicleChannelHandler {
     }
 
     private void startSchedule(int interval) {
-        if (refreshJob.isPresent()) {
-            if (refreshJob.get().isCancelled()) {
+        refreshJob.ifPresentOrElse(job -> {
+            if (job.isCancelled()) {
                 refreshJob = Optional
                         .of(scheduler.scheduleWithFixedDelay(this::getData, 0, interval, TimeUnit.MINUTES));
             } // else - scheduler is already running!
-        } else {
+        }, () -> {
             refreshJob = Optional.of(scheduler.scheduleWithFixedDelay(this::getData, 0, interval, TimeUnit.MINUTES));
-        }
+        });
     }
 
     @Override
     public void dispose() {
-        if (refreshJob.isPresent()) {
-            refreshJob.get().cancel(true);
-        }
+        refreshJob.ifPresent(job -> job.cancel(true));
     }
 
     public void getData() {
@@ -483,7 +415,7 @@ public class VehicleHandler extends VehicleChannelHandler {
      * @return
      */
     private boolean isSupported(String service) {
-        String services = thing.getProperties().get(Constants.SERVICES_SUPPORTED);
+        final String services = thing.getProperties().get(Constants.SERVICES_SUPPORTED);
         if (services != null) {
             if (services.contains(service)) {
                 return true;
@@ -497,9 +429,9 @@ public class VehicleHandler extends VehicleChannelHandler {
         }
     }
 
-    public void updateRemoteExecutionStatus(@Nullable String service, String status) {
+    public void updateRemoteExecutionStatus(@Nullable String service, @Nullable String status) {
         if (RemoteService.CHARGING_CONTROL.toString().equals(service)
-                && ExecutionState.EXECUTED.toString().equals(status)) {
+                && ExecutionState.EXECUTED.name().equals(status)) {
             saveChargeProfileSent();
         }
         updateChannel(CHANNEL_GROUP_REMOTE, REMOTE_STATE, StringType.valueOf(Converter.toTitleCase(
@@ -805,13 +737,13 @@ public class VehicleHandler extends VehicleChannelHandler {
                         break;
                 }
             } else if (command instanceof OnOffType) {
-                final ProfileKey enableKey = chargeEnableChannelKeys.get(id);
+                final ProfileKey enableKey = ChargeProfileUtils.getEnableKey(id);
                 if (enableKey != null) {
                     profile.setEnabled(enableKey, OnOffType.ON.equals(command));
                     updateTimedState(profile, enableKey);
                     processed = true;
                 } else {
-                    final ChargeKeyDay chargeKeyDay = chargeDayChannelKeys.get(id);
+                    final ChargeKeyDay chargeKeyDay = ChargeProfileUtils.getKeyDay(id);
                     if (chargeKeyDay != null) {
                         profile.setDayEnabled(chargeKeyDay.key, chargeKeyDay.day, OnOffType.ON.equals(command));
                         updateTimedState(profile, chargeKeyDay.key);
@@ -819,7 +751,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                     }
                 }
             } else if (command instanceof DecimalType) {
-                final ChargeKeyHour keyHour = chargeTimeChannelKeys.get(id);
+                final ChargeKeyHour keyHour = ChargeProfileUtils.getKeyHour(id);
                 if (keyHour != null) {
                     if (keyHour.isHour) {
                         profile.setHour(keyHour.key, ((DecimalType) command).intValue());

@@ -12,10 +12,19 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.utils;
 
+import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.*;
+
 import java.time.DayOfWeek;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey;
 
 /**
  * The {@link ChargeProfileUtils} utility functions for charging profiles
@@ -25,15 +34,116 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 @NonNullByDefault
 public class ChargeProfileUtils {
 
+    // Charging
+    public static class TimedChannel {
+        TimedChannel(final String time, @Nullable final String timer, final boolean hasDays) {
+            this.time = time;
+            this.timer = timer;
+            this.hasDays = hasDays;
+        }
+
+        public final String time;
+        public final @Nullable String timer;
+        public final boolean hasDays;
+    }
+
+    @SuppressWarnings("serial")
+    private static final Map<ProfileKey, TimedChannel> timedChannels = new HashMap<>() {
+        {
+            put(WINDOWSTART, new TimedChannel(CHARGE_WINDOW_START, null, false));
+            put(WINDOWEND, new TimedChannel(CHARGE_WINDOW_END, null, false));
+            put(TIMER1, new TimedChannel(CHARGE_TIMER1 + CHARGE_DEPARTURE, CHARGE_TIMER1, true));
+            put(TIMER2, new TimedChannel(CHARGE_TIMER2 + CHARGE_DEPARTURE, CHARGE_TIMER2, true));
+            put(TIMER3, new TimedChannel(CHARGE_TIMER3 + CHARGE_DEPARTURE, CHARGE_TIMER3, true));
+            put(OVERRIDE, new TimedChannel(CHARGE_OVERRIDE + CHARGE_DEPARTURE, CHARGE_OVERRIDE, false));
+        }
+    };
+
+    @SuppressWarnings("serial")
+    private static final Map<DayOfWeek, String> dayChannels = new HashMap<>() {
+        {
+            put(DayOfWeek.MONDAY, CHARGE_DAY_MON);
+            put(DayOfWeek.TUESDAY, CHARGE_DAY_TUE);
+            put(DayOfWeek.WEDNESDAY, CHARGE_DAY_WED);
+            put(DayOfWeek.THURSDAY, CHARGE_DAY_THU);
+            put(DayOfWeek.FRIDAY, CHARGE_DAY_FRI);
+            put(DayOfWeek.SATURDAY, CHARGE_DAY_SAT);
+            put(DayOfWeek.SUNDAY, CHARGE_DAY_SUN);
+        }
+    };
+
+    public static class ChargeKeyHour {
+        ChargeKeyHour(final ProfileKey key, final boolean isHour) {
+            this.key = key;
+            this.isHour = isHour;
+        }
+
+        public final ProfileKey key;
+        public final boolean isHour;
+    }
+
+    public static class ChargeKeyDay {
+        ChargeKeyDay(final ProfileKey key, final DayOfWeek day) {
+            this.key = key;
+            this.day = day;
+        }
+
+        public final ProfileKey key;
+        public final DayOfWeek day;
+    }
+
+    @SuppressWarnings("serial")
+    private static final Map<String, ProfileKey> chargeEnableChannelKeys = new HashMap<>() {
+        {
+            timedChannels.forEach((key, channel) -> {
+                put(channel.timer + CHARGE_ENABLED, key);
+            });
+            put(CHARGE_PROFILE_CLIMATE, CLIMATE);
+        }
+    };
+
+    @SuppressWarnings("serial")
+    private static final Map<String, ChargeKeyHour> chargeTimeChannelKeys = new HashMap<>() {
+        {
+            timedChannels.forEach((key, channel) -> {
+                put(channel.time + CHARGE_HOUR, new ChargeKeyHour(key, true));
+                put(channel.time + CHARGE_MINUTE, new ChargeKeyHour(key, false));
+            });
+        }
+    };
+
+    @SuppressWarnings("serial")
+    private static final Map<String, ChargeKeyDay> chargeDayChannelKeys = new HashMap<>() {
+        {
+            dayChannels.forEach((dayOfWeek, dayChannel) -> {
+                put(CHARGE_TIMER1 + dayChannel, new ChargeKeyDay(TIMER1, dayOfWeek));
+                put(CHARGE_TIMER2 + dayChannel, new ChargeKeyDay(TIMER2, dayOfWeek));
+                put(CHARGE_TIMER3 + dayChannel, new ChargeKeyDay(TIMER3, dayOfWeek));
+            });
+        }
+    };
+
+    public static @Nullable TimedChannel getTimedChannel(ProfileKey key) {
+        return timedChannels.get(key);
+    }
+
+    public static @Nullable String getDaysChannel(DayOfWeek day) {
+        return dayChannels.get(day);
+    }
+
+    public static @Nullable ProfileKey getEnableKey(final String id) {
+        return chargeEnableChannelKeys.get(id);
+    }
+
+    public static @Nullable ChargeKeyDay getKeyDay(final String id) {
+        return chargeDayChannelKeys.get(id);
+    }
+
+    public static @Nullable ChargeKeyHour getKeyHour(final String id) {
+        return chargeTimeChannelKeys.get(id);
+    }
+
     public static String formatDays(final Set<DayOfWeek> weekdays) {
-        StringBuilder days = new StringBuilder();
-        weekdays.forEach(entry -> {
-            if (days.length() == 0) {
-                days.append(Constants.DAYS.get(entry));
-            } else {
-                days.append(Constants.COMMA).append(Constants.DAYS.get(entry));
-            }
-        });
-        return days.toString();
+        return weekdays.stream().map(day -> DAYS.get(day)).collect(Collectors.joining(COMMA));
     }
 }
