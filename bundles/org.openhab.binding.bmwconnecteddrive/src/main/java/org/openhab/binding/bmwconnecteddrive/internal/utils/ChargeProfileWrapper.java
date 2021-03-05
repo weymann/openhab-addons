@@ -12,10 +12,9 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.utils;
 
-import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.ChargingPreference.*;
 import static org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey.*;
-import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.NULL_LOCAL_TIME;
-import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.TIME_FORMATER;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.*;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -117,7 +116,7 @@ public class ChargeProfileWrapper {
             addTime(WINDOWEND, planner.preferredChargingWindow.endTime);
         } else {
             preference.ifPresent(pref -> {
-                if (ChargingPreference.CHARGING_WINDOW.equals(pref)) {
+                if (CHARGING_WINDOW.equals(pref)) {
                     addTime(WINDOWSTART, null);
                     addTime(WINDOWEND, null);
                 }
@@ -234,7 +233,7 @@ public class ChargeProfileWrapper {
         preference.ifPresent(pref -> planner.chargingPreferences = pref.name());
         planner.climatizationEnabled = isEnabled(CLIMATE);
         preference.ifPresent(pref -> {
-            if (ChargingPreference.CHARGING_WINDOW.equals(pref)) {
+            if (CHARGING_WINDOW.equals(pref)) {
                 planner.chargingMode = getMode();
                 final LocalTime start = getTime(WINDOWSTART);
                 final LocalTime end = getTime(WINDOWEND);

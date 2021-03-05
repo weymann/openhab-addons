@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.bmwconnecteddrive.internal.utils;
 
+import static java.time.DayOfWeek.*;
+
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -78,13 +80,13 @@ public class Constants {
     @SuppressWarnings("serial")
     public static final Map<DayOfWeek, String> DAYS = new HashMap<>() {
         {
-            put(DayOfWeek.MONDAY, "Mon");
-            put(DayOfWeek.TUESDAY, "Tue");
-            put(DayOfWeek.WEDNESDAY, "Wed");
-            put(DayOfWeek.THURSDAY, "Thu");
-            put(DayOfWeek.FRIDAY, "Fri");
-            put(DayOfWeek.SATURDAY, "Sat");
-            put(DayOfWeek.SUNDAY, "Sun");
+            put(MONDAY, "Mon");
+            put(TUESDAY, "Tue");
+            put(WEDNESDAY, "Wed");
+            put(THURSDAY, "Thu");
+            put(FRIDAY, "Fri");
+            put(SATURDAY, "Sat");
+            put(SUNDAY, "Sun");
         }
     };
 }

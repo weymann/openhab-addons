@@ -13,6 +13,8 @@
 package org.openhab.binding.bmwconnecteddrive.internal.utils;
 
 import static org.openhab.binding.bmwconnecteddrive.internal.ConnectedDriveConstants.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.ChargeProfileWrapper.ProfileKey.*;
+import static org.openhab.binding.bmwconnecteddrive.internal.utils.Constants.*;
 
 import java.time.DayOfWeek;
 import java.util.HashMap;
@@ -48,12 +50,12 @@ public class ChargeProfileUtils {
     @SuppressWarnings("serial")
     private static final Map<ProfileKey, TimedChannel> timedChannels = new HashMap<>() {
         {
-            put(ProfileKey.WINDOWSTART, new TimedChannel(CHARGE_WINDOW_START, null, false));
-            put(ProfileKey.WINDOWEND, new TimedChannel(CHARGE_WINDOW_END, null, false));
-            put(ProfileKey.TIMER1, new TimedChannel(CHARGE_TIMER1 + CHARGE_DEPARTURE, CHARGE_TIMER1, true));
-            put(ProfileKey.TIMER2, new TimedChannel(CHARGE_TIMER2 + CHARGE_DEPARTURE, CHARGE_TIMER2, true));
-            put(ProfileKey.TIMER3, new TimedChannel(CHARGE_TIMER3 + CHARGE_DEPARTURE, CHARGE_TIMER3, true));
-            put(ProfileKey.OVERRIDE, new TimedChannel(CHARGE_OVERRIDE + CHARGE_DEPARTURE, CHARGE_OVERRIDE, false));
+            put(WINDOWSTART, new TimedChannel(CHARGE_WINDOW_START, null, false));
+            put(WINDOWEND, new TimedChannel(CHARGE_WINDOW_END, null, false));
+            put(TIMER1, new TimedChannel(CHARGE_TIMER1 + CHARGE_DEPARTURE, CHARGE_TIMER1, true));
+            put(TIMER2, new TimedChannel(CHARGE_TIMER2 + CHARGE_DEPARTURE, CHARGE_TIMER2, true));
+            put(TIMER3, new TimedChannel(CHARGE_TIMER3 + CHARGE_DEPARTURE, CHARGE_TIMER3, true));
+            put(OVERRIDE, new TimedChannel(CHARGE_OVERRIDE + CHARGE_DEPARTURE, CHARGE_OVERRIDE, false));
         }
     };
 
@@ -96,7 +98,7 @@ public class ChargeProfileUtils {
             timedChannels.forEach((key, channel) -> {
                 put(channel.timer + CHARGE_ENABLED, key);
             });
-            put(CHARGE_PROFILE_CLIMATE, ProfileKey.CLIMATE);
+            put(CHARGE_PROFILE_CLIMATE, CLIMATE);
         }
     };
 
@@ -114,9 +116,9 @@ public class ChargeProfileUtils {
     private static final Map<String, ChargeKeyDay> chargeDayChannelKeys = new HashMap<>() {
         {
             dayChannels.forEach((dayOfWeek, dayChannel) -> {
-                put(CHARGE_TIMER1 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER1, dayOfWeek));
-                put(CHARGE_TIMER2 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER2, dayOfWeek));
-                put(CHARGE_TIMER3 + dayChannel, new ChargeKeyDay(ProfileKey.TIMER3, dayOfWeek));
+                put(CHARGE_TIMER1 + dayChannel, new ChargeKeyDay(TIMER1, dayOfWeek));
+                put(CHARGE_TIMER2 + dayChannel, new ChargeKeyDay(TIMER2, dayOfWeek));
+                put(CHARGE_TIMER3 + dayChannel, new ChargeKeyDay(TIMER3, dayOfWeek));
             });
         }
     };
@@ -142,6 +144,6 @@ public class ChargeProfileUtils {
     }
 
     public static String formatDays(final Set<DayOfWeek> weekdays) {
-        return weekdays.stream().map(day -> Constants.DAYS.get(day)).collect(Collectors.joining(Constants.COMMA));
+        return weekdays.stream().map(day -> DAYS.get(day)).collect(Collectors.joining(COMMA));
     }
 }
