@@ -93,30 +93,33 @@ public class ConnectedDriveBridgeHandler extends BaseBridgeHandler implements St
 
     public String getDiscoveryFingerprint() {
         return troubleshootFingerprint.map(fingerprint -> {
-            VehiclesContainer container = Converter.getGson().fromJson(fingerprint, VehiclesContainer.class);
-            if (container != null) {
-                if (container.vehicles != null) {
-                    if (container.vehicles.isEmpty()) {
-                        return Constants.EMPTY_VEHICLES;
-                    } else {
-                        container.vehicles.forEach(entry -> {
-                            entry.vin = ANONYMOUS;
-                            entry.breakdownNumber = ANONYMOUS;
-                            if (entry.dealer != null) {
-                                Dealer d = entry.dealer;
-                                d.city = ANONYMOUS;
-                                d.country = ANONYMOUS;
-                                d.name = ANONYMOUS;
-                                d.phone = ANONYMOUS;
-                                d.postalCode = ANONYMOUS;
-                                d.street = ANONYMOUS;
-                            }
-                        });
-                        return Converter.getGson().toJson(container);
+            try {
+                VehiclesContainer container = Converter.getGson().fromJson(fingerprint, VehiclesContainer.class);
+                if (container != null) {
+                    if (container.vehicles != null) {
+                        if (container.vehicles.isEmpty()) {
+                            return Constants.EMPTY_VEHICLES;
+                        } else {
+                            container.vehicles.forEach(entry -> {
+                                entry.vin = ANONYMOUS;
+                                entry.breakdownNumber = ANONYMOUS;
+                                if (entry.dealer != null) {
+                                    Dealer d = entry.dealer;
+                                    d.city = ANONYMOUS;
+                                    d.country = ANONYMOUS;
+                                    d.name = ANONYMOUS;
+                                    d.phone = ANONYMOUS;
+                                    d.postalCode = ANONYMOUS;
+                                    d.street = ANONYMOUS;
+                                }
+                            });
+                            return Converter.getGson().toJson(container);
+                        }
                     }
                 }
+                // Not a VehiclesContainer or Vehicles is empty so deliver fingerprint as it is
+            } catch (JsonSyntaxException e) {
             }
-            // Not a VehiclesContainer or Vehicles is empty so deliver fingerprint as it is
             return fingerprint;
         }).orElse(Constants.INVALID);
     }
