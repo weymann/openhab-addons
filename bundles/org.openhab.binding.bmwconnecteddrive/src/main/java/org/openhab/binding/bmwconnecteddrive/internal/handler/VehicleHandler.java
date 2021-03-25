@@ -645,7 +645,7 @@ public class VehicleHandler extends VehicleChannelHandler {
                 proxy.get().requestLegacyVehcileStatus(configuration.get(), oldVehicleStatusCallback);
             }
             vehicleStatusCache = Optional.of(Converter.getGson().toJson(error));
-            setThingStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, error.reason);
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, error.reason);
             removeCallback(this);
         }
     }
