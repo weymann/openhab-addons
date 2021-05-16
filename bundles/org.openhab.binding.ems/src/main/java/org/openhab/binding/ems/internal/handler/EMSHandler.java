@@ -22,6 +22,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.ems.internal.EMSConfiguration;
 import org.openhab.binding.ems.utils.Formulas;
+import org.openhab.core.events.Event;
 import org.openhab.core.library.types.PointType;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -29,6 +30,7 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.osgi.framework.BundleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,26 +42,27 @@ import org.slf4j.LoggerFactory;
  */
 @NonNullByDefault
 public class EMSHandler extends BaseThingHandler {
-
-    private final Logger logger = LoggerFactory.getLogger(EMSHandler.class);
     // Granularity of forecast in minutes
     private final static int FORECAST_GRANULARITY_MIN = 5;
 
-    private @Nullable EMSConfiguration config;
+    private final Logger logger = LoggerFactory.getLogger(EMSHandler.class);
+    private BundleContext context;
     private Optional<Calendar> lastUpdate = Optional.empty();
     private Optional<WeatherForecast> wf = Optional.empty();
     private double latitude = 0;
     private double longitude = 0;
+    private @Nullable EMSConfiguration config;
+    private @Nullable ItemListener householdListener;
 
-    public EMSHandler(Thing thing, @Nullable PointType pt) {
+    public EMSHandler(Thing thing, @Nullable PointType pt, BundleContext bc) {
         super(thing);
+        context = bc;
         if (pt != null) {
             latitude = pt.getLatitude().doubleValue();
             longitude = pt.getLongitude().doubleValue();
         } else {
             logger.warn("No Location given - forecast will not work without havin location!");
         }
-
     }
 
     @Override
@@ -81,9 +84,10 @@ public class EMSHandler extends BaseThingHandler {
     @Override
     public void initialize() {
         setConfiguration(getConfigAs(EMSConfiguration.class));
+        householdListener = new ItemListener(this, config.householdConsumption, context);
         updateStatus(ThingStatus.ONLINE);
         wf = Optional.of(new WeatherForecast(latitude, longitude, config.owmApiKey));
-        scheduler.scheduleAtFixedRate(this::update, 0, 5, TimeUnit.MINUTES);
+        scheduler.scheduleWithFixedDelay(this::update, 0, 5, TimeUnit.MINUTES);
     }
 
     public void setConfiguration(EMSConfiguration c) {
@@ -92,23 +96,22 @@ public class EMSHandler extends BaseThingHandler {
 
     public void update() {
         Calendar update = Calendar.getInstance();
-        if (newHour(lastUpdate, update)) {
-
-        }
         if (newDay(lastUpdate, update)) {
-            generatePrediction();
+            logger.info("Generate new prediction");
+            wf = Optional.of(new WeatherForecast(latitude, longitude, config.owmApiKey));
+            updatePrediction(Calendar.getInstance(), wf.get());
+        } else if (newHour(lastUpdate, update)) {
+            wf = Optional.of(new WeatherForecast(latitude, longitude, config.owmApiKey));
+            updatePrediction(Calendar.getInstance(), wf.get());
         }
         lastUpdate = Optional.of(update);
     }
 
-    public void generatePrediction() {
-        wf = Optional.of(new WeatherForecast(latitude, longitude, config.owmApiKey));
-        Calendar date = Calendar.getInstance();
+    public void updatePrediction(Calendar date, WeatherForecast forecast) {
         for (int days = 0; days < 7; days++) {
             int observationDay = date.get(Calendar.DAY_OF_MONTH);
-            String observationDaate = date.get(Calendar.DAY_OF_MONTH) + "." + (date.get(Calendar.MONTH) + 1) + "."
+            String observationDate = date.get(Calendar.DAY_OF_MONTH) + "." + (date.get(Calendar.MONTH) + 1) + "."
                     + date.get(Calendar.YEAR);
-            logger.info("{}", observationDaate);
             double dailyProduction = 0;
             int dCounter = 0;
             double dCloduiness = 0;
@@ -117,22 +120,17 @@ public class EMSHandler extends BaseThingHandler {
                 int forecast_minute = date.get(Calendar.MINUTE);
                 double sunHeight = Formulas.round(Formulas.sunPositionDIN(date.get(Calendar.YEAR),
                         date.get(Calendar.MONTH) + 1, date.get(Calendar.DAY_OF_MONTH) + 1, forecast_hour,
-                        forecast_minute * FORECAST_GRANULARITY_MIN, 0, latitude, 10, 2), 1);
+                        forecast_minute, 0, latitude, 10, 2), 1);
                 if (sunHeight > 0) {
-                    int cloudiness = wf.get().getCloudiness(observationDay, forecast_hour);
+                    int cloudiness = forecast.getCloudiness(observationDay, forecast_hour);
                     // logger.info("Cloudiness on {} {}: {}", observationDaate, forecast_hour, cloudiness);
-                    double radiationInfo = Formulas.getRadiationInfo(Formulas.getCalendar(date.get(Calendar.YEAR),
-                            date.get(Calendar.MONTH) + 1, date.get(Calendar.DAY_OF_MONTH) + 1, forecast_hour,
-                            forecast_minute * FORECAST_GRANULARITY_MIN), sunHeight, latitude);
+                    double radiationInfo = Formulas.getRadiationInfo(
+                            Formulas.getCalendar(date.get(Calendar.YEAR), date.get(Calendar.MONTH) + 1,
+                                    date.get(Calendar.DAY_OF_MONTH) + 1, forecast_hour, forecast_minute),
+                            sunHeight, latitude);
                     double adjustedRadiationInfo = radiationInfo * (100 - cloudiness) / 100;
                     double production = Formulas
-                            .round(9.75 * adjustedRadiationInfo / 1000 * FORECAST_GRANULARITY_MIN / 60, 3);
-                    double cloudProduction = Formulas.round(production * 100 - cloudiness / 100, 3);
-                    if (cloudiness > 20 && cloudiness < 80) {
-                        logger.info("Cloudiness: {} Factor {}", cloudiness, Double.valueOf(cloudiness) / 100.0);
-                    }
-                    // logger.info("Best Production: {} Cloud Production {}", production,
-                    // Double.valueOf(cloudiness) / 100.0);
+                            .round(9.75 * adjustedRadiationInfo / 1000 * FORECAST_GRANULARITY_MIN / 60, 5);
                     dailyProduction += production;// * (100 - cloudiness) / 100;
                     dCloduiness += cloudiness;
                     dCounter++;
@@ -141,10 +139,9 @@ public class EMSHandler extends BaseThingHandler {
             }
             // updateState(new ChannelUID("pv-prediction-today"),
             // QuantityType.valueOf(dailyProduction, Units.KILOWATT_HOUR));
-            dailyProduction = Formulas.round(dailyProduction, 0);
+            dailyProduction = Formulas.round(dailyProduction, 1);
             dCloduiness = Formulas.round(dCloduiness / dCounter, 0);
-            logger.info("Prediction for {} is {} with ~ {}% cloudiness", observationDaate, dailyProduction,
-                    dCloduiness);
+            logger.info("Prediction for {} is {} with ~ {}% cloudiness", observationDate, dailyProduction, dCloduiness);
         }
     }
 
@@ -155,5 +152,17 @@ public class EMSHandler extends BaseThingHandler {
     private boolean newDay(Optional<Calendar> lastUpdate2, Calendar update) {
         return lastUpdate2.isEmpty() ? true
                 : lastUpdate2.get().get(Calendar.DAY_OF_YEAR) != update.get(Calendar.DAY_OF_YEAR);
+    }
+
+    public void receivedEvent(Event event) {
+        logger.info("Payload {} Topic {} Type {} from {}", event.getPayload(), event.getTopic(), event.getType(),
+                event.getSource());
+    }
+
+    @Override
+    public void dispose() {
+        if (householdListener != null) {
+            householdListener.dispose();
+        }
     }
 }

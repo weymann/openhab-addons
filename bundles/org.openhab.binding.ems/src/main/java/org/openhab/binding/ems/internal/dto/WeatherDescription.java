@@ -10,18 +10,16 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.ems.internal;
-
-import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.ems.utils.Constants;
+package org.openhab.binding.ems.internal.dto;
 
 /**
- * The {@link EMSConfiguration} class contains fields mapping thing configuration parameters.
+ * {@link WeatherDescription} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
  */
-@NonNullByDefault
-public class EMSConfiguration {
-    public String householdConsumption = Constants.UNDEF;
-    public String owmApiKey = Constants.UNDEF;
+public class WeatherDescription {
+    public int id; // ": 803,
+    public String main; // ": "Clouds",
+    public String description; // ": "broken clouds",
+    public String icon; // ": "04n"
 }

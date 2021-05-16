@@ -10,18 +10,21 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.ems.internal;
+package org.openhab.binding.ems.internal.dto;
 
-import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.ems.utils.Constants;
+import java.util.List;
 
 /**
- * The {@link EMSConfiguration} class contains fields mapping thing configuration parameters.
+ * {@link OnecallWeather} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
  */
-@NonNullByDefault
-public class EMSConfiguration {
-    public String householdConsumption = Constants.UNDEF;
-    public String owmApiKey = Constants.UNDEF;
+public class OnecallWeather {
+    public double lat; // ": 51.44,
+    public double lon; // ": -10,
+    public String timezone; // ": "Europe/Dublin",
+    public int timezone_offset; // ": 3600,
+    public WeatherCurrent current;
+    public List<HourForecast> hourly;
+    public List<DailyForecast> daily;
 }

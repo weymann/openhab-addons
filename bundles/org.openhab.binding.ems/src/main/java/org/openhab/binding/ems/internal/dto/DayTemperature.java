@@ -10,18 +10,18 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.ems.internal;
-
-import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.ems.utils.Constants;
+package org.openhab.binding.ems.internal.dto;
 
 /**
- * The {@link EMSConfiguration} class contains fields mapping thing configuration parameters.
+ * {@link DayTemperature} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
  */
-@NonNullByDefault
-public class EMSConfiguration {
-    public String householdConsumption = Constants.UNDEF;
-    public String owmApiKey = Constants.UNDEF;
+public class DayTemperature {
+    public double day; // ":284.62,
+    public double min; // ":283.83,
+    public double max; // ":285.33,
+    public double night; // ":284.4,
+    public double eve; // ":284.54,
+    public double morn; // ":284.62
 }

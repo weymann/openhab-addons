@@ -26,6 +26,8 @@ import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
+import org.osgi.framework.BundleContext;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 
@@ -38,10 +40,13 @@ import org.osgi.service.component.annotations.Reference;
 @NonNullByDefault
 @Component(configurationPid = "binding.ems", service = ThingHandlerFactory.class)
 public class EMSHandlerFactory extends BaseThingHandlerFactory {
+    private BundleContext context;
+    private LocationProvider locationProvider;
 
-    LocationProvider locationProvider;
-
-    public EMSHandlerFactory(final @Reference LocationProvider lp, final @Reference TimeZoneProvider timeZoneProvider) {
+    @Activate
+    public EMSHandlerFactory(final @Reference LocationProvider lp, final @Reference TimeZoneProvider timeZoneProvider,
+            BundleContext bc) {
+        context = bc;
         locationProvider = lp;
     }
 
@@ -57,7 +62,7 @@ public class EMSHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_EMS.equals(thingTypeUID)) {
-            return new EMSHandler(thing, locationProvider.getLocation());
+            return new EMSHandler(thing, locationProvider.getLocation(), context);
         }
 
         return null;

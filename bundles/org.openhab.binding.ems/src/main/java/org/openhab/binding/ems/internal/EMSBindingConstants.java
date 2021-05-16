@@ -27,7 +27,7 @@ public class EMSBindingConstants {
     private static final String BINDING_ID = "ems";
 
     // List of all Thing Type UIDs
-    public static final ThingTypeUID THING_TYPE_EMS = new ThingTypeUID(BINDING_ID, "EMS");
+    public static final ThingTypeUID THING_TYPE_EMS = new ThingTypeUID(BINDING_ID, "EnergyManager");
 
     // List of all Channel ids
     public static final String CHANNEL_1 = "channel1";

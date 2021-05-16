@@ -10,18 +10,16 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.ems.internal;
+package org.openhab.binding.ems.internal.dto;
 
-import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.ems.utils.Constants;
+import com.google.gson.annotations.SerializedName;
 
 /**
- * The {@link EMSConfiguration} class contains fields mapping thing configuration parameters.
+ * {@link HourRain} Data Transfer Object
  *
  * @author Bernd Weymann - Initial contribution
  */
-@NonNullByDefault
-public class EMSConfiguration {
-    public String householdConsumption = Constants.UNDEF;
-    public String owmApiKey = Constants.UNDEF;
+public class HourRain {
+    @SerializedName("1h")
+    public double oneh; // ":0.23
 }

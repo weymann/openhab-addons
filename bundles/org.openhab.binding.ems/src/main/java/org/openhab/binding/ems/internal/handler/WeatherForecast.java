@@ -23,9 +23,9 @@ import java.util.Iterator;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.openhab.binding.ems.dto.DailyForecast;
-import org.openhab.binding.ems.dto.HourForecast;
-import org.openhab.binding.ems.dto.OnecallWeather;
+import org.openhab.binding.ems.internal.dto.DailyForecast;
+import org.openhab.binding.ems.internal.dto.HourForecast;
+import org.openhab.binding.ems.internal.dto.OnecallWeather;
 import org.openhab.binding.ems.utils.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,9 +42,9 @@ public class WeatherForecast {
     private Optional<OnecallWeather> ocw = Optional.empty();
 
     public WeatherForecast(double lat, double lon, String apiKey) {
+        String url = "https://api.openweathermap.org/data/2.5/onecall?lat=" + lat + "&lon=" + lon + "&appid=" + apiKey;
         try {
-            URL weatherApi = new URL(
-                    "https://api.openweathermap.org/data/2.5/onecall?lat=" + lat + "&lon=" + lon + "&appid=" + apiKey);
+            URL weatherApi = new URL(url);
             HttpURLConnection con = (HttpURLConnection) weatherApi.openConnection();
             con.setRequestMethod("GET");
             BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
@@ -54,17 +54,21 @@ public class WeatherForecast {
                 content.append(inputLine);
             }
             in.close();
-            System.out.println(content.toString());
             OnecallWeather check = Constants.GSON.fromJson(content.toString(), OnecallWeather.class);
             if (check != null) {
                 ocw = Optional.of(check);
             }
         } catch (MalformedURLException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            logger.debug("Url {} not valid", url);
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            logger.debug("Error {} received for URL {}", e.getMessage(), url);
+        }
+    }
+
+    public WeatherForecast(String json) {
+        OnecallWeather check = Constants.GSON.fromJson(json.toString(), OnecallWeather.class);
+        if (check != null) {
+            ocw = Optional.of(check);
         }
     }
 
