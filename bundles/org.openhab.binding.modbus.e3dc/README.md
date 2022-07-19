@@ -54,6 +54,7 @@ Select as Bridge your previously created Modbus TCP Slave.
 | Parameter       | Type    | Description                                                             |           
 |-----------------|---------|-------------------------------------------------------------------------|
 | refresh         | integer | Refresh Rate of E3DC values in Milliseconds                             |
+| batteryCapacity | decimal | Capacity of the built in battery in kWh                                 |
 
 
 ### E3DC Wallbox
@@ -97,6 +98,8 @@ The E3DC device offers quite an amount of channels. For clustering 4 Channel Gro
 | Autarky                       | power             | autarky-channel              |  Number:Dimensionless  | Your current Autarky Level in Percent                                                  |
 | Self Consumption              | power             | self-consumption             |  Number:Dimensionless  | Your current Photovoltaic Self Consumption Level in Percent                            |
 | Battery State Of Charge       | power             | battery-soc                  |  Number:Dimensionless  | Charge Level of your attached Battery in Percent                                       |
+| Battery Charge                | power             | battery-charged              |  Number:Energy         | Charged energy of battery                                                              |
+| Battery Open Capacity         | power             | battery-uncharged            |  Number:Energy         | Open energy capacity of battery                                                        |
 
 
 ### Channel Group _String Details Block_
