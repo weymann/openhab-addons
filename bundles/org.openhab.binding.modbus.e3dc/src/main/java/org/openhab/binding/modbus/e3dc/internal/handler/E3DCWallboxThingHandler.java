@@ -15,6 +15,8 @@ package org.openhab.binding.modbus.e3dc.internal.handler;
 import static org.openhab.binding.modbus.e3dc.internal.E3DCBindingConstants.*;
 import static org.openhab.binding.modbus.e3dc.internal.modbus.E3DCModbusConstans.*;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.BitSet;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -62,6 +64,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
     private static final String READ_WRITE_ERROR = "Modbus Data Read/Write Error";
     private static final String READ_ERROR = "Modbus Read Error";
     private static final String WRITE_ERROR = "Modbus Write Error";
+    private static final int UPDATE_LOCK_TIME_SEC = 15;
 
     ChannelUID wbAvailableChannel;
     ChannelUID wbSunmodeChannel;
@@ -84,6 +87,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
     private volatile BitSet currentBitSet = new BitSet(16);
     private @Nullable E3DCWallboxConfiguration config;
     private @Nullable E3DCThingHandler bridgeHandler;
+    private LocalDateTime lockRequest = LocalDateTime.now().minusHours(1);
 
     public E3DCWallboxThingHandler(Thing thing) {
         super(thing);
@@ -140,6 +144,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
             if (wallboxId.isPresent()) {
                 wallboxSet(wallboxId.getAsInt(), writeValue);
             }
+            lockRequest = LocalDateTime.now();
         }
     }
 
@@ -198,6 +203,18 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
                     WallboxBlock block = blockOpt.get();
                     synchronized (this) {
                         currentBitSet = block.getBitSet();
+                    }
+                    /**
+                     * Avoid updates for 15 seconds after control command is sent
+                     * It takes some time after command is send until the device processed it
+                     * In between there's an unwanted toggle
+                     * - user sends command ON
+                     * - device toggles to OFF - command isn't processed yet
+                     * - device toggles to ON - command is processed and user action fulfilled
+                     */
+                    long secondsBetween = ChronoUnit.SECONDS.between(lockRequest, LocalDateTime.now());
+                    if (secondsBetween < UPDATE_LOCK_TIME_SEC) {
+                        return;
                     }
                     updateState(wbAvailableChannel, block.wbAvailable);
                     updateState(wbSunmodeChannel, block.wbSunmode);
