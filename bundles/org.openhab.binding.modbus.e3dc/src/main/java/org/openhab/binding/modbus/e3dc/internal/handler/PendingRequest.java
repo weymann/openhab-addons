@@ -21,7 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link PendingRequest} holds data requested by user
+ * The {@link PendingRequest} holds user data requet
  *
  * @author Bernd Weymann - Initial contribution
  */

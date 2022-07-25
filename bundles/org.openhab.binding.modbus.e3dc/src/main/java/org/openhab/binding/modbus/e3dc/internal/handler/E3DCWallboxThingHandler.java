@@ -127,6 +127,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
         if (command instanceof OnOffType) {
             int writeValue = 0;
             synchronized (this) {
+                logger.info("Current Bitset {}", currentBitSet);
                 if (channelUID.getIdWithoutGroup().equals(WB_SUNMODE_CHANNEL)) {
                     currentBitSet.set(WB_SUNMODE_BIT, command.equals(OnOffType.ON));
                     pendingRequests.put(WB_SUNMODE_CHANNEL, new PendingRequest(channelUID, (OnOffType) command));
@@ -144,8 +145,9 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
                     // clear request
                     logger.info("Nothing found for {} {}", channelUID, command);
                 }
+                logger.info("Wanted Bitset {}", currentBitSet);
                 writeValue = DataConverter.toInt(currentBitSet);
-                logger.debug("Wallbox write {}", writeValue);
+                logger.info("Wallbox write {}", writeValue);
             }
             OptionalInt wallboxId = getWallboxId(config);
             if (wallboxId.isPresent()) {
