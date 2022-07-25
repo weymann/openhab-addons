@@ -15,9 +15,9 @@ package org.openhab.binding.modbus.e3dc.internal.handler;
 import static org.openhab.binding.modbus.e3dc.internal.E3DCBindingConstants.*;
 import static org.openhab.binding.modbus.e3dc.internal.modbus.E3DCModbusConstans.*;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.BitSet;
+import java.util.Hashtable;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 
@@ -64,7 +64,6 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
     private static final String READ_WRITE_ERROR = "Modbus Data Read/Write Error";
     private static final String READ_ERROR = "Modbus Read Error";
     private static final String WRITE_ERROR = "Modbus Write Error";
-    private static final int UPDATE_LOCK_TIME_SEC = 15;
 
     ChannelUID wbAvailableChannel;
     ChannelUID wbSunmodeChannel;
@@ -87,7 +86,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
     private volatile BitSet currentBitSet = new BitSet(16);
     private @Nullable E3DCWallboxConfiguration config;
     private @Nullable E3DCThingHandler bridgeHandler;
-    private LocalDateTime lockRequest = LocalDateTime.now().minusHours(1);
+    private Map<String, PendingRequest> pendingRequests = new Hashtable<String, PendingRequest>();
 
     public E3DCWallboxThingHandler(Thing thing) {
         super(thing);
@@ -130,12 +129,20 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
             synchronized (this) {
                 if (channelUID.getIdWithoutGroup().equals(WB_SUNMODE_CHANNEL)) {
                     currentBitSet.set(WB_SUNMODE_BIT, command.equals(OnOffType.ON));
+                    pendingRequests.put(WB_SUNMODE_CHANNEL, new PendingRequest(channelUID, (OnOffType) command));
                 } else if (channelUID.getIdWithoutGroup().equals(WB_CHARGING_ABORTED_CHANNEL)) {
                     currentBitSet.set(WB_CHARGING_ABORTED_BIT, command.equals(OnOffType.ON));
+                    pendingRequests.put(WB_CHARGING_ABORTED_CHANNEL,
+                            new PendingRequest(channelUID, (OnOffType) command));
                 } else if (channelUID.getIdWithoutGroup().equals(WB_SCHUKO_ON_CHANNEL)) {
                     currentBitSet.set(WB_SCHUKO_ON_BIT, command.equals(OnOffType.ON));
+                    pendingRequests.put(WB_SCHUKO_ON_CHANNEL, new PendingRequest(channelUID, (OnOffType) command));
                 } else if (channelUID.getIdWithoutGroup().equals(WB_1PHASE_CHANNEL)) {
                     currentBitSet.set(WB_1PHASE_BIT, command.equals(OnOffType.ON));
+                    pendingRequests.put(WB_1PHASE_CHANNEL, new PendingRequest(channelUID, (OnOffType) command));
+                } else {
+                    // clear request
+                    logger.info("Nothing found for {} {}", channelUID, command);
                 }
                 writeValue = DataConverter.toInt(currentBitSet);
                 logger.debug("Wallbox write {}", writeValue);
@@ -144,7 +151,6 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
             if (wallboxId.isPresent()) {
                 wallboxSet(wallboxId.getAsInt(), writeValue);
             }
-            lockRequest = LocalDateTime.now();
         }
     }
 
@@ -154,7 +160,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
      * @param wallboxId needed to calculate right register
      * @param writeValue integer to be written
      */
-    public void wallboxSet(int wallboxId, int writeValue) {
+    private void wallboxSet(int wallboxId, int writeValue) {
         E3DCThingHandler localBridgeHandler = bridgeHandler;
         if (localBridgeHandler != null) {
             ModbusCommunicationInterface comms = localBridgeHandler.getComms();
@@ -204,31 +210,23 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
                     synchronized (this) {
                         currentBitSet = block.getBitSet();
                     }
-                    /**
-                     * Avoid updates for 15 seconds after control command is sent
-                     * It takes some time after command is send until the device processed it
-                     * In between there's an unwanted toggle
-                     * - user sends command ON
-                     * - device toggles to OFF - command isn't processed yet
-                     * - device toggles to ON - command is processed and user action fulfilled
-                     */
-                    long secondsBetween = ChronoUnit.SECONDS.between(lockRequest, LocalDateTime.now());
-                    if (secondsBetween < UPDATE_LOCK_TIME_SEC) {
-                        return;
-                    }
+
+                    // read-write registers
+                    handleUpdate(wbSunmodeChannel, block.wbSunmode);
+                    handleUpdate(wbChargingAbortedChannel, block.wbChargingAborted);
+                    handleUpdate(wbSchukoOnChannel, block.wbSchukoOn);
+                    handleUpdate(wb1phaseChannel, block.wb1phase);
+
+                    // read-only registers
                     updateState(wbAvailableChannel, block.wbAvailable);
-                    updateState(wbSunmodeChannel, block.wbSunmode);
-                    updateState(wbChargingAbortedChannel, block.wbChargingAborted);
                     updateState(wbChargingChannel, block.wbCharging);
                     updateState(wbJackLockedChannel, block.wbJackLocked);
                     updateState(wbJackPluggedChannel, block.wbJackPlugged);
-                    updateState(wbSchukoOnChannel, block.wbSchukoOn);
                     updateState(wbSchukoPluggedChannel, block.wbSchukoPlugged);
                     updateState(wbSchukoLockedChannel, block.wbSchukoLocked);
                     updateState(wbSchukoRelay16Channel, block.wbSchukoRelay16);
                     updateState(wbRelay16Channel, block.wbRelay16);
                     updateState(wbRelay32Channel, block.wbRelay32);
-                    updateState(wb1phaseChannel, block.wb1phase);
                 } else {
                     logger.debug("Unable to get ID {} from WallboxArray", wallboxId);
                 }
@@ -237,6 +235,35 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
             }
         } else {
             logger.debug("Unable to get {} from Bridge", DataType.WALLBOX);
+        }
+    }
+
+    /**
+     * Before updating read-write channels check if a pending request is present
+     * Don't update if there's a pending request in progress unless
+     * - value changed to expected one
+     * - timeout expired
+     */
+    private void handleUpdate(ChannelUID channel, OnOffType onOffType) {
+        if (pendingRequests.containsKey(channel.getIdWithoutGroup())) {
+            String channelId = channel.getIdWithoutGroup();
+            PendingRequest req = pendingRequests.get(channelId);
+            if (req.getCommand().equals(onOffType)) {
+                // state reached - update channel and remove request
+                updateState(channel, onOffType);
+                logger.info("State reached - remove pending {}", req);
+                pendingRequests.remove(channelId);
+            } else if (req.timeoutExpired()) {
+                // timeout reached - update channel and remove request
+                updateState(wbSunmodeChannel, onOffType);
+                logger.info("Timeout - remove pending {}", req);
+                pendingRequests.remove(channelId);
+            } else {// else wait until state reached or timeout expires
+                logger.info("Block update - pending {}", req);
+            }
+        } else {
+            // simple update
+            updateState(channel, onOffType);
         }
     }
 
