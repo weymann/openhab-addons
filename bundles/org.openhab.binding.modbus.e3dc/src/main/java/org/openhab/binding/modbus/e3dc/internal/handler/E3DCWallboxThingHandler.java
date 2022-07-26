@@ -84,6 +84,7 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
     private ReadWriteSuccess dataRead = ReadWriteSuccess.NOT_RECEIVED;
     private ReadWriteSuccess dataWrite = ReadWriteSuccess.NOT_RECEIVED;
     private volatile BitSet currentBitSet = new BitSet(16);
+    private volatile BitSet previousBitSet = new BitSet(16);
     private @Nullable E3DCWallboxConfiguration config;
     private @Nullable E3DCThingHandler bridgeHandler;
     private Map<String, PendingRequest> pendingRequests = new Hashtable<String, PendingRequest>();
@@ -211,6 +212,10 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
                     WallboxBlock block = blockOpt.get();
                     synchronized (this) {
                         currentBitSet = block.getBitSet();
+                        if (!previousBitSet.equals(currentBitSet)) {
+                            logger.info("Bitset change {} => {}", previousBitSet, currentBitSet);
+                        }
+                        previousBitSet = currentBitSet;
                     }
 
                     // read-write registers
