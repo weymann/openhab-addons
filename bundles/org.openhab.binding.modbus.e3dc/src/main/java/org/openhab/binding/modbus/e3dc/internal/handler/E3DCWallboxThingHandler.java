@@ -128,12 +128,20 @@ public class E3DCWallboxThingHandler extends BaseThingHandler {
         if (command instanceof OnOffType) {
             int writeValue = 0;
             synchronized (this) {
+                /**
+                 * [todo] change implementation after E3DC Support Ticket is answered.
+                 * currently reading WB_CHARGING_ABORTED_BIT shows right value but writing needs to be the opposite
+                 * a) flip bit at the beginning to have the right state for sending
+                 * b) if channel WB_CHARGING_ABORTED_CHANNEL has a command do exactly the opposite of the command
+                 */
+                currentBitSet.set(WB_CHARGING_ABORTED_BIT, !currentBitSet.get(WB_CHARGING_ABORTED_BIT));
                 logger.info("Current Bitset {}", currentBitSet);
                 if (channelUID.getIdWithoutGroup().equals(WB_SUNMODE_CHANNEL)) {
                     currentBitSet.set(WB_SUNMODE_BIT, command.equals(OnOffType.ON));
                     pendingRequests.put(WB_SUNMODE_CHANNEL, new PendingRequest(channelUID, (OnOffType) command));
                 } else if (channelUID.getIdWithoutGroup().equals(WB_CHARGING_ABORTED_CHANNEL)) {
-                    currentBitSet.set(WB_CHARGING_ABORTED_BIT, command.equals(OnOffType.ON));
+                    // see b) in above comment
+                    currentBitSet.set(WB_CHARGING_ABORTED_BIT, command.equals(OnOffType.OFF));
                     pendingRequests.put(WB_CHARGING_ABORTED_CHANNEL,
                             new PendingRequest(channelUID, (OnOffType) command));
                 } else if (channelUID.getIdWithoutGroup().equals(WB_SCHUKO_ON_CHANNEL)) {
