@@ -10,23 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.mercedesme.internal.config;
-
-import static org.openhab.binding.mercedesme.internal.Constants.NOT_SET;
+package org.openhab.binding.mercedesme.internal.dto;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.mercedesme.internal.Constants;
 
 /**
- * The {@link AccountConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link TokenResponse} dto contains JSon body of token response
  *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class AccountConfiguration {
-
-    public String email = NOT_SET;
-    public String region = NOT_SET;
-
-    public String callbackIP = NOT_SET;
-    public int callbackPort = -1;
+public class TokenResponse {
+    public String access_token = Constants.NOT_SET;
+    public String refresh_token = Constants.NOT_SET;
+    public String token_type = Constants.NOT_SET;
+    public int expires_in;
 }

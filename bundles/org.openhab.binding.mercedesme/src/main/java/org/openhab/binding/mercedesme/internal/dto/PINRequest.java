@@ -10,23 +10,26 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.mercedesme.internal.config;
+package org.openhab.binding.mercedesme.internal.dto;
 
-import static org.openhab.binding.mercedesme.internal.Constants.NOT_SET;
+import java.util.UUID;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link AccountConfiguration} class contains fields mapping thing configuration parameters.
+ * The {@link PINRequest} dto contains JSon body for PIN request
  *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class AccountConfiguration {
+public class PINRequest {
+    public String emailOrPhoneNumber;
+    public String countryCode;
+    public String nonce;
 
-    public String email = NOT_SET;
-    public String region = NOT_SET;
-
-    public String callbackIP = NOT_SET;
-    public int callbackPort = -1;
+    public PINRequest(String mail, String country) {
+        emailOrPhoneNumber = mail;
+        countryCode = country;
+        nonce = UUID.randomUUID().toString();
+    }
 }
