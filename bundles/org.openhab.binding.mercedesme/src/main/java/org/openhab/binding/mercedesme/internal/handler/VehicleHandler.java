@@ -164,7 +164,7 @@ public class VehicleHandler extends BaseThingHandler {
             logger.warn("AccountHandler not set");
             return;
         }
-        String token = accountHandler.get().getToken();
+        String token = "abc";
         if (token.isEmpty()) {
             String textKey = Constants.STATUS_TEXT_PREFIX + "vehicle" + Constants.STATUS_BRIDGE_ATHORIZATION;
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
@@ -232,7 +232,7 @@ public class VehicleHandler extends BaseThingHandler {
         String debugPrefix = this.getThing().getLabel() + Constants.COLON + finalEndpoint;
 
         Request req = httpClient.newRequest(requestUrl);
-        req.header(HttpHeader.AUTHORIZATION, "Bearer " + accountHandler.get().getToken());
+        req.header(HttpHeader.AUTHORIZATION, "Bearer " + "abc");
         try {
             ContentResponse cr = req.send();
             logger.trace("{} Response {} {}", debugPrefix, cr.getStatus(), cr.getContentAsString());
@@ -261,7 +261,7 @@ public class VehicleHandler extends BaseThingHandler {
 
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(requestUrl))
-                .header(HttpHeader.AUTHORIZATION.toString(), "Bearer " + accountHandler.get().getToken()).GET().build();
+                .header(HttpHeader.AUTHORIZATION.toString(), "Bearer " + "abc").GET().build();
         try {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             logger.debug("{} Fallback Response {} {}", debugPrefix, response.statusCode(), response.body());
