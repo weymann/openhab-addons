@@ -11,13 +11,6 @@
   </parent>
 
   <dependencies>
-    <!-- version needs to match with other projects like org.openhab.io.openhabcloud.pom.xml -->
-    <dependency>
-      <groupId>org.json</groupId>
-      <artifactId>json</artifactId>
-      <version>20230227</version>
-      <scope>compile</scope>
-    </dependency>
     <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
     <dependency>
       <groupId>com.google.protobuf</groupId>
