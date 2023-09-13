@@ -113,9 +113,11 @@ public class VehicleHandler extends BaseThingHandler {
     private int activeTemperaturePoint = -1;
     private JSONObject chargeGroupValueStorage = new JSONObject();
     private Map<String, State> hvacGroupValueStorage = new HashMap<String, State>();
+    private String vehicleType = NOT_SET;
 
     public VehicleHandler(Thing thing, MercedesMeCommandOptionProvider cop, MercedesMeStateOptionProvider sop) {
         super(thing);
+        vehicleType = thing.getThingTypeUID().getAsString();
         mmcop = cop;
         mmsop = sop;
     }
@@ -495,9 +497,12 @@ public class VehicleHandler extends BaseThingHandler {
     @Override
     public void dispose() {
         accountHandler.get().unregisterVin(config.get().vin);
+        super.dispose();
     }
 
     public void distributeContent(VEPUpdate data) {
+        boolean fullUpdate = data.getFullUpdate();
+        logger.info("Partial Vehicle Update");
         updateStatus(ThingStatus.ONLINE);
 
         String json = Utils.proto2Json(data);
@@ -523,8 +528,10 @@ public class VehicleHandler extends BaseThingHandler {
                 updateChannel(new ChannelStateMap("gps", Constants.GROUP_POSITION, UnDefType.UNDEF));
             }
         } else {
-            logger.info("Either Latitude {} or Longitude {} attribute missing", latitude, longitude);
-            updateChannel(new ChannelStateMap("gps", Constants.GROUP_POSITION, UnDefType.UNDEF));
+            if (fullUpdate) {
+                logger.info("Either Latitude {} or Longitude {} attribute missing", latitude, longitude);
+                updateChannel(new ChannelStateMap("gps", Constants.GROUP_POSITION, UnDefType.UNDEF));
+            }
         }
 
         /**
@@ -581,51 +588,55 @@ public class VehicleHandler extends BaseThingHandler {
          */
         if (Constants.BEV.equals(thing.getThingTypeUID().getId())
                 || Constants.HYBRID.equals(thing.getThingTypeUID().getId())) {
-            ChargeProgramsValue cpv = atts.get("chargePrograms").getChargeProgramsValue();
-            logger.info("CHARGEPROGRM found {} entries", cpv.getChargeProgramParametersCount());
-            if (cpv.getChargeProgramParametersCount() > 0) {
-                List<ChargeProgramParameters> chareProgeamParameters = cpv.getChargeProgramParametersList();
-                List<CommandOption> commandOptions = new ArrayList<CommandOption>();
-                List<StateOption> stateOptions = new ArrayList<StateOption>();
-                synchronized (chargeGroupValueStorage) {
-                    chargeGroupValueStorage.clear();
-                    chareProgeamParameters.forEach(program -> {
-                        String programName = program.getChargeProgram().name();
-                        int number = Utils.getChargeProgramNumber(programName);
-                        logger.info("CHARGEPROGRM store {} with number {}", programName, number);
-                        if (number >= 0) {
-                            JSONObject programValuesJson = new JSONObject();
-                            programValuesJson.put(Constants.MAX_SOC_KEY, program.getMaxSoc());
-                            programValuesJson.put(Constants.AUTOUNLOCK_KEY, program.getAutoUnlock());
-                            chargeGroupValueStorage.put(Integer.toString(number), programValuesJson);
-                            commandOptions.add(new CommandOption(Integer.toString(number), programName));
-                            stateOptions.add(new StateOption(Integer.toString(number), programName));
+            if (atts.containsKey("chargePrograms")) {
+                ChargeProgramsValue cpv = atts.get("chargePrograms").getChargeProgramsValue();
+                logger.info("CHARGEPROGRM found {} entries", cpv.getChargeProgramParametersCount());
+                if (cpv.getChargeProgramParametersCount() > 0) {
+                    List<ChargeProgramParameters> chareProgeamParameters = cpv.getChargeProgramParametersList();
+                    List<CommandOption> commandOptions = new ArrayList<CommandOption>();
+                    List<StateOption> stateOptions = new ArrayList<StateOption>();
+                    synchronized (chargeGroupValueStorage) {
+                        chargeGroupValueStorage.clear();
+                        chareProgeamParameters.forEach(program -> {
+                            String programName = program.getChargeProgram().name();
+                            int number = Utils.getChargeProgramNumber(programName);
+                            logger.info("CHARGEPROGRM store {} with number {}", programName, number);
+                            if (number >= 0) {
+                                JSONObject programValuesJson = new JSONObject();
+                                programValuesJson.put(Constants.MAX_SOC_KEY, program.getMaxSoc());
+                                programValuesJson.put(Constants.AUTOUNLOCK_KEY, program.getAutoUnlock());
+                                chargeGroupValueStorage.put(Integer.toString(number), programValuesJson);
+                                commandOptions.add(new CommandOption(Integer.toString(number), programName));
+                                stateOptions.add(new StateOption(Integer.toString(number), programName));
 
-                        } else {
-                            logger.info("No Integer mappong found for Charge Program {}", programName);
-                        }
-                    });
-                }
-                ChannelUID cuid = new ChannelUID(thing.getUID(), GROUP_CHARGE, "program");
-                mmcop.setCommandOptions(cuid, commandOptions);
-                mmsop.setStateOptions(cuid, stateOptions);
+                            } else {
+                                logger.info("No Integer mappong found for Charge Program {}", programName);
+                            }
+                        });
+                    }
+                    ChannelUID cuid = new ChannelUID(thing.getUID(), GROUP_CHARGE, "program");
+                    mmcop.setCommandOptions(cuid, commandOptions);
+                    mmsop.setStateOptions(cuid, stateOptions);
 
-                boolean selectedProgram = atts.containsKey("selectedChargeProgram");
-                if (selectedProgram) {
-                    selectedChargeProgram = (int) atts.get("selectedChargeProgram").getIntValue();
-                    ChargeProgramParameters cpp = cpv.getChargeProgramParameters(selectedChargeProgram);
-                    ChannelStateMap programMap = new ChannelStateMap("program", GROUP_CHARGE,
-                            DecimalType.valueOf(Integer.toString(selectedChargeProgram)));
-                    updateChannel(programMap);
-                    ChannelStateMap maxSocMap = new ChannelStateMap("max-soc", GROUP_CHARGE,
-                            QuantityType.valueOf((double) cpp.getMaxSoc(), Units.PERCENT));
-                    updateChannel(maxSocMap);
-                    ChannelStateMap autoUnlockMap = new ChannelStateMap("auto-unlock", GROUP_CHARGE,
-                            OnOffType.from(cpp.getAutoUnlock()));
-                    updateChannel(autoUnlockMap);
+                    boolean selectedProgram = atts.containsKey("selectedChargeProgram");
+                    if (selectedProgram) {
+                        selectedChargeProgram = (int) atts.get("selectedChargeProgram").getIntValue();
+                        ChargeProgramParameters cpp = cpv.getChargeProgramParameters(selectedChargeProgram);
+                        ChannelStateMap programMap = new ChannelStateMap("program", GROUP_CHARGE,
+                                DecimalType.valueOf(Integer.toString(selectedChargeProgram)));
+                        updateChannel(programMap);
+                        ChannelStateMap maxSocMap = new ChannelStateMap("max-soc", GROUP_CHARGE,
+                                QuantityType.valueOf((double) cpp.getMaxSoc(), Units.PERCENT));
+                        updateChannel(maxSocMap);
+                        ChannelStateMap autoUnlockMap = new ChannelStateMap("auto-unlock", GROUP_CHARGE,
+                                OnOffType.from(cpp.getAutoUnlock()));
+                        updateChannel(autoUnlockMap);
+                    }
+                } else {
+                    logger.trace("No Charge Program property available for {}", thing.getThingTypeUID());
                 }
             } else {
-                logger.trace("No Charge Program property available for {}", thing.getThingTypeUID());
+                logger.trace("No Charge Programs found");
             }
         }
         /**
@@ -642,11 +653,11 @@ public class VehicleHandler extends BaseThingHandler {
                  */
                 // store ChannelMap for range radius calculation
                 String channel = csm.getChannel();
-                if ("range-electric".equals(channel)) {
+                if ("range-electric".equals(channel) && !Constants.COMBUSTION.equals(vehicleType)) {
                     rangeElectric = Optional.of((QuantityType<?>) csm.getState());
-                } else if ("range-fuel".equals(channel)) {
+                } else if ("range-fuel".equals(channel) && !Constants.BEV.equals(vehicleType)) {
                     rangeFuel = Optional.of((QuantityType<?>) csm.getState());
-                } else if ("soc".equals(channel)) {
+                } else if ("soc".equals(channel) && !Constants.COMBUSTION.equals(vehicleType)) {
                     if (config.get().batteryCapacity > 0) {
                         float socValue = ((QuantityType<?>) csm.getState()).floatValue();
                         float batteryCapacity = config.get().batteryCapacity;
@@ -662,7 +673,7 @@ public class VehicleHandler extends BaseThingHandler {
                     } else {
                         logger.debug("No battery capacity given");
                     }
-                } else if ("fuel-level".equals(channel)) {
+                } else if ("fuel-level".equals(channel) && !Constants.BEV.equals(vehicleType)) {
                     if (config.get().fuelCapacity > 0) {
                         float fuelLevelValue = ((QuantityType<?>) csm.getState()).floatValue();
                         float fuelCapacity = config.get().fuelCapacity;
