@@ -318,6 +318,11 @@ public class ForecastSolarObject implements SolarForecast {
         return zdt.toInstant();
     }
 
+    @Override
+    public void triggerUpdate() {
+        expirationDateTime = Instant.MIN;
+    }
+
     private void throwOutOfRangeException(Instant query) {
         if (getForecastBegin().equals(Instant.MAX) || getForecastEnd().equals(Instant.MIN)) {
             throw new SolarForecastException(this, "Forecast invalid time range");
