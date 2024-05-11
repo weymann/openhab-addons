@@ -4,13 +4,13 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<thing-type id="fs-plane">
+	<thing-type id="smart-fs-plane">
 		<supported-bridge-type-refs>
-			<bridge-type-ref id="fs-site"/>
+			<bridge-type-ref id="smart-fs-site"/>
 		</supported-bridge-type-refs>
 
-		<label>Forecast Solar Plane</label>
-		<description>PV Plane attached to forecast solar public subscription site</description>
+		<label>Smart Forecast Solar Plane</label>
+		<description>Smart PV Plane attached to smart forecast solar site</description>
 
 		<channels>
 			<channel id="power-estimate" typeId="power-estimate"/>
@@ -19,9 +19,9 @@
 			<channel id="energy-actual" typeId="energy-actual"/>
 			<channel id="energy-remain" typeId="energy-remain"/>
 			<channel id="energy-today" typeId="energy-today"/>
-			<channel id="json" typeId="json"/>
+			<channel id="correction-factor" typeId="correction-factor"/>
 		</channels>
 
-		<config-description-ref uri="thing-type:solarforecast:fs-plane"/>
+		<config-description-ref uri="thing-type:solarforecast:smart-fs-plane"/>
 	</thing-type>
 </thing:thing-descriptions>
