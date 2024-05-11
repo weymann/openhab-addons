@@ -20,6 +20,7 @@ import org.openhab.binding.solarforecast.CallbackMock;
 import org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants;
 import org.openhab.binding.solarforecast.internal.forecastsolar.ForecastSolarObject;
 import org.openhab.core.library.types.PointType;
+import org.openhab.core.persistence.PersistenceServiceRegistry;
 import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.internal.ThingImpl;
 
@@ -27,13 +28,14 @@ import org.openhab.core.thing.internal.ThingImpl;
  * The {@link ForecastSolarPlaneMock} mocks Plane Handler for solar.forecast
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - Constructor correction
  */
 @NonNullByDefault
 public class ForecastSolarPlaneMock extends ForecastSolarPlaneHandler {
 
     public ForecastSolarPlaneMock(ForecastSolarObject fso) {
         super(new ThingImpl(SolarForecastBindingConstants.FORECAST_SOLAR_PLANE, new ThingUID("test", "plane")),
-                mock(HttpClient.class));
+                mock(HttpClient.class), mock(PersistenceServiceRegistry.class));
         super.setCallback(new CallbackMock());
         setLocation(PointType.valueOf("1.23,9.87"));
         super.setForecast(fso);

@@ -28,6 +28,7 @@ import org.openhab.core.i18n.LocationProvider;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.library.types.PointType;
+import org.openhab.core.persistence.PersistenceServiceRegistry;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
@@ -43,20 +44,23 @@ import org.osgi.service.component.annotations.Reference;
  * handlers.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - Forward persistence to forecast.solar plane handler
  */
 @NonNullByDefault
 @Component(configurationPid = "binding.solarforecast", service = ThingHandlerFactory.class)
 public class SolarForecastHandlerFactory extends BaseThingHandlerFactory {
     private final TimeZoneProvider timeZoneProvider;
     private final HttpClient httpClient;
+    private final PersistenceServiceRegistry persistenceRegistry;
     private Optional<PointType> location = Optional.empty();
 
     @Activate
     public SolarForecastHandlerFactory(final @Reference HttpClientFactory hcf, final @Reference LocationProvider lp,
-            final @Reference TimeZoneProvider tzp) {
+            final @Reference PersistenceServiceRegistry psr, final @Reference TimeZoneProvider tzp) {
         timeZoneProvider = tzp;
         httpClient = hcf.getCommonHttpClient();
         Utils.setTimeZoneProvider(tzp);
+        persistenceRegistry = psr;
         PointType pt = lp.getLocation();
         if (pt != null) {
             location = Optional.of(pt);
@@ -74,7 +78,7 @@ public class SolarForecastHandlerFactory extends BaseThingHandlerFactory {
         if (FORECAST_SOLAR_SITE.equals(thingTypeUID)) {
             return new ForecastSolarBridgeHandler((Bridge) thing, location);
         } else if (FORECAST_SOLAR_PLANE.equals(thingTypeUID)) {
-            return new ForecastSolarPlaneHandler(thing, httpClient);
+            return new ForecastSolarPlaneHandler(thing, httpClient, persistenceRegistry);
         } else if (SOLCAST_SITE.equals(thingTypeUID)) {
             return new SolcastBridgeHandler((Bridge) thing, timeZoneProvider);
         } else if (SOLCAST_PLANE.equals(thingTypeUID)) {

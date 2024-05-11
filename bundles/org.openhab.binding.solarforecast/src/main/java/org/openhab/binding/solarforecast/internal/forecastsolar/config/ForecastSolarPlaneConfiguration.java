@@ -19,6 +19,7 @@ import org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants;
  * The {@link ForecastSolarPlaneConfiguration} class contains fields mapping thing configuration parameters.
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - Add powerItem to adjust forecast
  */
 @NonNullByDefault
 public class ForecastSolarPlaneConfiguration {
@@ -29,4 +30,5 @@ public class ForecastSolarPlaneConfiguration {
     public double dampAM = 0;
     public double dampPM = 0;
     public String horizon = SolarForecastBindingConstants.EMPTY;
+    public String powerItem = SolarForecastBindingConstants.EMPTY;
 }
