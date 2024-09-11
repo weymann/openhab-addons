@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="entsoe"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<thing-type id="dayAheadPrices">
+
+		<label>Day ahead prices</label>
+		<description>Hourly spot prices of the electricity market</description>
+		<category>WebService</category>
+
+		<channel-groups>
+			<channel-group id="priceNow" typeId="group-price">
+				<label>Price for current hour</label>
+				<description>Electricity spot price for the current hour</description>
+			</channel-group>
+			<channel-group id="priceHours01" typeId="group-price">
+				<label>1 Hours Price</label>
+				<description>Electricity spot price in 1 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours02" typeId="group-price">
+				<label>2 Hours Price</label>
+				<description>Electricity spot price in 2 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours03" typeId="group-price">
+				<label>3 Hours Price</label>
+				<description>Electricity spot price in 3 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours04" typeId="group-price">
+				<label>4 Hours Price</label>
+				<description>Electricity spot price in 4 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours05" typeId="group-price">
+				<label>5 Hours Price</label>
+				<description>Electricity spot price in 5 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours06" typeId="group-price">
+				<label>6 Hours Price</label>
+				<description>Electricity spot price in 6 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours07" typeId="group-price">
+				<label>7 Hours Price</label>
+				<description>Electricity spot price in 7 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours08" typeId="group-price">
+				<label>8 Hours Price</label>
+				<description>Electricity spot price in 8 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours09" typeId="group-price">
+				<label>9 Hours Price</label>
+				<description>Electricity spot price in 9 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours10" typeId="group-price">
+				<label>10 Hours Price</label>
+				<description>Electricity spot price in 10 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours11" typeId="group-price">
+				<label>11 Hours Price</label>
+				<description>Electricity spot price in 11 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours12" typeId="group-price">
+				<label>12 Hours Price</label>
+				<description>Electricity spot price in 12 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours13" typeId="group-price">
+				<label>13 Hours Price</label>
+				<description>Electricity spot price in 13 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours14" typeId="group-price">
+				<label>14 Hours Price</label>
+				<description>Electricity spot price in 14 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours15" typeId="group-price">
+				<label>15 Hours Price</label>
+				<description>Electricity spot price in 15 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours16" typeId="group-price">
+				<label>16 Hours Price</label>
+				<description>Electricity spot price in 16 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours17" typeId="group-price">
+				<label>17 Hours Price</label>
+				<description>Electricity spot price in 17 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours18" typeId="group-price">
+				<label>18 Hours Price</label>
+				<description>Electricity spot price in 18 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours19" typeId="group-price">
+				<label>19 Hours Price</label>
+				<description>Electricity spot price in 19 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours20" typeId="group-price">
+				<label>20 Hours Price</label>
+				<description>Electricity spot price in 20 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours21" typeId="group-price">
+				<label>21 Hours Price</label>
+				<description>Electricity spot price in 21 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours22" typeId="group-price">
+				<label>22 Hours Price</label>
+				<description>Electricity spot price in 22 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours23" typeId="group-price">
+				<label>23 Hours Price</label>
+				<description>Electricity spot price in 23 hours.</description>
+			</channel-group>
+			<channel-group id="priceHours24" typeId="group-price">
+				<label>24 Hours Price</label>
+				<description>Electricity spot price in 24 hours.</description>
+			</channel-group>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="securityToken" type="text" required="true">
+				<context>password</context>
+				<label>Security token</label>
+				<description>Security token for EntsoE API</description>
+			</parameter>
+			<parameter name="area" type="text" required="true">
+				<label>Area</label>
+				<description>See https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html#_areas</description>
+				<options>
+					<option value="10Y1001A1001A65H">Denmark (DK)</option>
+					<option value="10Y1001A1001A83F">Germany (DE)</option>
+					<option value="10Y1001A1001A92E">United Kingdom (UK)</option>
+					<option value="10Y1001A1001A93C">Malta (MT)</option>
+					<option value="10Y1001A1001A990">Moldova (MD)</option>
+					<option value="10Y1001A1001B004">Armenia (AM)</option>
+					<option value="10Y1001A1001B012">Georgia (GE)</option>
+					<option value="10Y1001A1001B05V">Azerbaijan (AZ)</option>
+					<option value="10Y1001C--00003F">Ukraine (UA)</option>
+					<option value="10Y1001C--00100H">Kosovo (XK)</option>
+					<option value="10YAL-KESH-----5">Albania (AL)</option>
+					<option value="10YAT-APG------L">Austria (AT)</option>
+					<option value="10YBA-JPCC-----D">Bosnia and Herz. (BA)</option>
+					<option value="10YBE----------2">Belgium (BE)</option>
+					<option value="10YCA-BULGARIA-R">Bulgaria (BG)</option>
+					<option value="10YCH-SWISSGRIDZ">Switzerland (CH)</option>
+					<option value="10YCS-CG-TSO---S">Montenegro (ME)</option>
+					<option value="10YCS-SERBIATSOV">Serbia (RS)</option>
+					<option value="10YCY-1001A0003J">Cyprus (CY)</option>
+					<option value="10YCZ-CEPS-----N">Czech Republic (CZ)</option>
+					<option value="10YFI-1--------U">Finland (FI)</option>
+					<option value="10YFR-RTE------C">France (FR)</option>
+					<option value="10YGR-HTSO-----Y">Greece (GR)</option>
+					<option value="10YHR-HEP------M">Croatia (HR)</option>
+					<option value="10YHU-MAVIR----U">Hungary (HU)</option>
+					<option value="10YIE-1001A00010">Ireland (IE)</option>
+					<option value="10YIT-GRTN-----B">Italy (IT)</option>
+					<option value="10YLT-1001A0008Q">Lithuania (LT)</option>
+					<option value="10YLU-CEGEDEL-NQ">Luxembourg (LU)</option>
+					<option value="10YLV-1001A00074">Latvia (LV)</option>
+					<option value="10YMK-MEPSO----8">North Macedonia (MK)</option>
+					<option value="10YNL----------L">Netherlands (NL)</option>
+					<option value="10YNO-0--------C">Norway (NO)</option>
+					<option value="10YPT-REN------W">Portugal (PT)</option>
+					<option value="10YRO-TEL------P">Romania (RO)</option>
+					<option value="10YSE-1--------K">Sweden (SE)</option>
+					<option value="10YSI-ELES-----O">Slovenia (SI)</option>
+					<option value="10YSK-SEPS-----K">Slovakia (SK)</option>
+					<option value="10YTR-TEIAS----W">Turkey (TR)</option>
+					<option value="BY">Belarus (BY)</option>
+					<option value="RU">Russia (RU)</option>
+					<option value="IS">Iceland (IS)</option>
+				</options>
+			</parameter>
+
+		</config-description>
+	</thing-type>
+
+	<channel-group-type id="group-price">
+		<label>Day ahead prices</label>
+		<description>These are the current prices.</description>
+		<channels>
+			<channel id="time" typeId="time-channel"/>
+			<channel id="price" typeId="price-channel"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-type id="time-channel">
+		<item-type>DateTime</item-type>
+		<label>Time</label>
+		<category>Time</category>
+		<state readOnly="true" pattern="%1$tY.%1$tm.%1$td %1$tH:%1$tM"/>
+	</channel-type>
+	<channel-type id="price-channel">
+		<item-type>Number</item-type>
+		<label>Price</label>
+		<category>Price</category>
+		<state readOnly="true" pattern="%.2f €/MWh"/>
+	</channel-type>
+</thing:thing-descriptions>
