@@ -27,10 +27,10 @@ import org.osgi.service.component.annotations.Component;
  * The {@link EntsoEHandlerFactory} is responsible for creating things and thing
  * handlers.
  *
- * @author Miika Jukka - Initial contribution
+ * @author Jørgen Melhus - Initial contribution
  */
 @NonNullByDefault
-@Component(configurationPid = "binding.entsoe", service = ThingHandlerFactory.class)
+@Component(configurationPid = "binding.EntsoE", service = ThingHandlerFactory.class)
 public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
 
     @Override

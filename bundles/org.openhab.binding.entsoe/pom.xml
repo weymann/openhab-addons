@@ -10,7 +10,7 @@
     <version>4.3.0-SNAPSHOT</version>
   </parent>
 
-  <artifactId>org.openhab.binding.entsoe</artifactId>
+  <artifactId>org.openhab.binding.EntsoE</artifactId>
 
   <name>openHAB Add-ons :: Bundles :: EntsoE Binding</name>
 

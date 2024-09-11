@@ -3,10 +3,10 @@
 This binding connects to EntsoE transparency platform to retrieve day ahead prices of the pan-European electricity market. The service is free but requires you to register for api-key.
 
 Main site
-https://www.entsoe.eu/
+https://www.EntsoE.eu/
 
 Go here for registration and api-key 
-https://transparency.entsoe.eu/
+https://transparency.EntsoE.eu/
 
 ## Supported Things
 
@@ -38,11 +38,11 @@ Number channel holds that hours price in €/MWh.
 ## Full Example
 
 ```
-DateTime EntsoE_PriceHours01_Time  "Aikaleima +01h"                    <price>     (GrElectricPrices) { channel="entsoe:dayAheadPrices:finland:priceHours01#time" }
-Number   EntsoE_PriceHours01_Price "Sähkön hinta +01h [%.2f €/MWh]"  <price>     (GrElectricPrices) { channel="entsoe:dayAheadPrices:finland:priceHours01#price" }
+DateTime EntsoE_PriceHours01_Time  "Aikaleima +01h"                    <price>     (GrElectricPrices) { channel="EntsoE:dayAheadPrices:finland:priceHours01#time" }
+Number   EntsoE_PriceHours01_Price "Sähkön hinta +01h [%.2f €/MWh]"  <price>     (GrElectricPrices) { channel="EntsoE:dayAheadPrices:finland:priceHours01#price" }
 
-Number EntsoE_PriceHours02_Time    "Aikaleima +2h"                     <price>     (GrElectricPrices) { channel="entsoe:dayAheadPrices:finland:priceHours02#price" }
-Number EntsoE_PriceHours02_Price   "Sähkön hinta +2h [%.2f €/MWh]"     <price>     (GrElectricPrices) { channel="entsoe:dayAheadPrices:finland:priceHours02#price" }
+Number EntsoE_PriceHours02_Time    "Aikaleima +2h"                     <price>     (GrElectricPrices) { channel="EntsoE:dayAheadPrices:finland:priceHours02#price" }
+Number EntsoE_PriceHours02_Price   "Sähkön hinta +2h [%.2f €/MWh]"     <price>     (GrElectricPrices) { channel="EntsoE:dayAheadPrices:finland:priceHours02#price" }
 ...
 
 ```

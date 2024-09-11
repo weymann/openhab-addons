@@ -10,22 +10,24 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.entsoe.internal;
+package org.openhab.binding.entsoe.internal.exception;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link EntsoEConfiguration} class contains fields mapping thing
- * configuration parameters.
- *
  * @author Jørgen Melhus - Initial contribution
+ *
  */
 @NonNullByDefault
-public class EntsoEConfiguration {
-    public String securityToken = "";
-    public String area = "";
-    public double additionalCost = 0.0;
-    public double vat = 0.0;
-    public int spotPricesAvailableUtcHour = 11;
-    public int historicDays = 1;
+public class EntsoEResponseMapException extends Exception {
+
+    private static final long serialVersionUID = -2792399185046072564L;
+
+    public EntsoEResponseMapException(String message) {
+        super(message);
+    }
+
+    public EntsoEResponseMapException(Throwable cause) {
+        super(cause);
+    }
 }
