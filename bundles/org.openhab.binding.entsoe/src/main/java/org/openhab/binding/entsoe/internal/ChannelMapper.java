@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2023 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,7 +15,6 @@ package org.openhab.binding.entsoe.internal;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jdt.annotation.Nullable;
 
 /**
  * @author Miika Jukka - Initial contribution
@@ -34,12 +33,8 @@ public class ChannelMapper {
             Map.entry(19, "priceHours19"), Map.entry(20, "priceHours20"), Map.entry(21, "priceHours21"),
             Map.entry(22, "priceHours22"), Map.entry(23, "priceHours23"), Map.entry(24, "priceHours24"));
 
-    public static @Nullable String getChannelID(Integer hour) {
-        return CHANNEL_MAP.get(hour);
-    }
-
-    public static Integer getHour(String channelID) {
-        return CHANNEL_MAP.entrySet().stream().filter(k -> k.getValue().equals(channelID)).map(Map.Entry::getKey)
-                .findFirst().orElse(99);
+    public static String getChannelID(Integer hour) {
+        String channelID = CHANNEL_MAP.get(hour);
+        return channelID != null ? channelID : "unknown";
     }
 }
