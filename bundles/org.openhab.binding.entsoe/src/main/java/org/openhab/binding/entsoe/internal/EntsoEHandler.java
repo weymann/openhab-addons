@@ -250,7 +250,7 @@ public class EntsoEHandler extends BaseThingHandler {
                 .minusDays(needToFetchHistoricDays() ? _config.historicDays : 1).withHour(22);
         ZonedDateTime endUtc = currentUtcTimeWholeHours().plusDays(1).withHour(22);
 
-        boolean needsUpdate = lastDayAheadReceived == ZonedDateTime.of(LocalDateTime.MIN, ZoneId.of("UTC"))
+        boolean needsUpdate = lastDayAheadReceived.equals(ZonedDateTime.of(LocalDateTime.MIN, ZoneId.of("UTC")))
                 || _responseMap == null || needToFetchHistoricDays(true);
 
         boolean hasNextDayValue = needsUpdate ? false

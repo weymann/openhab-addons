@@ -30,7 +30,7 @@ import org.osgi.service.component.annotations.Component;
  * @author Jørgen Melhus - Initial contribution
  */
 @NonNullByDefault
-@Component(configurationPid = "binding.EntsoE", service = ThingHandlerFactory.class)
+@Component(configurationPid = "binding.entsoe", service = ThingHandlerFactory.class)
 public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
 
     @Override

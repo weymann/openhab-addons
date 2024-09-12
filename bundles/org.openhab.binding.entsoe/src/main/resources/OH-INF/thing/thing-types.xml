@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<thing:thing-descriptions bindingId="EntsoE"
+<thing:thing-descriptions bindingId="entsoe"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
@@ -25,13 +25,13 @@
 			<parameter name="area" type="text" required="true">
 				<label>Area</label>
 				<description>Choose from list or enter custom EIC area. See
-					https://transparency.EntsoE.eu/content/static_content/Static%20content/web%20api/Guide.html#_areas
+					https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html#_areas
 					and
-					https://www.EntsoE.eu/data/energy-identification-codes-eic/eic-approved-codes/ (Area Y, Bidding Zone)</description>
+					https://www.entsoe.eu/data/energy-identification-codes-eic/eic-approved-codes/ (Area Y, Bidding Zone)</description>
 				<limitToOptions>false</limitToOptions>
 				<options>
 					<!--
-						url: https://www.EntsoE.eu/data/energy-identification-codes-eic/eic-approved-codes/
+						url: https://www.entsoe.eu/data/energy-identification-codes-eic/eic-approved-codes/
 						filter:
 						EIC Type Code: Area Y
 						Function: Bidding Zone

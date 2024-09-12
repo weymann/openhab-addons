@@ -28,7 +28,7 @@ import org.openhab.core.types.TimeSeries.Policy;
 @NonNullByDefault
 public class EntsoEBindingConstants {
 
-    private static final String BINDING_ID = "EntsoE";
+    private static final String BINDING_ID = "entsoe";
 
     public static final Policy TIMESERIES_POLICY = Policy.REPLACE;
 

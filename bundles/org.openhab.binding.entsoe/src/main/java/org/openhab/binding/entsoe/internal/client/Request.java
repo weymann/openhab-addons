@@ -26,7 +26,7 @@ public class Request {
 
     private static DateTimeFormatter REQUEST_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
-    private static final String BASE_URL = "https://web-api.tp.EntsoE.eu/api?";
+    private static final String BASE_URL = "https://web-api.tp.entsoe.eu/api?";
     private static final String DOCUMENT_TYPE_PRICE = "A44";
 
     private final String securityToken;
