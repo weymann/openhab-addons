@@ -18,12 +18,15 @@ import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_T
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.entsoe.internal.handler.EntsoEHandler;
+import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerFactory;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 
 /**
  * The {@link EntsoEHandlerFactory} is responsible for creating things and thing
@@ -35,6 +38,13 @@ import org.osgi.service.component.annotations.Component;
 @Component(configurationPid = "binding.entsoe", service = ThingHandlerFactory.class)
 public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
 
+    private TimeZoneProvider timeZoneProvider;
+
+    @Activate
+    public EntsoEHandlerFactory(final @Reference TimeZoneProvider tzp) {
+        timeZoneProvider = tzp;
+    }
+
     @Override
     public boolean supportsThingType(ThingTypeUID thingTypeUID) {
         return SUPPORTED_THING_TYPE_UIDS.contains(thingTypeUID);
@@ -45,7 +55,7 @@ public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_SERVICE.equals(thingTypeUID)) {
-            return new EntsoEHandler(thing);
+            return new EntsoEHandler(thing, timeZoneProvider);
         }
         return null;
     }

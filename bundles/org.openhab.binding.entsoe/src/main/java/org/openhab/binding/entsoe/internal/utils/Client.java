@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.entsoe.internal.client;
+package org.openhab.binding.entsoe.internal.utils;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -22,6 +22,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.openhab.binding.entsoe.internal.client.Request;
 import org.openhab.binding.entsoe.internal.exception.EntsoEConfigurationException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEUnexpectedException;
@@ -90,11 +91,28 @@ public class Client {
         }
 
         // Get all "timeSeries" nodes from document
-        NodeList listOfTimeSeries = document.getElementsByTagName("TimeSeries");
-        for (int i = 0; i < listOfTimeSeries.getLength(); i++) {
-            Node timeSeriesNode = listOfTimeSeries.item(i);
+        NodeList listOfPeriods = document.getElementsByTagName("Period");
+        for (int i = 0; i < listOfPeriods.getLength(); i++) {
+            Node timeSeriesNode = listOfPeriods.item(i);
             if (timeSeriesNode.getNodeType() == Node.ELEMENT_NODE) {
                 Element timeSeriesElement = (Element) timeSeriesNode;
+                NodeList periodNodes = timeSeriesElement.getChildNodes();
+                for (int j = 0; j < periodNodes.getLength(); j++) {
+                    Node periodNode = periodNodes.item(j);
+                    System.out.println("Node " + periodNode.getNodeName());
+                }
+                System.out.println("Node" + timeSeriesElement.getNodeName());
+                // Check resolution of time interval
+                // Get start time from node
+                // NodeList listOfResultions =
+                // timeSeriesElement.getElementsByTagName("resolution");
+                // System.out.println("Number of time intervals: " +
+                // listOfResultions.getLength());
+                // Node resolutionNode = listOfResultions.item(0);
+                // Element resolutionElement = (Element) resolutionNode;
+                // String resolution =
+                // resolutionElement.getElementsByTagName("resolution").item(0).getTextContent();
+                //// System.out.println("Resolution: " + resolution);
 
                 // Get start time from node
                 NodeList listOfTimeInterval = timeSeriesElement.getElementsByTagName("timeInterval");
@@ -103,11 +121,9 @@ public class Client {
                 String startTime = startTimeElement.getElementsByTagName("start").item(0).getTextContent();
                 ZonedDateTime zonedStartTime = ZonedDateTime.parse(startTime);
 
-                logger.debug("\"timeSeries\" node: {}/{} with start time: {}", (i + 1), listOfTimeSeries.getLength(),
-                        zonedStartTime);
-
                 NodeList listOfPoints = timeSeriesElement.getElementsByTagName("Point");
 
+                System.out.println("Number of points: " + listOfPoints.getLength());
                 for (int p = 0; p < listOfPoints.getLength(); p++) {
                     Node pointNode = listOfPoints.item(p);
                     if (pointNode.getNodeType() == Node.ELEMENT_NODE) {

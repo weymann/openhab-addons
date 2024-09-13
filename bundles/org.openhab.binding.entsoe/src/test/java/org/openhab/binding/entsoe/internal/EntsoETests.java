@@ -36,11 +36,12 @@ import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.http.HttpMethod;
 import org.junit.jupiter.api.Test;
-import org.openhab.binding.entsoe.internal.client.Client;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEUnexpectedException;
 import org.openhab.binding.entsoe.internal.handler.EntsoEHandler;
+import org.openhab.binding.entsoe.internal.utils.Client;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.library.unit.CurrencyUnits;
 import org.openhab.core.thing.internal.ThingImpl;
@@ -53,6 +54,12 @@ import org.xml.sax.SAXException;
  */
 @NonNullByDefault
 class EntsoETests {
+    private static TimeZoneProvider timeZoneProvider = new TimeZoneProvider() {
+        @Override
+        public ZoneId getTimeZone() {
+            return ZoneId.systemDefault();
+        }
+    };
 
     @Test
     public void testHandler() {
@@ -86,7 +93,7 @@ class EntsoETests {
 
         // Create Handler with Callback
         ThingCallbackListener listener = new ThingCallbackListener();
-        EntsoEHandler handler = new EntsoEHandler(thing);
+        EntsoEHandler handler = new EntsoEHandler(thing, timeZoneProvider);
         handler.setCallback(listener);
         handler.initialize();
         try {

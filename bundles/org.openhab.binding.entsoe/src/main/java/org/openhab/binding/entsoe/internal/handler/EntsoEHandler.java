@@ -32,12 +32,13 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.entsoe.internal.client.Client;
 import org.openhab.binding.entsoe.internal.client.Request;
 import org.openhab.binding.entsoe.internal.config.EntsoEConfiguration;
 import org.openhab.binding.entsoe.internal.exception.EntsoEConfigurationException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEUnexpectedException;
+import org.openhab.binding.entsoe.internal.utils.Client;
+import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.CurrencyUnits;
@@ -70,9 +71,11 @@ public class EntsoEHandler extends BaseThingHandler {
     private EntsoEConfiguration config = new EntsoEConfiguration();
     private @Nullable ScheduledFuture<?> refreshJob;
     private Map<String, State> channelData = new HashMap<>();
+    private TimeZoneProvider timeZoneProvider;
 
-    public EntsoEHandler(Thing thing) {
+    public EntsoEHandler(Thing thing, TimeZoneProvider tzp) {
         super(thing);
+        timeZoneProvider = tzp;
     }
 
     @Override
