@@ -43,12 +43,10 @@ import org.xml.sax.SAXException;
 @NonNullByDefault
 public class Client {
 
-    private final Logger logger = LoggerFactory.getLogger(Client.class);
+    private static final Logger logger = LoggerFactory.getLogger(Client.class);
 
-    private DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+    private static final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
     // private @Nullable DocumentBuilder documentBuilder;
-
-    private Map<ZonedDateTime, Double> responseMap = new TreeMap<>();
 
     public Map<ZonedDateTime, Double> doGetRequest(Request request, int timeout)
             throws EntsoEResponseException, EntsoEUnexpectedException, EntsoEConfigurationException {
@@ -72,10 +70,9 @@ public class Client {
         }
     }
 
-    private Map<ZonedDateTime, Double> parseXmlResponse(String responseText) throws ParserConfigurationException,
+    public static Map<ZonedDateTime, Double> parseXmlResponse(String responseText) throws ParserConfigurationException,
             SAXException, IOException, EntsoEResponseException, EntsoEUnexpectedException {
-
-        responseMap.clear();
+        Map<ZonedDateTime, Double> responseMap = new TreeMap<>();
 
         DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
         Document document = documentBuilder.parse(new InputSource(new StringReader(responseText)));

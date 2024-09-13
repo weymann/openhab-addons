@@ -12,10 +12,12 @@
  */
 package org.openhab.binding.entsoe.internal;
 
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.*;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.SUPPORTED_THING_TYPE_UIDS;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_TYPE_DAY_AHEAD_PRICES;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.entsoe.internal.handler.EntsoEHandler;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;

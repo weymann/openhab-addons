@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.entsoe.internal;
+package org.openhab.binding.entsoe.internal.handler;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,8 +26,10 @@ import javax.measure.Unit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.entsoe.internal.EntsoEBindingConstants;
 import org.openhab.binding.entsoe.internal.client.Client;
 import org.openhab.binding.entsoe.internal.client.Request;
+import org.openhab.binding.entsoe.internal.config.EntsoEConfiguration;
 import org.openhab.binding.entsoe.internal.exception.EntsoEConfigurationException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseMapException;
@@ -133,16 +135,19 @@ public class EntsoEHandler extends BaseThingHandler {
         }
 
         BigDecimal rate = getExchangeRate();
-        if (rate.compareTo(new BigDecimal(0)) == 1) {
-            updateStatus(ThingStatus.ONLINE);
-            _logger.debug("Initialized {}", isInitialized());
-            if (isInitialized())
-                _refreshJob = scheduler.schedule(this::refreshPrices, 5, TimeUnit.SECONDS);
-        } else {
-            String msg = "Could not get exchange rate from openHAB. Have you configured a currency binding to fetch currency rates (e.g. Freecurrency) and set your default currency provider together with a default base currency?";
-            _logger.error(msg);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, msg);
-        }
+        // if (rate.compareTo(new BigDecimal(0)) == 1) {
+        updateStatus(ThingStatus.ONLINE);
+        _logger.debug("Initialized {}", isInitialized());
+        // if (isInitialized())
+        _refreshJob = scheduler.schedule(this::refreshPrices, 1, TimeUnit.SECONDS);
+        // } else {
+        // String msg = "Could not get exchange rate from openHAB. Have you configured a
+        // currency binding to fetch currency rates (e.g. Freecurrency) and set your
+        // default currency provider together with a default base currency?";
+        // _logger.error(msg);
+        // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+        // msg);
+        // }
     }
 
     @Override
@@ -200,8 +205,9 @@ public class EntsoEHandler extends BaseThingHandler {
         _logger.trace("getExchangeRate()");
         BigDecimal rate = CurrencyUnits.getExchangeRate(_fromUnit);
 
+        System.out.println("rate: " + rate);
         if (rate == null) {
-            rate = new BigDecimal(0);
+            rate = new BigDecimal(1);
         } else {
             _logger.debug("Exchange rate {}{}: {}", _fromUnit.getName(), _baseUnit.getName(), rate.floatValue());
         }
@@ -238,6 +244,7 @@ public class EntsoEHandler extends BaseThingHandler {
 
     @SuppressWarnings("null")
     private void refreshPrices() {
+        System.out.println("refreshPrices");
         _logger.trace("refreshPrices()");
         if (!isLinked(EntsoEBindingConstants.CHANNEL_SPOT_PRICES)) {
             _logger.debug("Channel {} is not linked, cant update channel", EntsoEBindingConstants.CHANNEL_SPOT_PRICES);

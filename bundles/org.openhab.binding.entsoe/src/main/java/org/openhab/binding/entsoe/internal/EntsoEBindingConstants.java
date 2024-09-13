@@ -29,20 +29,13 @@ import org.openhab.core.types.TimeSeries.Policy;
 public class EntsoEBindingConstants {
 
     private static final String BINDING_ID = "entsoe";
-
-    public static final Policy TIMESERIES_POLICY = Policy.REPLACE;
-
-    public static final String ENTSOE_CURRENCY = "EUR";
+    public static final ThingTypeUID THING_TYPE_DAY_AHEAD_PRICES = new ThingTypeUID(BINDING_ID, "dayAhead");
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPE_UIDS = Set.of(THING_TYPE_DAY_AHEAD_PRICES);
 
     public static final String CHANNEL_SPOT_PRICES = "prices";
-
     public static final String CHANNEL_LAST_DAY_AHEAD_RECEIVED = "lastDayAheadReceived";
-
     public static final String CHANNEL_TRIGGER_PRICES_RECEIVED = "pricesReceived";
 
-    // Thing Type UIDs
-    public static final ThingTypeUID THING_TYPE_DAY_AHEAD_PRICES = new ThingTypeUID(BINDING_ID, "dayAhead");
-
-    // List of all Thing Type UIDs
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPE_UIDS = Set.of(THING_TYPE_DAY_AHEAD_PRICES);
+    public static final Policy TIMESERIES_POLICY = Policy.REPLACE;
+    public static final String ENTSOE_CURRENCY = "EUR";
 }
