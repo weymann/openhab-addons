@@ -13,7 +13,7 @@
 package org.openhab.binding.entsoe.internal;
 
 import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.SUPPORTED_THING_TYPE_UIDS;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_TYPE_DAY_AHEAD_PRICES;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_TYPE_SERVICE;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -44,10 +44,9 @@ public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
     protected @Nullable ThingHandler createHandler(Thing thing) {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
-        if (THING_TYPE_DAY_AHEAD_PRICES.equals(thingTypeUID)) {
+        if (THING_TYPE_SERVICE.equals(thingTypeUID)) {
             return new EntsoEHandler(thing);
         }
-
         return null;
     }
 }

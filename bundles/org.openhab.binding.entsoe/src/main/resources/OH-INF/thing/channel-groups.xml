@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="entsoe"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<channel-group-type id="electricity">
+		<label>Electricity</label>
+		<description>Channels related to electricity</description>
+		<channels>
+			<channel id="spot-price" typeId="energy-price">
+				<label>Spot Price</label>
+				<description>Spot prices of the electricity market from today and tomorrow.</description>
+			</channel>
+			<channel id="updated" typeId="date-time">
+				<label>Last Price update</label>
+				<description>Timestamp of the last spot prices update.</description>
+			</channel>
+			<channel id="event" typeId="event"/>
+		</channels>
+	</channel-group-type>
+
+</thing:thing-descriptions>

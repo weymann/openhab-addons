@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="entsoe"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<channel-type id="energy-price">
+		<item-type>Number:EnergyPrice</item-type>
+		<label>Energy Price</label>
+		<description></description>
+		<category>Price</category>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="date-time">
+		<item-type>DateTime</item-type>
+		<label>Last Price update</label>
+		<description>Timestamp of the last spot prices update</description>
+		<category>Time</category>
+		<state readOnly="true" pattern="%1$tY.%1$tm.%1$td %1$tH:%1$tM"/>
+	</channel-type>
+
+	<channel-type id="event" advanced="true">
+		<kind>trigger</kind>
+		<label>Event</label>
+		<description>Event triggered</description>
+		<event>
+			<options>
+				<option value="DAY_AHEAD_AVAILABLE">Day-ahead prices are available</option>
+			</options>
+		</event>
+	</channel-type>
+
+</thing:thing-descriptions>

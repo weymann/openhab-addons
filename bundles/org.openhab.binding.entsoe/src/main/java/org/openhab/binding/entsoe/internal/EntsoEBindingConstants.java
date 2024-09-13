@@ -16,7 +16,6 @@ import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.thing.ThingTypeUID;
-import org.openhab.core.types.TimeSeries.Policy;
 
 /**
  * The {@link EntsoEBindingConstants} class defines common constants, which are
@@ -28,14 +27,14 @@ import org.openhab.core.types.TimeSeries.Policy;
 @NonNullByDefault
 public class EntsoEBindingConstants {
 
-    private static final String BINDING_ID = "entsoe";
-    public static final ThingTypeUID THING_TYPE_DAY_AHEAD_PRICES = new ThingTypeUID(BINDING_ID, "dayAhead");
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPE_UIDS = Set.of(THING_TYPE_DAY_AHEAD_PRICES);
+    public static final String BINDING_ID = "entsoe";
+    public static final ThingTypeUID THING_TYPE_SERVICE = new ThingTypeUID(BINDING_ID, "service");
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPE_UIDS = Set.of(THING_TYPE_SERVICE);
 
-    public static final String CHANNEL_SPOT_PRICES = "prices";
-    public static final String CHANNEL_LAST_DAY_AHEAD_RECEIVED = "lastDayAheadReceived";
-    public static final String CHANNEL_TRIGGER_PRICES_RECEIVED = "pricesReceived";
-
-    public static final Policy TIMESERIES_POLICY = Policy.REPLACE;
-    public static final String ENTSOE_CURRENCY = "EUR";
+    public static final String CHANNEL_GROUP_ELECTRICITY = "electricity";
+    public static final String CHANNEL_SPOT_PRICE = "spot-price";
+    public static final String CHANNEL_UPDATED = "updated";
+    public static final String CHANNEL_EVENT = "event";
+    public static final String CHANNEL_EVENT_DAY_AHEAD = "DAY_AHEAD_AVAILABLE";
+    public static final int API_TIMEOUT = 30000;
 }

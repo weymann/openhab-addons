@@ -15,7 +15,6 @@ package org.openhab.binding.entsoe.internal.client;
 import java.io.IOException;
 import java.io.StringReader;
 import java.time.ZonedDateTime;
-import java.util.Map;
 import java.util.TreeMap;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -48,7 +47,7 @@ public class Client {
     private static final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
     // private @Nullable DocumentBuilder documentBuilder;
 
-    public Map<ZonedDateTime, Double> doGetRequest(Request request, int timeout)
+    public TreeMap<ZonedDateTime, Double> doGetRequest(Request request, int timeout)
             throws EntsoEResponseException, EntsoEUnexpectedException, EntsoEConfigurationException {
         try {
             logger.debug("Sending GET request with parameters: {}", request);
@@ -70,9 +69,10 @@ public class Client {
         }
     }
 
-    public static Map<ZonedDateTime, Double> parseXmlResponse(String responseText) throws ParserConfigurationException,
-            SAXException, IOException, EntsoEResponseException, EntsoEUnexpectedException {
-        Map<ZonedDateTime, Double> responseMap = new TreeMap<>();
+    public static TreeMap<ZonedDateTime, Double> parseXmlResponse(String responseText)
+            throws ParserConfigurationException, SAXException, IOException, EntsoEResponseException,
+            EntsoEUnexpectedException {
+        TreeMap<ZonedDateTime, Double> responseMap = new TreeMap<>();
 
         DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
         Document document = documentBuilder.parse(new InputSource(new StringReader(responseText)));

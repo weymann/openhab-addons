@@ -12,9 +12,16 @@
  */
 package org.openhab.binding.entsoe.internal;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.io.net.http.HttpUtil;
 
+/**
+ * {@link HttpUtilMock} mock http utility
+ *
+ * @author Bernd Weymann - Initial contribution
+ */
+@NonNullByDefault
 public class HttpUtilMock extends HttpUtil {
 
     public void setClientFactory(HttpClientFactory factory) {
