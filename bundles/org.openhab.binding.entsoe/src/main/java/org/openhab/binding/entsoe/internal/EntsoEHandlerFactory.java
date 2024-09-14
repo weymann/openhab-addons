@@ -12,8 +12,7 @@
  */
 package org.openhab.binding.entsoe.internal;
 
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.SUPPORTED_THING_TYPE_UIDS;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_TYPE_SERVICE;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.*;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -38,11 +37,9 @@ import org.osgi.service.component.annotations.Reference;
 @Component(configurationPid = "binding.entsoe", service = ThingHandlerFactory.class)
 public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
 
-    private TimeZoneProvider timeZoneProvider;
-
     @Activate
     public EntsoEHandlerFactory(final @Reference TimeZoneProvider tzp) {
-        timeZoneProvider = tzp;
+        Utils.setTimeZoneProvider(tzp);
     }
 
     @Override
@@ -55,7 +52,7 @@ public class EntsoEHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_SERVICE.equals(thingTypeUID)) {
-            return new EntsoEHandler(thing, timeZoneProvider);
+            return new EntsoEHandler(thing);
         }
         return null;
     }

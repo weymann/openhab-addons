@@ -36,5 +36,7 @@ public class EntsoEBindingConstants {
     public static final String CHANNEL_UPDATED = "updated";
     public static final String CHANNEL_EVENT = "event";
     public static final String CHANNEL_EVENT_DAY_AHEAD = "DAY_AHEAD_AVAILABLE";
+
+    public static final String PREFERRED_DURATION = "PT60M";
     public static final int API_TIMEOUT = 30000;
 }

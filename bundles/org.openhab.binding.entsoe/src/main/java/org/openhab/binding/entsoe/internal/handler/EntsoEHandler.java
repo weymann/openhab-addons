@@ -12,15 +12,11 @@
  */
 package org.openhab.binding.entsoe.internal.handler;
 
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.API_TIMEOUT;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.CHANNEL_EVENT;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.CHANNEL_EVENT_DAY_AHEAD;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.CHANNEL_GROUP_ELECTRICITY;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.CHANNEL_SPOT_PRICE;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.CHANNEL_UPDATED;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.*;
 import static org.openhab.core.types.TimeSeries.Policy.REPLACE;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -30,15 +26,17 @@ import java.util.TreeMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import javax.measure.Unit;
+
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.entsoe.internal.Utils;
 import org.openhab.binding.entsoe.internal.client.Request;
 import org.openhab.binding.entsoe.internal.config.EntsoEConfiguration;
 import org.openhab.binding.entsoe.internal.exception.EntsoEConfigurationException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEUnexpectedException;
-import org.openhab.binding.entsoe.internal.utils.Client;
-import org.openhab.core.i18n.TimeZoneProvider;
+import org.openhab.binding.entsoe.internal.utils.XMLParser;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.CurrencyUnits;
@@ -52,6 +50,7 @@ import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.TimeSeries;
 import org.openhab.core.types.UnDefType;
+import org.openhab.core.types.util.UnitUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,11 +70,9 @@ public class EntsoEHandler extends BaseThingHandler {
     private EntsoEConfiguration config = new EntsoEConfiguration();
     private @Nullable ScheduledFuture<?> refreshJob;
     private Map<String, State> channelData = new HashMap<>();
-    private TimeZoneProvider timeZoneProvider;
 
-    public EntsoEHandler(Thing thing, TimeZoneProvider tzp) {
+    public EntsoEHandler(Thing thing) {
         super(thing);
-        timeZoneProvider = tzp;
     }
 
     @Override
@@ -132,20 +129,22 @@ public class EntsoEHandler extends BaseThingHandler {
         boolean success = false;
         EntsoEConfiguration config = getConfigAs(EntsoEConfiguration.class);
 
-        ZonedDateTime start = ZonedDateTime.now().minusDays(1).withHour(22);
-        ZonedDateTime end = ZonedDateTime.now().plusDays(2);
+        // get prices for today & tomorrow
+        ZonedDateTime start = ZonedDateTime.now(Utils.getClock()).withHour(0).withMinute(0);
+        ZonedDateTime end = ZonedDateTime.now(Utils.getClock()).withHour(0).withMinute(0).plusDays(1);
 
         Request request = new Request(config.securityToken, config.area, start, end);
-        Client client = new Client();
+        XMLParser client = new XMLParser();
 
         logger.debug("Start: {}, end: {}", start, end);
+        System.out.println("Start " + start + " End " + end);
 
         try {
-            TreeMap<ZonedDateTime, Double> responseMap = client.doGetRequest(request, API_TIMEOUT);
+            TreeMap<Instant, Double> responseMap = client.doGetRequest(request, API_TIMEOUT);
             TimeSeries timesSeries = new TimeSeries(REPLACE);
             responseMap.forEach((time, price) -> {
                 double priceKwh = price / 1000; // convert price €/mWh to €/kWh
-                timesSeries.add(time.toInstant(), QuantityType.valueOf(priceKwh, CurrencyUnits.BASE_ENERGY_PRICE));
+                timesSeries.add(time, QuantityType.valueOf(priceKwh, getPriceUnit()));
             });
             sendTimeSeries(CHANNEL_GROUP_ELECTRICITY + "#" + CHANNEL_SPOT_PRICE, timesSeries);
             updateState(CHANNEL_GROUP_ELECTRICITY + "#" + CHANNEL_UPDATED, new DateTimeType(ZonedDateTime.now()));
@@ -169,5 +168,15 @@ public class EntsoEHandler extends BaseThingHandler {
         } finally {
             schedule(success);
         }
+    }
+
+    private Unit<?> getPriceUnit() {
+        Unit<?> priceUnit = UnitUtils.parseUnit("EUR/kWh");
+        if (priceUnit == null) {
+            priceUnit = CurrencyUnits.BASE_ENERGY_PRICE;
+            logger.info("Using {} instead of EUR/kWh, because it is not available", priceUnit);
+            System.out.println("Using " + priceUnit + " instead of EUR/kWh, because it is not available");
+        }
+        return priceUnit;
     }
 }

@@ -15,13 +15,12 @@ package org.openhab.binding.entsoe.internal;
 
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.API_TIMEOUT;
-import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.THING_TYPE_SERVICE;
+import static org.mockito.Mockito.*;
+import static org.openhab.binding.entsoe.internal.EntsoEBindingConstants.*;
 
 import java.io.IOException;
-import java.time.ZonedDateTime;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -39,7 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.openhab.binding.entsoe.internal.exception.EntsoEResponseException;
 import org.openhab.binding.entsoe.internal.exception.EntsoEUnexpectedException;
 import org.openhab.binding.entsoe.internal.handler.EntsoEHandler;
-import org.openhab.binding.entsoe.internal.utils.Client;
+import org.openhab.binding.entsoe.internal.utils.XMLParser;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.io.net.http.HttpClientFactory;
@@ -63,6 +62,7 @@ class EntsoETests {
 
     @Test
     public void testHandler() {
+        Utils.setTimeZoneProvider(timeZoneProvider);
         // mock thing with config
         ThingImpl thing = new ThingImpl(THING_TYPE_SERVICE, "4711");
         Map<String, Object> configMap = new HashMap<>();
@@ -93,7 +93,7 @@ class EntsoETests {
 
         // Create Handler with Callback
         ThingCallbackListener listener = new ThingCallbackListener();
-        EntsoEHandler handler = new EntsoEHandler(thing, timeZoneProvider);
+        EntsoEHandler handler = new EntsoEHandler(thing);
         handler.setCallback(listener);
         handler.initialize();
         try {
@@ -107,7 +107,7 @@ class EntsoETests {
     public void testResponse() {
         String response = FileReader.readFileInString("src/test/resources/de-lu.xml");
         try {
-            Map<ZonedDateTime, Double> prices = Client.parseXmlResponse(response);
+            Map<Instant, Double> prices = XMLParser.parseXmlResponse(response);
             System.out.println("Numbver of prices " + prices.size());
         } catch (ParserConfigurationException | SAXException | IOException | EntsoEResponseException
                 | EntsoEUnexpectedException e) {
@@ -119,5 +119,6 @@ class EntsoETests {
     public void testCurrencyConversion() {
         // CurrencyService currencyService = new CurrencyService();
         CurrencyUnits currencyUnits = new CurrencyUnits();
+        // CurrencyService.
     }
 }

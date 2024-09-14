@@ -14,7 +14,12 @@ package org.openhab.binding.entsoe.internal.utils;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.TreeMap;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -41,14 +46,16 @@ import org.xml.sax.SAXException;
  *
  */
 @NonNullByDefault
-public class Client {
+public class XMLParser {
 
-    private static final Logger logger = LoggerFactory.getLogger(Client.class);
-
+    private static final Logger logger = LoggerFactory.getLogger(XMLParser.class);
     private static final DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-    // private @Nullable DocumentBuilder documentBuilder;
+    private static final String PERIOD_TAG = "Period";
+    private static final String DURATION_TAG = "resolution";
+    private static final String POINT_TAG = "Point";
+    private static final String DESIRED_DURATION = "PT60M";
 
-    public TreeMap<ZonedDateTime, Double> doGetRequest(Request request, int timeout)
+    public TreeMap<Instant, Double> doGetRequest(Request request, int timeout)
             throws EntsoEResponseException, EntsoEUnexpectedException, EntsoEConfigurationException {
         try {
             logger.debug("Sending GET request with parameters: {}", request);
@@ -57,9 +64,9 @@ public class Client {
             if (responseText == null) {
                 logger.error("GET request failed and returned null for request url: {}", url);
                 throw new EntsoEResponseException("Request failed");
+            } else {
+                return parseXmlResponse(responseText);
             }
-            logger.debug("{}", responseText);
-            return parseXmlResponse(responseText);
         } catch (IOException e) {
             if (e.getMessage().contains("Authentication challenge without WWW-Authenticate header")) {
                 throw new EntsoEConfigurationException("Authentication failed. Please check your security token");
@@ -70,15 +77,24 @@ public class Client {
         }
     }
 
-    public static TreeMap<ZonedDateTime, Double> parseXmlResponse(String responseText)
-            throws ParserConfigurationException, SAXException, IOException, EntsoEResponseException,
-            EntsoEUnexpectedException {
-        TreeMap<ZonedDateTime, Double> responseMap = new TreeMap<>();
+    public static TreeMap<Instant, Double> parseXmlResponse(String responseText) throws ParserConfigurationException,
+            SAXException, IOException, EntsoEResponseException, EntsoEUnexpectedException {
+        logger.debug("{}", responseText);
+        Document d = getDocument(responseText);
+        Map<String, TreeMap<Instant, Double>> periods = getPeriods(d);
+        System.out.println(periods);
+        TreeMap<Instant, Double> response = periods.get(DESIRED_DURATION);
+        if (response == null) {
+            response = new TreeMap<>();
+        }
+        return response;
+    }
 
+    private static Document getDocument(String xmlString)
+            throws EntsoEResponseException, IOException, ParserConfigurationException, SAXException {
         DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-        Document document = documentBuilder.parse(new InputSource(new StringReader(responseText)));
+        Document document = documentBuilder.parse(new InputSource(new StringReader(xmlString)));
         document.getDocumentElement().normalize();
-
         // Check for rejection
         if (document.getDocumentElement().getNodeName().equals("Acknowledgement_MarketDocument")) {
             NodeList reasonOfRejection = document.getElementsByTagName("Reason");
@@ -89,55 +105,58 @@ public class Client {
             throw new EntsoEResponseException(
                     String.format("Request failed with API response: Code %s, Text %s", reasonCode, reasonText));
         }
+        return document;
+    }
 
-        // Get all "timeSeries" nodes from document
-        NodeList listOfPeriods = document.getElementsByTagName("Period");
+    private static Map<String, TreeMap<Instant, Double>> getPeriods(Document document) {
+        Map<String, TreeMap<Instant, Double>> periods = new HashMap<>();
+        NodeList listOfPeriods = document.getElementsByTagName(PERIOD_TAG);
         for (int i = 0; i < listOfPeriods.getLength(); i++) {
+            // loop over periods
+            // calculate start time and duration
             Node timeSeriesNode = listOfPeriods.item(i);
             if (timeSeriesNode.getNodeType() == Node.ELEMENT_NODE) {
+                TreeMap<Instant, Double> prices = new TreeMap<>();
                 Element timeSeriesElement = (Element) timeSeriesNode;
+                Instant start = getStartTimestamp(timeSeriesElement);
+                String duration = "unknown";
                 NodeList periodNodes = timeSeriesElement.getChildNodes();
                 for (int j = 0; j < periodNodes.getLength(); j++) {
                     Node periodNode = periodNodes.item(j);
-                    System.out.println("Node " + periodNode.getNodeName());
+                    if (periodNode.getNodeName().equals(DURATION_TAG)) {
+                        duration = periodNode.getTextContent();
+                    }
                 }
-                System.out.println("Node" + timeSeriesElement.getNodeName());
-                // Check resolution of time interval
-                // Get start time from node
-                // NodeList listOfResultions =
-                // timeSeriesElement.getElementsByTagName("resolution");
-                // System.out.println("Number of time intervals: " +
-                // listOfResultions.getLength());
-                // Node resolutionNode = listOfResultions.item(0);
-                // Element resolutionElement = (Element) resolutionNode;
-                // String resolution =
-                // resolutionElement.getElementsByTagName("resolution").item(0).getTextContent();
-                //// System.out.println("Resolution: " + resolution);
-
-                // Get start time from node
-                NodeList listOfTimeInterval = timeSeriesElement.getElementsByTagName("timeInterval");
-                Node startTimeNode = listOfTimeInterval.item(0);
-                Element startTimeElement = (Element) startTimeNode;
-                String startTime = startTimeElement.getElementsByTagName("start").item(0).getTextContent();
-                ZonedDateTime zonedStartTime = ZonedDateTime.parse(startTime);
-
+                Duration priceDuration = Duration.parse(duration);
+                // calculate prices
                 NodeList listOfPoints = timeSeriesElement.getElementsByTagName("Point");
-
                 System.out.println("Number of points: " + listOfPoints.getLength());
                 for (int p = 0; p < listOfPoints.getLength(); p++) {
                     Node pointNode = listOfPoints.item(p);
                     if (pointNode.getNodeType() == Node.ELEMENT_NODE) {
                         Element pointElement = (Element) pointNode;
-                        ZonedDateTime timeStamp = zonedStartTime.plusHours(p);
+                        String positionString = pointElement.getElementsByTagName("position").item(0).getTextContent();
+                        int position = Integer.parseInt(positionString) - 1;
+                        Instant priceStartTime = start.plus(position * priceDuration.toMinutes(), ChronoUnit.MINUTES);
                         String price = pointElement.getElementsByTagName("price.amount").item(0).getTextContent();
                         Double priceAsDouble = Double.parseDouble(price);
-                        responseMap.put(timeStamp, priceAsDouble);
-                        logger.debug("\"Point\" node: {}/{} with values: {} - {} €/MWh", (p + 1),
-                                listOfPoints.getLength(), timeStamp, priceAsDouble);
+                        prices.put(priceStartTime, priceAsDouble);
                     }
                 }
+                periods.put(duration, prices);
             }
         }
-        return responseMap;
+        return periods;
+    }
+
+    private static Instant getStartTimestamp(Element elem) {
+        NodeList listOfTimeInterval = elem.getElementsByTagName("timeInterval");
+        Node startTimeNode = listOfTimeInterval.item(0);
+        Element startTimeElement = (Element) startTimeNode;
+        String startTime = startTimeElement.getElementsByTagName("start").item(0).getTextContent();
+        ZonedDateTime zdt = ZonedDateTime.parse(startTime);
+        System.out.println("Start Time zdt " + zdt);
+        System.out.println("Start Time ins " + zdt.toInstant());
+        return zdt.toInstant();
     }
 }
