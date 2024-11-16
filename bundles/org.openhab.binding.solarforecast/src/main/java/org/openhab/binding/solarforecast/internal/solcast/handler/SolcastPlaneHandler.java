@@ -15,6 +15,7 @@ package org.openhab.binding.solarforecast.internal.solcast.handler;
 import static org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants.*;
 import static org.openhab.binding.solarforecast.internal.solcast.SolcastConstants.*;
 
+import java.net.http.HttpClient;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,10 +28,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.http.HttpHeader;
+import org.jcp.xml.dsig.internal.dom.Utils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecast;
@@ -39,7 +40,6 @@ import org.openhab.binding.solarforecast.internal.actions.SolarForecastProvider;
 import org.openhab.binding.solarforecast.internal.solcast.SolcastObject;
 import org.openhab.binding.solarforecast.internal.solcast.SolcastObject.QueryMode;
 import org.openhab.binding.solarforecast.internal.solcast.config.SolcastPlaneConfiguration;
-import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.storage.Storage;
@@ -51,10 +51,10 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
-import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javafx.scene.web.HTMLEditorSkin.Command;
 
 /**
  * The {@link SolcastPlaneHandler} is a non active handler instance. It will be
@@ -67,14 +67,14 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
     public static final String CALL_COUNT_APPENDIX = "-count";
     public static final String CALL_COUNT_DATE_APPENDIX = "-count-date";
 
-    protected Optional<SolcastObject> forecastOptional = Optional.empty();
+    protected Optional<SolcastObject> currentForecastOptional = Optional.empty();
 
     private final Logger logger = LoggerFactory.getLogger(SolcastPlaneHandler.class);
     private final HttpClient httpClient;
     private SolcastPlaneConfiguration configuration = new SolcastPlaneConfiguration();
     private Optional<SolcastBridgeHandler> bridgeHandler = Optional.empty();
     private Storage<String> storage;
-    private Instant lastReset = Instant.now();
+    private Instant lastReset = Utils.now();
     private int apiRequestCounter = 0;
 
     public SolcastPlaneHandler(Thing thing, HttpClient hc, Storage<String> storage) {
@@ -111,9 +111,9 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
                 if (handler instanceof SolcastBridgeHandler sbh) {
                     bridgeHandler = Optional.of(sbh);
                     Instant expiration = (configuration.refreshInterval == 0) ? Instant.MAX
-                            : Instant.now(Utils.getClock()).minusSeconds(1);
+                            : Utils.now().minusSeconds(1);
                     SolcastObject forecast = new SolcastObject(thing.getUID().getAsString(), expiration, sbh, storage);
-                    forecastOptional = Optional.of(forecast);
+                    currentForecastOptional = Optional.of(forecast);
                     sbh.addPlane(this);
                 } else {
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
@@ -147,46 +147,51 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
         if (command instanceof RefreshType) {
-            forecastOptional.ifPresent(forecastObject -> {
-                String group = channelUID.getGroupId();
-                if (group == null) {
-                    group = EMPTY;
-                }
-                String channel = channelUID.getIdWithoutGroup();
-                QueryMode mode = QueryMode.Average;
-                switch (group) {
-                    case GROUP_AVERAGE:
-                        mode = QueryMode.Average;
-                        break;
-                    case GROUP_OPTIMISTIC:
-                        mode = QueryMode.Optimistic;
-                        break;
-                    case GROUP_PESSIMISTIC:
-                        mode = QueryMode.Pessimistic;
-                        break;
-                    case GROUP_RAW:
-                        forecastOptional.ifPresent(f -> {
-                            updateState(GROUP_RAW + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_JSON,
-                                    StringType.valueOf(f.getRaw()));
-                        });
-                }
-                switch (channel) {
-                    case CHANNEL_ENERGY_ESTIMATE:
-                        sendTimeSeries(CHANNEL_ENERGY_ESTIMATE, forecastObject.getEnergyTimeSeries(mode));
-                        break;
-                    case CHANNEL_POWER_ESTIMATE:
-                        sendTimeSeries(CHANNEL_POWER_ESTIMATE, forecastObject.getPowerTimeSeries(mode));
-                        break;
-                    default:
-                        updateChannels(forecastObject);
-                }
-            });
+            checkCount();
+            if (CHANNEL_API_COUNT.equals(channelUID.getIdWithoutGroup())) {
+                updateState(CHANNEL_API_COUNT, new DecimalType(apiRequestCounter));
+            } else {
+                currentForecastOptional.ifPresent(forecastObject -> {
+                    String group = channelUID.getGroupId();
+                    if (group == null) {
+                        group = EMPTY;
+                    }
+                    String channel = channelUID.getIdWithoutGroup();
+                    QueryMode mode = QueryMode.Average;
+                    switch (group) {
+                        case GROUP_AVERAGE:
+                            mode = QueryMode.Average;
+                            break;
+                        case GROUP_OPTIMISTIC:
+                            mode = QueryMode.Optimistic;
+                            break;
+                        case GROUP_PESSIMISTIC:
+                            mode = QueryMode.Pessimistic;
+                            break;
+                        case GROUP_RAW:
+                            currentForecastOptional.ifPresent(f -> {
+                                updateState(GROUP_RAW + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_JSON,
+                                        StringType.valueOf(f.getRaw()));
+                            });
+                    }
+                    switch (channel) {
+                        case CHANNEL_ENERGY_ESTIMATE:
+                            sendTimeSeries(CHANNEL_ENERGY_ESTIMATE, forecastObject.getEnergyTimeSeries(mode));
+                            break;
+                        case CHANNEL_POWER_ESTIMATE:
+                            sendTimeSeries(CHANNEL_POWER_ESTIMATE, forecastObject.getPowerTimeSeries(mode));
+                            break;
+                        default:
+                            updateChannels(forecastObject);
+                    }
+                });
+            }
         }
     }
 
     protected synchronized SolcastObject fetchData() {
         bridgeHandler.ifPresent(bridge -> {
-            forecastOptional.ifPresent(forecastObject -> {
+            currentForecastOptional.ifPresent(forecastObject -> {
                 if (forecastObject.isExpired()) {
                     logger.trace("[REDUCE] Forecast expired -> get new forecast");
                     String forecastUrl = String.format(FORECAST_URL, configuration.resourceId);
@@ -194,7 +199,7 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
                     try {
                         JSONObject forecast = null;
                         if (forecastObject.getForecastBegin() != Instant.MAX
-                                && forecastObject.getForecastEnd() != Instant.MIN) {
+                                && forecastObject.getForecastEnd() != Instant.MIN && configuration.guessActuals) {
                             // we found a forecast with valid data
                             forecast = getTodaysValues(forecastObject.getRaw());
                             int valuesToday = forecast.getJSONArray(KEY_ACTUALS).length();
@@ -231,22 +236,19 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
                             increaseCount();
                             ContentResponse crForecast = forecastRequest.send();
 
-                            if (crForecast.getStatus() == 200) {
-                                logger.trace("[REDUCE] Forecast call successful");
-                                JSONObject forecastJson = new JSONObject(crForecast.getContentAsString());
-                                forecast.put(KEY_FORECAST, forecastJson.getJSONArray(KEY_FORECAST));
-                                Instant expiration = (configuration.refreshInterval == 0) ? Instant.MAX
-                                        : Instant.now(Utils.getClock()).plus(configuration.refreshInterval,
-                                                ChronoUnit.MINUTES);
-                                SolcastObject localForecast = new SolcastObject(thing.getUID().getAsString(), forecast,
-                                        expiration, bridge, storage);
-                                setForecast(localForecast);
-                                updateState(GROUP_RAW + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_JSON,
-                                        StringType.valueOf(forecastOptional.get().getRaw()));
-                                updateStatus(ThingStatus.ONLINE);
-                            } else {
-                                apiCallFailure(forecastUrl, crForecast.getStatus());
-                            }
+                        if (crForecast.getStatus() == 200) {
+                            JSONObject forecastJson = new JSONObject(crForecast.getContentAsString());
+                            forecast.put(KEY_FORECAST, forecastJson.getJSONArray(KEY_FORECAST));
+                            Instant expiration = (configuration.refreshInterval == 0) ? Instant.MAX
+                                    : Utils.now().plus(configuration.refreshInterval, ChronoUnit.MINUTES);
+                            SolcastObject localForecast = new SolcastObject(thing.getUID().getAsString(), forecast,
+                                    expiration, bridge, storage);
+                            setForecast(localForecast);
+                            updateState(GROUP_RAW + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_JSON,
+                                    StringType.valueOf(currentForecastOptional.get().getRaw()));
+                            updateStatus(ThingStatus.ONLINE);
+                        } else {
+                            apiCallFailure(forecastUrl, crForecast.getStatus());
                         }
                     } catch (ExecutionException | TimeoutException e) {
                         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
@@ -260,7 +262,7 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
                 }
             });
         });
-        return forecastOptional.get();
+        return currentForecastOptional.get();
     }
 
     private void increaseCount() {
@@ -269,12 +271,16 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
     }
 
     private void checkCount() {
-        Instant now = Instant.now();
+        Instant now = Utils.now();
         if (lastReset.atZone(ZoneId.of("UTC")).getDayOfMonth() != now.atZone(ZoneId.of("UTC")).getDayOfMonth()) {
             logger.trace("[REDUCE] New day {}, reset counter", now);
             apiRequestCounter = 0;
             lastReset = now;
         }
+    }
+
+    public int getCount() {
+        return apiRequestCounter;
     }
 
     /**
@@ -343,10 +349,15 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
             updateState(GROUP_RAW + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_COUNT,
                     new DecimalType(apiRequestCounter));
         });
+        updateState(GROUP_UPDATE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_API_COUNT,
+                new DecimalType(apiRequestCounter));
+        ZonedDateTime creation = Utils.getZdtFromUTC(f.getCreationInstant());
+        updateState(GROUP_UPDATE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_LATEST_UPDATE,
+                new DateTimeType(creation));
     }
 
     protected synchronized void setForecast(SolcastObject f) {
-        forecastOptional = Optional.of(f);
+        currentForecastOptional = Optional.of(f);
         sendTimeSeries(GROUP_AVERAGE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_POWER_ESTIMATE,
                 f.getPowerTimeSeries(QueryMode.Average));
         sendTimeSeries(GROUP_AVERAGE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_ENERGY_ESTIMATE,
@@ -366,6 +377,6 @@ public class SolcastPlaneHandler extends BaseThingHandler implements SolarForeca
 
     @Override
     public synchronized List<SolarForecast> getSolarForecasts() {
-        return List.of(forecastOptional.get());
+        return List.of(currentForecastOptional.get());
     }
 }

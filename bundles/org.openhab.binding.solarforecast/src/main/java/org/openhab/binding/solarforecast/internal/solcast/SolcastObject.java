@@ -67,6 +67,7 @@ public class SolcastObject implements SolarForecast {
     private String identifier;
     private Optional<JSONObject> rawData = Optional.of(new JSONObject());
     private Instant expirationDateTime;
+    private Instant creationDateTime;
     private long period = 30;
 
     public enum QueryMode {
@@ -91,6 +92,7 @@ public class SolcastObject implements SolarForecast {
         // Constructor called from SolcastBridgeHandler at initialization
         identifier = id;
         expirationDateTime = expires;
+        creationDateTime = Utils.now();
         timeZoneProvider = tzp;
         dateOutputFormatter = DateTimeFormatter.ofPattern(SolarForecastBindingConstants.PATTERN_FORMAT)
                 .withZone(tzp.getTimeZone());
@@ -111,6 +113,7 @@ public class SolcastObject implements SolarForecast {
             Storage<String> storage) {
         identifier = id;
         expirationDateTime = expiration;
+        creationDateTime = Utils.now();
         timeZoneProvider = tzp;
         dateOutputFormatter = DateTimeFormatter.ofPattern(SolarForecastBindingConstants.PATTERN_FORMAT)
                 .withZone(tzp.getTimeZone());
@@ -175,7 +178,7 @@ public class SolcastObject implements SolarForecast {
     }
 
     public boolean isExpired() {
-        return expirationDateTime.isBefore(Instant.now(Utils.getClock()));
+        return expirationDateTime.isBefore(Utils.now());
     }
 
     public double getActualEnergyValue(ZonedDateTime query, QueryMode mode) {
@@ -236,7 +239,7 @@ public class SolcastObject implements SolarForecast {
     public TimeSeries getEnergyTimeSeries(QueryMode mode) {
         TreeMap<ZonedDateTime, Double> dtm = getDataMap(mode);
         TimeSeries ts = new TimeSeries(Policy.REPLACE);
-        Instant now = Instant.now(Utils.getClock());
+        Instant now = Utils.now();
         dtm.forEach((timestamp, energy) -> {
             Instant entryTimestamp = timestamp.toInstant();
             if (Utils.isAfterOrEqual(entryTimestamp, now)) {
@@ -290,7 +293,7 @@ public class SolcastObject implements SolarForecast {
     public TimeSeries getPowerTimeSeries(QueryMode mode) {
         TreeMap<ZonedDateTime, Double> dtm = getDataMap(mode);
         TimeSeries ts = new TimeSeries(Policy.REPLACE);
-        Instant now = Instant.now(Utils.getClock());
+        Instant now = Utils.now();
         dtm.forEach((timestamp, power) -> {
             Instant entryTimestamp = timestamp.toInstant();
             if (Utils.isAfterOrEqual(entryTimestamp, now)) {
@@ -403,7 +406,7 @@ public class SolcastObject implements SolarForecast {
         if (mode.equals(QueryMode.Error)) {
             return Utils.getEnergyState(-1);
         } else if (mode.equals(QueryMode.Optimistic) || mode.equals(QueryMode.Pessimistic)) {
-            if (end.isBefore(Instant.now())) {
+            if (end.isBefore(Utils.now())) {
                 throw new IllegalArgumentException(
                         "Solcast argument " + mode.toString() + " only available for future values");
             }
@@ -444,7 +447,7 @@ public class SolcastObject implements SolarForecast {
                 throw new IllegalArgumentException("Solcast doesn't support argument " + args[0]);
             }
         } else if (mode.equals(QueryMode.Optimistic) || mode.equals(QueryMode.Pessimistic)) {
-            if (timestamp.isBefore(Instant.now(Utils.getClock()).minus(1, ChronoUnit.MINUTES))) {
+            if (timestamp.isBefore(Utils.now().minus(1, ChronoUnit.MINUTES))) {
                 throw new IllegalArgumentException(
                         "Solcast argument " + mode.toString() + " only available for future values");
             }
@@ -524,5 +527,10 @@ public class SolcastObject implements SolarForecast {
         } else {
             return "Invalid time range";
         }
+    }
+
+    @Override
+    public Instant getCreationInstant() {
+        return creationDateTime;
     }
 }
