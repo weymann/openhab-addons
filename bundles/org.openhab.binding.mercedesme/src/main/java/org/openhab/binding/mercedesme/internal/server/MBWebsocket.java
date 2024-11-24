@@ -114,6 +114,9 @@ public class MBWebsocket {
                 }
             }
             logger.trace("Websocket stop");
+            if (session != null) {
+                session.close();
+            }
             client.stop();
             client.destroy();
         } catch (Throwable t) {
