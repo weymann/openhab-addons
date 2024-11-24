@@ -211,7 +211,8 @@ public class MBWebsocket {
 
     @OnWebSocketClose
     public void onDisconnect(Session session, int statusCode, String reason) {
-        logger.debug("Disconnected from server. Status {} Reason {}", statusCode, reason);
+        logger.debug("Vehicle Decoder Stats {}", accountHandler.decodeStatistics);
+        logger.trace("Disconnected from server. Status {} Reason {}", statusCode, reason);
         this.session = null;
         // ensure execution stop if disconnect was triggered from server side
         interrupt();

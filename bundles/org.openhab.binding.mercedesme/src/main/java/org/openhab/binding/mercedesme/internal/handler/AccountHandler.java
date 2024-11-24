@@ -12,8 +12,9 @@
  */
 package org.openhab.binding.mercedesme.internal.handler;
 
-import java.io.IOException;
-import java.util.ArrayList;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOExcepimport java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,7 @@ import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+ * 
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
 import com.daimler.mbcarkit.proto.Protos.AcknowledgeAssignedVehicles;
 import com.daimler.mbcarkit.proto.VehicleEvents;
@@ -65,10 +67,10 @@ import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
 import com.daimler.mbcarkit.proto.VehicleEvents.VEPUpdate;
 import com.daimler.mbcarkit.proto.Vehicleapi.AcknowledgeAppTwinCommandStatusUpdatesByVIN;
 import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByPID;
-import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByVIN;
-import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinPendingCommandsRequest;
+import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByVIN;rt com.daimler.m
 
-/**
+    /**
+    
  * The {@link AccountHandler} acts as Bridge between MercedesMe Account and the associated vehicles
  *
  * @author Bernd Weymann - Initial contribution
@@ -87,6 +89,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private final Map<String, VehicleHandler> activeVehicleHandlerMap = new HashMap<>();
     private final Map<String, VEPUpdate> vepUpdateMap = new HashMap<>();
     private final Map<String, Map<String, Object>> capabilitiesMap = new HashMap<>();
+    private final List<byte[]> eventQueue = new ArrayList<>();
+    private final List<String> fileDumps = new ArrayList<>();
 
     private Optional<AuthServer> server = Optional.empty();
     private Optional<AuthService> authService = Optional.empty();
@@ -97,11 +101,12 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private String capabilitiesEndpoint = "/v1/vehicle/%s/capabilities";
     private String commandCapabilitiesEndpoint = "/v1/vehicle/%s/capabilities/commands";
     private String poiEndpoint = "/v1/vehicle/%s/route";
+    private boolean updateRunning = false;
 
     final MBWebsocket ws;
     Optional<AccountConfiguration> config = Optional.empty();
-    @Nullable
-    ClientMessage message;
+
+    public final Map<String, Integer> decodeStatistics = new HashMap<>();
 
     public AccountHandler(Bridge bridge, MercedesMeDiscoveryService mmds, HttpClient hc, LocaleProvider lp,
             StorageService store, NetworkAddressService nas) {
@@ -339,6 +344,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         try {
             PushMessage pm = VehicleEvents.PushMessage.parseFrom(array);
             if (pm.hasVepUpdates()) {
+                count("Vehcile Updates");
                 boolean distributed = distributeVepUpdates(pm.getVepUpdates().getUpdatesMap());
                 logger.trace("Distributed VEPUpdate {}", distributed);
                 if (distributed) {
@@ -348,14 +354,14 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                     ws.sendAcknowledgeMessage(cm);
                 }
             } else if (pm.hasAssignedVehicles()) {
-                for (int i = 0; i < pm.getAssignedVehicles().getVinsCount(); i++) {
+                count("Vehcile Assignments");
                     String vin = pm.getAssignedVehicles().getVins(0);
-                    discovery(vin);
                 }
                 AcknowledgeAssignedVehicles ack = AcknowledgeAssignedVehicles.newBuilder().build();
                 ClientMessage cm = ClientMessage.newBuilder().setAcknowledgeAssignedVehicles(ack).build();
                 ws.sendAcknowledgeMessage(cm);
             } else if (pm.hasApptwinCommandStatusUpdatesByVin()) {
+                count("Vehcile Command Responses");
                 AppTwinCommandStatusUpdatesByVIN csubv = pm.getApptwinCommandStatusUpdatesByVin();
                 commandStatusUpdate(csubv.getUpdatesByVinMap());
                 AcknowledgeAppTwinCommandStatusUpdatesByVIN ack = AcknowledgeAppTwinCommandStatusUpdatesByVIN
@@ -364,18 +370,36 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                         .build();
                 ws.sendAcknowledgeMessage(cm);
             } else if (pm.hasApptwinPendingCommandRequest()) {
-                AppTwinPendingCommandsRequest pending = pm.getApptwinPendingCommandRequest();
+                count("Vehcile Pending Commands");
                 if (!pending.getAllFields().isEmpty()) {
-                    logger.trace("Pending Command {}", pending.getAllFields());
                 }
             } else if (pm.hasDebugMessage()) {
+                count("Debug Messages");
                 logger.trace("MB Debug Message: {}", pm.getDebugMessage().getMessage());
             } else {
+                count("Unknown");
                 logger.trace("MB Message: {} not handled", pm.getAllFields());
             }
         } catch (IOException e) {
-            logger.trace("IOException decoding message {}", e.getMessage());
+            count("Exception Fails");
+            String message = e.getMessage();
+            logger.debug("IOException decoding message {}", message);
+            if (!fileDumps.contains(message) && message != null) {
+                // write only one file per error message
+                fileDumps.add(message);
+                try {
+                    File tmpFile = File.createTempFile("mercedesme", "proto");
+                    String fileName = tmpFile.getPath() + " " + tmpFile.getName();
+                    logger.debug("IOException write proto file into {}", fileName);
+                    FileOutputStream outputStream = new FileOutputStream(tmpFile);
+                    outputStream.write(array);
+                    outputStream.close();
+                } catch (IOException e1) {
+                    logger.debug("Error writing temporary file {}", e1.getMessage());
+                }
+            }
         } catch (Error err) {
+            count("Error Fails");
             logger.debug("Error caught {}", err.getMessage());
         }
     }
@@ -383,13 +407,13 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     public boolean distributeVepUpdates(Map<String, VEPUpdate> map) {
         List<String> notFoundList = new ArrayList<>();
         map.forEach((key, value) -> {
+            if (value.getFullUpdate()) {
+                vepUpdateMap.put(key, value);
+            }
             VehicleHandler h = activeVehicleHandlerMap.get(key);
             if (h != null) {
                 h.enqueueUpdate(value);
             } else {
-                if (value.getFullUpdate()) {
-                    vepUpdateMap.put(key, value);
-                }
                 notFoundList.add(key);
             }
         });
@@ -424,6 +448,15 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 discoveryProperties.put("vin", vin);
                 discoveryService.vehicleDiscovered(this, vin, discoveryProperties);
             }
+        }
+    }
+
+    private void count(String item) {
+        if (decodeStatistics.containsKey(item)) {
+            int count = decodeStatistics.get(item);
+            decodeStatistics.put(item, ++count);
+        } else {
+            decodeStatistics.put(item, 1);
         }
     }
 
