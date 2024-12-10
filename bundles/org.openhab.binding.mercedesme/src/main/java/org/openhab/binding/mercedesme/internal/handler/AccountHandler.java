@@ -14,7 +14,8 @@ package org.openhab.binding.mercedesme.internal.handler;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOExcepimport java.util.ArrayList;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +59,6 @@ import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
- * 
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
 import com.daimler.mbcarkit.proto.Protos.AcknowledgeAssignedVehicles;
 import com.daimler.mbcarkit.proto.VehicleEvents;
@@ -67,10 +67,11 @@ import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
 import com.daimler.mbcarkit.proto.VehicleEvents.VEPUpdate;
 import com.daimler.mbcarkit.proto.Vehicleapi.AcknowledgeAppTwinCommandStatusUpdatesByVIN;
 import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByPID;
-import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByVIN;rt com.daimler.m
+import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByVIN;
+import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinPendingCommandsRequest;
 
-    /**
-    
+/**
+ *
  * The {@link AccountHandler} acts as Bridge between MercedesMe Account and the associated vehicles
  *
  * @author Bernd Weymann - Initial contribution
@@ -89,7 +90,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private final Map<String, VehicleHandler> activeVehicleHandlerMap = new HashMap<>();
     private final Map<String, VEPUpdate> vepUpdateMap = new HashMap<>();
     private final Map<String, Map<String, Object>> capabilitiesMap = new HashMap<>();
-    private final List<byte[]> eventQueue = new ArrayList<>();
     private final List<String> fileDumps = new ArrayList<>();
 
     private Optional<AuthServer> server = Optional.empty();
@@ -101,7 +101,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private String capabilitiesEndpoint = "/v1/vehicle/%s/capabilities";
     private String commandCapabilitiesEndpoint = "/v1/vehicle/%s/capabilities/commands";
     private String poiEndpoint = "/v1/vehicle/%s/route";
-    private boolean updateRunning = false;
 
     final MBWebsocket ws;
     Optional<AccountConfiguration> config = Optional.empty();
@@ -355,8 +354,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 }
             } else if (pm.hasAssignedVehicles()) {
                 count("Vehcile Assignments");
-                    String vin = pm.getAssignedVehicles().getVins(0);
-                }
+                String vin = pm.getAssignedVehicles().getVins(0);
                 AcknowledgeAssignedVehicles ack = AcknowledgeAssignedVehicles.newBuilder().build();
                 ClientMessage cm = ClientMessage.newBuilder().setAcknowledgeAssignedVehicles(ack).build();
                 ws.sendAcknowledgeMessage(cm);
@@ -371,6 +369,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 ws.sendAcknowledgeMessage(cm);
             } else if (pm.hasApptwinPendingCommandRequest()) {
                 count("Vehcile Pending Commands");
+                AppTwinPendingCommandsRequest pending = pm.getApptwinPendingCommandRequest();
                 if (!pending.getAllFields().isEmpty()) {
                 }
             } else if (pm.hasDebugMessage()) {
