@@ -354,7 +354,10 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 }
             } else if (pm.hasAssignedVehicles()) {
                 count("Vehcile Assignments");
-                String vin = pm.getAssignedVehicles().getVins(0);
+                for (int i = 0; i < pm.getAssignedVehicles().getVinsCount(); i++) {
+                    String vin = pm.getAssignedVehicles().getVins(i);
+                    discovery(vin);
+                }
                 AcknowledgeAssignedVehicles ack = AcknowledgeAssignedVehicles.newBuilder().build();
                 ClientMessage cm = ClientMessage.newBuilder().setAcknowledgeAssignedVehicles(ack).build();
                 ws.sendAcknowledgeMessage(cm);
