@@ -29,18 +29,17 @@ import javax.measure.quantity.Energy;
 import javax.measure.quantity.Power;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
+import org.jcp.xml.dsig.internal.dom.Utils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants;
 import org.openhab.binding.solarforecast.internal.SolarForecastException;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecast;
-import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.storage.Storage;
 import org.openhab.core.types.TimeSeries;
-import org.openhab.core.types.TimeSeries.Policy;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -53,6 +52,7 @@ import org.slf4j.LoggerFactory;
 @NonNullByDefault
 public class SolcastObject implements SolarForecast {
     public static final String FORECAST_APPENDIX = "-forecast";
+    public static final String CREATION_APPENDIX = "-creation";
     public static final String EXPIRATION_APPENDIX = "-expiration";
 
     private static final TreeMap<ZonedDateTime, Double> EMPTY_MAP = new TreeMap<>();
@@ -66,8 +66,8 @@ public class SolcastObject implements SolarForecast {
     private DateTimeFormatter dateOutputFormatter;
     private String identifier;
     private Optional<JSONObject> rawData = Optional.of(new JSONObject());
-    private Instant expirationDateTime;
     private Instant creationDateTime;
+    private Instant expirationDateTime;
     private long period = 30;
 
     public enum QueryMode {
@@ -88,40 +88,37 @@ public class SolcastObject implements SolarForecast {
         }
     }
 
-    public SolcastObject(String id, Instant expires, TimeZoneProvider tzp, Storage<String> storage) {
-        // Constructor called from SolcastBridgeHandler at initialization
-        identifier = id;
-        expirationDateTime = expires;
-        creationDateTime = Utils.now();
-        timeZoneProvider = tzp;
-        dateOutputFormatter = DateTimeFormatter.ofPattern(SolarForecastBindingConstants.PATTERN_FORMAT)
-                .withZone(tzp.getTimeZone());
-        // try to recover data from storage during initialization in order to reduce
-        // Solcast API calls
-        if (storage.containsKey(id + FORECAST_APPENDIX)) {
-            JSONObject forecast = new JSONObject(storage.get(id + FORECAST_APPENDIX));
-            String expirationString = storage.get(id + EXPIRATION_APPENDIX);
-            if (expirationString != null) {
-                expirationDateTime = Instant.parse(expirationString);
-            }
-            add(forecast);
-            logger.trace("[REDUCE] recovered forecast data {}", forecast.toString());
-        }
-    }
-
-    public SolcastObject(String id, JSONObject forecast, Instant expiration, TimeZoneProvider tzp,
+    public SolcastObject(String id, @Nullable JSONObject forecast, Instant expiration, TimeZoneProvider tzp,
             Storage<String> storage) {
+        JSONObject newForecast = forecast;
         identifier = id;
-        expirationDateTime = expiration;
         creationDateTime = Utils.now();
+        expirationDateTime = expiration;
         timeZoneProvider = tzp;
         dateOutputFormatter = DateTimeFormatter.ofPattern(SolarForecastBindingConstants.PATTERN_FORMAT)
                 .withZone(tzp.getTimeZone());
-        add(forecast);
-        // store data in storage for later use e.g. after restart
-        logger.trace("[REDUCE] store forecast data {}", forecast.toString());
-        storage.put(id + FORECAST_APPENDIX, forecast.toString());
-        storage.put(id + EXPIRATION_APPENDIX, expiration.toString());
+        if (newForecast == null) {
+            // try to recover data from storage during initialization in order to reduce
+            // Solcast API calls
+            if (storage.containsKey(id + FORECAST_APPENDIX)) {
+                newForecast = new JSONObject(storage.get(id + FORECAST_APPENDIX));
+                String expirationString = storage.get(id + EXPIRATION_APPENDIX);
+                String creationString = storage.get(id + CREATION_APPENDIX);
+                if (creationString != null) {
+                    creationDateTime = Instant.parse(creationString);
+                }
+                if (expirationString != null) {
+                    expirationDateTime = Instant.parse(expirationString);
+                }
+            }
+        }
+        if (newForecast != null) {
+            add(newForecast);
+            // store data in storage for later use e.g. after restart
+            storage.put(id + FORECAST_APPENDIX, newForecast.toString());
+            storage.put(id + CREATION_APPENDIX, creationDateTime.toString());
+            storage.put(id + EXPIRATION_APPENDIX, expirationDateTime.toString());
+        }
     }
 
     private void add(JSONObject forecast) {
