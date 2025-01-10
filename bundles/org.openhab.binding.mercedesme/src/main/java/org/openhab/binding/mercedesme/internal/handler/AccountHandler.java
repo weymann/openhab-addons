@@ -85,7 +85,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private final LocaleProvider localeProvider;
     private final Storage<String> storage;
     private final Map<String, VehicleHandler> activeVehicleHandlerMap = new HashMap<>();
-    private final Map<String, VEPUpdate> vepUpdateMap = new HashMap<>();
     private final Map<String, Map<String, Object>> capabilitiesMap = new HashMap<>();
 
     private Optional<AuthServer> server = Optional.empty();
@@ -272,10 +271,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         discoveryService.vehicleRemove(this, vin, handler.getThing().getThingTypeUID().getId());
         activeVehicleHandlerMap.put(vin, handler);
         discovery(vin); // update properties for added vehicle
-        VEPUpdate updateForVin = vepUpdateMap.get(vin);
-        if (updateForVin != null) {
-            handler.enqueueUpdate(updateForVin);
-        }
+        refresh(); // start web socket to receive data
     }
 
     public void unregisterVin(String vin) {
@@ -387,9 +383,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             if (h != null) {
                 h.enqueueUpdate(value);
             } else {
-                if (value.getFullUpdate()) {
-                    vepUpdateMap.put(key, value);
-                }
                 notFoundList.add(key);
             }
         });
