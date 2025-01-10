@@ -39,6 +39,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
+import com.daimler.mbcarkit.proto.VehicleEvents;
+import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
 
 /**
  * {@link MBWebsocket} as socket endpoint to communicate with Mercedes
@@ -113,7 +115,7 @@ public class MBWebsocket {
                     runTill = runTill.plusMillis(ADDON_MESSAGE_TIME_MS);
                 }
             }
-            logger.trace("Websocket stop");
+            logger.trace("Websocket stop: Messages- delivered {}", accountHandler.messageCounter);
             client.stop();
             client.destroy();
         } catch (Throwable t) {
@@ -190,20 +192,25 @@ public class MBWebsocket {
      */
 
     @OnWebSocketMessage
-    public void onBytes(InputStream is) {
+    public void onByteStream(InputStream is) {
         try {
-            byte[] array = is.readAllBytes();
-            is.close();
-            accountHandler.enqueueMessage(array);
-            /**
-             * https://community.openhab.org/t/mercedes-me/136866/12
-             * Release Websocket thread as early as possible to avoid execeptions
-             *
-             * 1. Websocket thread responsible for reading stream in bytes and enqueue for AccountHandler.
-             * 2. AccountHamdler thread responsible for encoding proto message. In case of update enqueue proto message
-             * at VehicleHandöer
-             * 3. VehicleHandler responsible to update channels
-             */
+            PushMessage pm = VehicleEvents.PushMessage.parseFrom(is);
+            accountHandler.enqueueMessage(pm);
+        } catch (IOException e) {
+            logger.debug("IOException reading input stream {}", e.getMessage());
+        }
+    }
+
+    @OnWebSocketMessage
+    public void onByteArray(byte[] data, int offset, int length) {
+        // https://javadoc.io/doc/org.eclipse.jetty.websocket/websocket-api/latest/org/eclipse/jetty/websocket/api/annotations/OnWebSocketMessage.html
+        logger.debug("Received byte array with offset {} length {} / {}", offset, length, data.length);
+        int newLength = length - offset;
+        byte[] adjustedData = new byte[newLength];
+        System.arraycopy(data, offset, adjustedData, 0, newLength);
+        try {
+            PushMessage pm = VehicleEvents.PushMessage.parseFrom(adjustedData);
+            accountHandler.enqueueMessage(pm);
         } catch (IOException e) {
             logger.debug("IOException reading input stream {}", e.getMessage());
         }
