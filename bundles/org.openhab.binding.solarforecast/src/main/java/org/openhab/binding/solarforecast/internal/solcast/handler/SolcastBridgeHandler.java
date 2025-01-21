@@ -13,6 +13,7 @@
 package org.openhab.binding.solarforecast.internal.solcast.handler;
 
 import static org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants.*;
+import static org.openhab.binding.solarforecast.internal.solcast.SolcastConstants.MODES;
 
 import java.time.DateTimeException;
 import java.time.Instant;
@@ -28,14 +29,14 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.jcp.xml.dsig.internal.dom.Utils;
 import org.json.JSONObject;
+import org.openhab.binding.solarforecast.internal.SolarForecastException;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecast;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecastActions;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecastProvider;
 import org.openhab.binding.solarforecast.internal.solcast.SolcastObject;
-import org.openhab.binding.solarforecast.internal.solcast.SolcastObject.QueryMode;
 import org.openhab.binding.solarforecast.internal.solcast.config.SolcastBridgeConfiguration;
+import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DateTimeType;
 import org.openhab.core.library.types.QuantityType;
@@ -46,15 +47,15 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
+import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.TimeSeries;
+import org.openhab.core.types.TimeSeries.Policy;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javafx.scene.web.HTMLEditorSkin.Command;
-
 /**
- * The {@link SolcastBridgeHandler} is a non active handler instance. It will be
- * triggered by the bridge.
+ * The {@link SolcastBridgeHandler} is a non active handler instance. It will be triggered by the bridge.
  *
  * @author Bernd Weymann - Initial contribution
  */
@@ -108,6 +109,8 @@ public class SolcastBridgeHandler extends BaseBridgeHandler implements SolarFore
                 case CHANNEL_ENERGY_REMAIN:
                 case CHANNEL_ENERGY_TODAY:
                 case CHANNEL_POWER_ACTUAL:
+                case CHANNEL_API_COUNT:
+                case CHANNEL_LATEST_UPDATE:
                     getData();
                     break;
                 case CHANNEL_POWER_ESTIMATE:
@@ -179,8 +182,6 @@ public class SolcastBridgeHandler extends BaseBridgeHandler implements SolarFore
                     powerSum += forecastObject.getActualPowerValue(now, mode);
                     daySum += forecastObject.getDayTotal(now.toLocalDate(), mode);
                 }
-            }
-            if (update) {
                 updateStatus(ThingStatus.ONLINE);
                 updateState(group + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_ENERGY_ACTUAL,
                         Utils.getEnergyState(energySum));
@@ -190,8 +191,12 @@ public class SolcastBridgeHandler extends BaseBridgeHandler implements SolarFore
                         Utils.getEnergyState(daySum));
                 updateState(group + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_POWER_ACTUAL,
                         Utils.getPowerState(powerSum));
-            }
-        });
+            });
+        } catch (SolarForecastException sfe) {
+            // stay online to receive new data from planes but not ready with comment
+            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NOT_YET_READY,
+                    "@text/solarforecast.site.status.exception [\"" + sfe.getMessage() + "\"]");
+        }
     }
 
     public synchronized void forecastUpdate() {
@@ -205,14 +210,12 @@ public class SolcastBridgeHandler extends BaseBridgeHandler implements SolarFore
             forecastObjects.addAll(sfph.getSolarForecasts());
         }
         // sort in Tree according to times for each scenario
-        List<QueryMode> modes = List.of(QueryMode.Average, QueryMode.Pessimistic, QueryMode.Optimistic);
-        modes.forEach(mode -> {
+        MODES.forEach(mode -> {
             TreeMap<Instant, QuantityType<?>> combinedPowerForecast = new TreeMap<>();
             TreeMap<Instant, QuantityType<?>> combinedEnergyForecast = new TreeMap<>();
 
             // bugfix: https://github.com/weymann/OH3-SolarForecast-Drops/issues/5
-            // find common start and end time which fits to all forecast objects to avoid
-            // ambiguous values
+            // find common start and end time which fits to all forecast objects to avoid ambiguous values
             final Instant commonStart = Utils.getCommonStartTime(forecastObjects);
             final Instant commonEnd = Utils.getCommonEndTime(forecastObjects);
             forecastObjects.forEach(fc -> {

@@ -30,16 +30,18 @@ import javax.measure.quantity.Power;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.jcp.xml.dsig.internal.dom.Utils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants;
 import org.openhab.binding.solarforecast.internal.SolarForecastException;
 import org.openhab.binding.solarforecast.internal.actions.SolarForecast;
+import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.storage.Storage;
 import org.openhab.core.types.TimeSeries;
+import org.openhab.core.types.TimeSeries.Policy;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
