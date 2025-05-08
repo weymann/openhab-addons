@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:curves:wallbox">
+		<parameter name="chargeItem" type="text" required="true">
+			<label>Charge Power</label>
+			<description>Item measuring BEV charge power</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="chargeItemPersistence" type="text">
+			<label>Charge Power Persistence</label>
+			<description>Override HEMS default persistence for wallbox charge power item</description>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>

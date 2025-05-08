@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:curves:pv">
+		<parameter name="label" type="text">
+			<label>Label</label>
+			<description>Human readable, ideally unique label for this Curves entity</description>
+		</parameter>
+		<parameter name="pvPowerItem" type="text">
+			<label>PV Power</label>
+			<description>Item measuring PV power production</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="pvPowerItemPersistence" type="text">
+			<label>PV Power Persistence</label>
+			<description>Override HEMS default persistence for PV power item</description>
+		</parameter>
+		<parameter name="powerForecastItem" type="text" required="true">
+			<label>PV Power Forecast </label>
+			<description>Item providing TimeSeries of power forecast</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="powerForecastItemPersistence" type="text">
+			<label>PV Power Forecast Persistence</label>
+			<description>Override HEMS default persistence for PV power forecast item</description>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>

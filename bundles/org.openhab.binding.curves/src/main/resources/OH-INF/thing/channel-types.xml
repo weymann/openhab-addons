@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="curves"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<channel-type id="power">
+		<item-type>Number:Power</item-type>
+		<label>Power</label>
+		<description>Power prediction for this moment</description>
+		<state pattern="%.0f %unit%" readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="strategies">
+		<item-type>String</item-type>
+		<label>Strategies</label>
+		<description>Strategies taken into account</description>
+	</channel-type>
+
+	<channel-type id="string">
+		<item-type>String</item-type>
+		<label>String</label>
+	</channel-type>
+
+	<channel-type id="json">
+		<item-type>String</item-type>
+		<label>Result</label>
+	</channel-type>
+</thing:thing-descriptions>

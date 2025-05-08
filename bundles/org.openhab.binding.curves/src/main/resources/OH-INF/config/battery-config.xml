@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+
+	<config-description uri="thing-type:curves:battery">
+		<parameter name="label" type="text" required="true">
+			<label>Label</label>
+			<description>Human readable, ideally unique label for this Curves entity</description>
+		</parameter>
+		<parameter name="batteryCapacity" type="decimal" required="true">
+			<label>Battery Energy Capacity</label>
+			<description>Home battery capacity in kWh</description>
+			<default>10</default>
+		</parameter>
+		<parameter name="maxChargePower" type="integer" required="true">
+			<label>Maximum Charge Power</label>
+			<description>Maximum charge power your battery is capable in watt</description>
+			<default>3000</default>
+		</parameter>
+		<parameter name="maxDischargePower" type="integer" required="true">
+			<label>Maximum Discharge Power</label>
+			<description>Maximum discharge power your battery is capable in watt</description>
+			<default>3000</default>
+		</parameter>
+		<parameter name="stateOfChargeItem" type="text">
+			<label>Battery SoC</label>
+			<description>Item providing the current state of charge in percent</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="stateOfChargeItemPersistence" type="text">
+			<label>Battery SoC Persistence</label>
+			<description>Override HEMS default persistence for battery soc item</description>
+		</parameter>
+		<parameter name="chargeItem" type="text">
+			<label>Charge Power</label>
+			<description>Item measuring charge power of home battery in Watts</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="chargeItemPersistence" type="text">
+			<label>Charge Power Persistence</label>
+			<description>Override HEMS default persistence for battery charge power item</description>
+		</parameter>
+		<parameter name="dischargeItem" type="text">
+			<label>Discharge Power</label>
+			<description>Item measuring discharge power of home battery in Watts</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="dischargeItemPersistence" type="text">
+			<label>Discharge Power Persistence</label>
+			<description>Override HEMS default persistence for battery discharge power item</description>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>

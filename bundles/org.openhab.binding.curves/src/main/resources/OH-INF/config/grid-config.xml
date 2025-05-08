@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:curves:grid">
+		<parameter name="staticTariff" type="decimal">
+			<label>Static Tariff</label>
+			<description>Static price for one kWh provided by grid for comparison</description>
+		</parameter>
+		<parameter name="pvSelfConsumptionTariff" type="decimal">
+			<label>PV Self-consumption Tariff</label>
+			<description>Calculatory price for one kWh PV self consumption</description>
+		</parameter>
+		<parameter name="feedInTariff" type="decimal" required="true">
+			<label>Feed-in Tariff</label>
+			<description>Static price for one kWh feed-in to grid</description>
+		</parameter>
+		<parameter name="dynamicTariffItem" type="text">
+			<label>Dynamic Tariff</label>
+			<description>Item providing TimeSeries with spot prices for dynamic tariff</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="grid2HomeItem" type="text">
+			<label>Grid to Home</label>
+			<description>Item measuring the grid to home power</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="grid2HomeItemersistence" type="text">
+			<label>Grid to Home Persistence</label>
+			<description>Override HEMS default persistence for grid to home power item</description>
+		</parameter>
+		<parameter name="home2GridItem" type="text">
+			<label>Home to Grid</label>
+			<description>Item measuring the home to grid power</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="home2GridItemPersistence" type="text">
+			<label>Home to Grid Persistence</label>
+			<description>Override HEMS default persistence for home to grid power item</description>
+		</parameter>
+	</config-description>
+
+</config-description:config-descriptions>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="curves"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<bridge-type id="controller">
+		<label>Curves Controller</label>
+		<description>Controller Bridge for all entities</description>
+
+		<channels>
+			<channel id="strategies-included" typeId="strategies">
+				<label>Included Calculation Strategies</label>
+				<description>Strategies taken into account in calculations</description>
+			</channel>
+			<channel id="strategies-excluded" typeId="strategies">
+				<label>Excluded Calculation Strategies</label>
+				<description>Strategies which still can be added if applicable</description>
+			</channel>
+			<channel id="calculation-selection" typeId="string">
+				<label>Select Calculation</label>
+				<description>List of calculations which can be selected</description>
+			</channel>
+			<channel id="calculation-result" typeId="json">
+				<label>Calculation Result</label>
+				<description>Current selected calculation result</description>
+			</channel>
+		</channels>
+
+		<config-description-ref uri="thing-type:curves:controller"/>
+	</bridge-type>
+
+	<thing-type id="pv">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="controller"/>
+		</supported-bridge-type-refs>
+
+		<label>Curves PV</label>
+		<description>PV production entity</description>
+
+		<config-description-ref uri="thing-type:curves:pv"/>
+	</thing-type>
+
+	<thing-type id="household">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="controller"/>
+            <bridge-type-ref id="controller"/>
+		</supported-bridge-type-refs>
+
+		<label>Curves Household</label>
+		<description>Household consumption entity</description>
+
+		<channels>
+			<channel id="household-cast" typeId="power">
+				<label>Household Power Prediction</label>
+				<description>Power prediction for household consumption</description>
+			</channel>
+		</channels>
+
+		<config-description-ref uri="thing-type:curves:household"/>
+	</thing-type>
+
+	<thing-type id="grid">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="controller"/>
+		</supported-bridge-type-refs>
+
+		<label>Curves Grid</label>
+		<description>Entity for power to and from grid prediction</description>
+
+		<channels>
+			<channel id="to-grid-cast" typeId="power">
+				<label>Power to Grid</label>
+				<description>Power prediction towards grid</description>
+			</channel>
+			<channel id="from-grid-cast" typeId="power">
+				<label>Power from Grid</label>
+				<description>Power prediction of grid consumption</description>
+			</channel>
+		</channels>
+
+		<config-description-ref uri="thing-type:curves:grid"/>
+	</thing-type>
+
+	<thing-type id="battery">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="controller"/>
+		</supported-bridge-type-refs>
+
+		<label>Curves Battery</label>
+		<description>Entity for battery charge and discharge prediction</description>
+
+		<channels>
+			<channel id="charge-cast" typeId="power">
+				<label>Charge Prediction</label>
+				<description>Prediction for power usage to charge battery</description>
+			</channel>
+			<channel id="discharge-cast" typeId="power">
+				<label>Discharge Prediction</label>
+				<description>Power prediction for battery charging and discharging</description>
+			</channel>
+		</channels>
+
+		<config-description-ref uri="thing-type:curves:battery"/>
+	</thing-type>
+
+	<thing-type id="wallbox">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="controller"/>
+		</supported-bridge-type-refs>
+
+		<label>Curves Wallbox</label>
+		<description>Wallbox entity</description>
+
+		<config-description-ref uri="thing-type:curves:wallbox"/>
+	</thing-type>
+
+</thing:thing-descriptions>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:curves:household">
+		<parameter name="label" type="text" required="true">
+			<label>Label</label>
+			<description>Human readable, ideally unique label for this Curves entity</description>
+		</parameter>
+		<parameter name="householdPowerItem" type="text" required="true">
+			<label>Household Power</label>
+			<description>Item measuring the household power consumption</description>
+			<context>item</context>
+		</parameter>
+		<parameter name="householdPowerItemPersistence" type="text">
+			<label>Household Power Persistence</label>
+			<description>Override HEMS default persistence for household power item</description>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>

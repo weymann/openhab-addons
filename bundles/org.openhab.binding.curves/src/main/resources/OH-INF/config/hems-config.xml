@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0 https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+	<config-description uri="thing-type:curves:hems">
+		<parameter name="defaultPersistence" type="text" required="false">
+			<label>Default Persistence</label>
+			<description>Default persistence for curve item connections</description>
+		</parameter>
+		<parameter name="granularity" type="integer" required="false">
+			<label>Calculation Granularity</label>
+			<description>Time-frame duration as basis for all calculations</description>
+			<limitToOptions>false</limitToOptions>
+			<options>
+				<option value="5">5 Minutes</option>
+				<option value="15">15 Minutes</option>
+				<option value="30">30 Minutes</option>
+				<option value="60">1 Hour</option>
+			</options>
+			<default>5</default>
+			<advanced>true</advanced>
+		</parameter>
+		<parameter name="predictionPeriod" type="integer" required="false">
+			<label>Prediction Period</label>
+			<description>Prediction period in days</description>
+			<limitToOptions>false</limitToOptions>
+			<options>
+				<option value="1">Today</option>
+				<option value="2">Today and Tomorrow</option>
+				<option value="3">2 Days ahead</option>
+				<option value="4">3 Days ahead</option>
+				<option value="5">4 Days ahead</option>
+			</options>
+			<default>2</default>
+			<advanced>true</advanced>
+		</parameter>
+	</config-description>
+</config-description:config-descriptions>
