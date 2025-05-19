@@ -10,20 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.tibber.internal.config;
-
-import static org.openhab.binding.tibber.internal.TibberBindingConstants.EMPTY;
+package org.openhab.binding.tibber.internal;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.junit.jupiter.api.Test;
 
 /**
- * The {@link TibberConfiguration} class contains fields mapping configuration parameters.
+ * The {@link TibberTest} defines some basic tests.
  *
- * @author Stian Kjoglum - Initial contribution
- * @author Bernd Weymann - make config variables public
+ * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class TibberConfiguration {
-    public String token = EMPTY;
-    public String homeid = EMPTY;
+public class TibberTest {
+
+    @Test
+    void testResponse() {
+    }
 }
