@@ -10,21 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.tibber.internal.config;
-
-import static org.openhab.binding.tibber.internal.TibberBindingConstants.EMPTY;
+package org.openhab.binding.tibber.internal.exception;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link TibberConfiguration} class contains fields mapping configuration parameters.
+ * The {@link PriceCalculationException} exception is thrown if ThingsActions parameters contains errors
  *
- * @author Stian Kjoglum - Initial contribution
- * @author Bernd Weymann - make config variables public
+ * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class TibberConfiguration {
-    public String token = EMPTY;
-    public String homeid = EMPTY;
-    public int updateHour = 13;
+public class PriceCalculationException extends RuntimeException {
+    private static final long serialVersionUID = -1841031906330289887L;
+
+    public PriceCalculationException(String reason) {
+        super(reason);
+    }
 }
