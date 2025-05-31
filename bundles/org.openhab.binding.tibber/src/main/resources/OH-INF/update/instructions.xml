@@ -56,7 +56,7 @@
 			<remove-channel id="live_minPowerproduction"/>
 			<remove-channel id="live_maxPowerproduction"/>
 
-			<add-channel id="spot-prices" groupIds="price">
+			<add-channel id="spot-price" groupIds="price">
 				<type>tibber:price</type>
 				<label>Spot Prices</label>
 				<description>Spot prices for today and tomorrow</description>
