@@ -127,7 +127,7 @@
 				<label>Product ID</label>
 				<description>Product Id of your device</description>
 			</parameter>
-			<parameter name="refreshInterval" type="integer" unit="min" min="5">
+			<parameter name="refreshInterval" type="integer" unit="min" min="5" required="true">
 				<label>Refresh Interval</label>
 				<description>Interval the device is polled in minutes.</description>
 				<default>15</default>
