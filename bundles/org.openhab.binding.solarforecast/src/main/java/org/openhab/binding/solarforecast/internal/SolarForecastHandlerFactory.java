@@ -65,7 +65,7 @@ public class SolarForecastHandlerFactory extends BaseThingHandlerFactory {
     @Activate
     public SolarForecastHandlerFactory(final @Reference HttpClientFactory hcf, final @Reference LocationProvider lp,
             final @Reference TimeZoneProvider tzp, final @Reference StorageService storageService,
-            final @Reference PersistenceServiceRegistry psr, final @Reference TimeZoneProvider tzp) {
+            final @Reference PersistenceServiceRegistry psr) {
         persistenceRegistry = psr;
         timeZoneProvider = tzp;
         httpClientFactory = hcf;
@@ -100,7 +100,7 @@ public class SolarForecastHandlerFactory extends BaseThingHandlerFactory {
         } else if (SOLCAST_SITE.equals(thingTypeUID)) {
             return new SolcastBridgeHandler((Bridge) thing, timeZoneProvider);
         } else if (SOLCAST_PLANE.equals(thingTypeUID)) {
-            return new SolcastPlaneHandler(thing, httpClientFactory.getCommonHttpClient());
+            return new SolcastPlaneHandler(thing, httpClientFactory.getCommonHttpClient(), storage);
         }
         return null;
     }

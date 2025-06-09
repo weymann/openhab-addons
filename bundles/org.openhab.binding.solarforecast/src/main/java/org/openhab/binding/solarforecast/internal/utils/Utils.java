@@ -38,6 +38,10 @@ import org.openhab.core.library.unit.Units;
 import org.openhab.core.persistence.FilterCriteria;
 import org.openhab.core.persistence.HistoricItem;
 import org.openhab.core.persistence.QueryablePersistenceService;
+import org.openhab.core.types.State;
+import org.openhab.core.types.TimeSeries.Entry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link Utils} Helpers for Solcast and ForecastSolar
@@ -160,7 +164,7 @@ public class Utils {
     public static Instant now() {
         return Instant.now(clock);
     }
-    
+
     /**
      * Check if an item has historic data in the persistence service
      *
