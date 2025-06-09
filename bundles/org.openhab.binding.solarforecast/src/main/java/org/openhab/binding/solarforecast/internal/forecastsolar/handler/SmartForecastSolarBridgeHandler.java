@@ -61,7 +61,7 @@ public class SmartForecastSolarBridgeHandler extends ForecastSolarBridgeHandler 
         if (forecastProductionSum > 0) {
             factor = energyProductionSum / forecastProductionSum;
         }
-        logger.info("forecastUpdate E3DC {}, Forecast {} factor {}", energyProductionSum, forecastProductionSum,
+        logger.info("forecastUpdate Inverter {}, Forecast {} factor {}", energyProductionSum, forecastProductionSum,
                 factor);
 
         // calculate new correction factor out of each plane and their production values

@@ -73,10 +73,10 @@ public class SmartForecastSolarPlaneHandler extends AdjustableForecastSolarPlane
                     factor = energyProduction / forecastProduction;
                 }
                 forecast.setCorrectionFactor(factor);
+                logger.debug("Inverter {}, Forecast {} factor {}", energyProduction, forecastProduction, factor);
             } else {
                 logger.debug("Holding time, first correction starts {}", startCorrectionTime);
             }
-            logger.debug("E3DC {}, Forecast {} factor {}", energyProduction, forecastProduction, factor);
         }
 
         // factor is applied to the forecast so new adapted values are available
