@@ -12,15 +12,13 @@
  */
 package org.openhab.binding.solarforecast.internal.forecastsolar.handler;
 
-import static org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants.*;
+import static org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants.CHANNEL_CORRECTION_FACTOR;
 
-import java.time.Instant;
 import java.time.ZonedDateTime;
-import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
-import org.openhab.binding.solarforecast.internal.SolarForecastBindingConstants;
 import org.openhab.binding.solarforecast.internal.forecastsolar.ForecastSolarObject;
 import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.library.types.DecimalType;
@@ -47,12 +45,11 @@ public class SmartForecastSolarPlaneHandler extends AdjustableForecastSolarPlane
     }
 
     @Override
-    protected String queryParameters() {
-        if (!SolarForecastBindingConstants.EMPTY.equals(configuration.horizon)) {
-            return "&horizon=" + configuration.horizon;
-        } else {
-            return EMPTY;
-        }
+    protected Map<String, String> queryParameters() {
+        Map<String, String> params = super.queryParameters();
+        // remove actual key if present - smart does calculate adjustment itself
+        params.remove("actual");
+        return params;
     }
 
     /**
@@ -69,21 +66,15 @@ public class SmartForecastSolarPlaneHandler extends AdjustableForecastSolarPlane
         forecastProduction = forecast.getActualEnergyValue(ZonedDateTime.now(Utils.getClock()));
 
         double factor = 1;
-        Instant firstMeasure = forecast.getFirstPowerTimestamp();
-        if (Instant.MAX.equals(firstMeasure)) {
-            logger.debug("SmartForecastSolarPlaneHandler: Unable to determine first measure of forecast");
-        } else {
-            Instant startCorrectionTime = firstMeasure.plus(configuration.holdingTime, ChronoUnit.MINUTES);
-            if (Instant.now(Utils.getClock()).isAfter(startCorrectionTime)) {
-                if (forecastProduction > 0) {
-                    factor = energyProduction / forecastProduction;
-                }
-                forecast.setCorrectionFactor(factor);
-                logger.debug("Inverter {}, Forecast {} factor {}", energyProduction, forecastProduction, factor);
-            } else {
-                logger.debug("Holding time, first correction starts {}", startCorrectionTime);
+        if (isHoldingTimeElapsed()) {
+            if (forecastProduction > 0) {
+                factor = energyProduction / forecastProduction;
             }
+            forecast.setCorrectionFactor(factor);
+        } else {
+            logger.debug("Holding time not elapsed, no adjustment of forecast");
         }
+        logger.debug("Inverter {}, Forecast {} factor {}", energyProduction, forecastProduction, factor);
 
         // factor is applied to the forecast so new adapted values are available
         updateState(CHANNEL_CORRECTION_FACTOR, new DecimalType(factor));
