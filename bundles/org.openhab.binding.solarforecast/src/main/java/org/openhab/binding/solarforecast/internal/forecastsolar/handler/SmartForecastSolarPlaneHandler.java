@@ -62,6 +62,7 @@ public class SmartForecastSolarPlaneHandler extends AdjustableForecastSolarPlane
      */
     @Override
     protected synchronized void setForecast(ForecastSolarObject f) {
+        logger.trace("Smart forecast before adjusting  {} ", f.getRaw());
         forecast = f;
         Optional<Double> energyCalculation = Utils.getEnergyTillNow(configuration.calculationItemName,
                 persistenceService.get());

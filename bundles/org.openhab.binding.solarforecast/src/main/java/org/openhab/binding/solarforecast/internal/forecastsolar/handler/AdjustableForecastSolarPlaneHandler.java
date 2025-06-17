@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
+import org.openhab.binding.solarforecast.internal.forecastsolar.ForecastSolarObject;
 import org.openhab.binding.solarforecast.internal.utils.Utils;
 import org.openhab.core.persistence.PersistenceService;
 import org.openhab.core.persistence.PersistenceServiceRegistry;
@@ -124,5 +125,11 @@ public class AdjustableForecastSolarPlaneHandler extends ForecastSolarPlaneHandl
             logger.debug("Forecast is empty, no first measure available");
         }
         return false;
+    }
+
+    @Override
+    protected synchronized void setForecast(ForecastSolarObject f) {
+        logger.trace("Adjustable forecast response  {} ", f.getRaw());
+        super.setForecast(f);
     }
 }

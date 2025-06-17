@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -168,7 +169,7 @@ public class ForecastSolarObject implements SolarForecast {
     @Override
     public TimeSeries getEnergyTimeSeries(QueryMode mode) {
         TimeSeries ts = new TimeSeries(Policy.REPLACE);
-        Instant now = Utils.now();
+        Instant now = Utils.now().minus(1, ChronoUnit.HOURS); // changing current hour is accepted
         wattHourMap.forEach((timestamp, energy) -> {
             Instant entryTimestamp = timestamp.toInstant();
             if (Utils.isAfterOrEqual(entryTimestamp, now)) {
@@ -232,7 +233,7 @@ public class ForecastSolarObject implements SolarForecast {
     @Override
     public TimeSeries getPowerTimeSeries(QueryMode mode) {
         TimeSeries ts = new TimeSeries(Policy.REPLACE);
-        Instant now = Utils.now();
+        Instant now = Utils.now().minus(1, ChronoUnit.HOURS); // changing current hour is accepted
         wattMap.forEach((timestamp, power) -> {
             Instant entryTimestamp = timestamp.toInstant();
             if (Utils.isAfterOrEqual(entryTimestamp, now)) {
