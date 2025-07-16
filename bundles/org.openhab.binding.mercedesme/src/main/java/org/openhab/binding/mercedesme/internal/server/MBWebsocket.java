@@ -219,16 +219,14 @@ public class MBWebsocket {
                     return;
                 }
                 logger.trace("Websocket start {} max message size {}", websocketURL, client.getMaxBinaryMessageSize());
+                runTill = Instant.now().plusMillis(WS_RUNTIME_MS);
                 client.start();
                 client.connect(this, new URI(websocketURL), request);
                 webSocketClient = Optional.of(client);
-                runTill = Instant.now().plusMillis(WS_RUNTIME_MS);
                 state = WebsocketState.STARTED;
             } catch (Exception e) {
-                // catch Exceptions of start stop and declare communication error
-                accountHandler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "@text/mercedesme.account.status.websocket-failure");
-                logger.warn("Websocket handling exception: {}", e.getMessage());
+                logger.info("Websocket start exception: {} - try to resume login", e.getMessage());
+                accountHandler.resume();
             }
         }
     }
@@ -426,6 +424,8 @@ public class MBWebsocket {
         state = WebsocketState.DISCONNECTED;
         pingPongMap.clear();
         if (throwable != null) {
+            logger.info("Websocket onClosedSession exception: {} - try to resume login", throwable.getMessage());
+            accountHandler.resume();
             accountHandler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                     "@text/mercedesme.account.status.websocket-failure [\"" + throwable.getMessage() + "\"]");
         }

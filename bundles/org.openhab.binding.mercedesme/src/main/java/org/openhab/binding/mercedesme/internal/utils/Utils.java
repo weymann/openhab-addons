@@ -15,6 +15,10 @@ package org.openhab.binding.mercedesme.internal.utils;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -22,6 +26,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -640,5 +645,29 @@ public class Utils {
         } else {
             return new ArrayList<CommandOption>();
         }
+    }
+
+    /**
+     * Splits a URL query into a Map of key-value pairs
+     *
+     * @param url - URL to split
+     * @return Map with key-value pairs from query
+     * @throws UnsupportedEncodingException if decoding fails
+     * @throws URISyntaxException
+     * @throws MalformedURLException
+     */
+    public static Map<String, String> getQueryParams(String query) {
+        Map<String, String> queryPairs = new LinkedHashMap<String, String>();
+        String[] pairs = query.split("&");
+        for (String pair : pairs) {
+            int idx = pair.indexOf("=");
+            try {
+                queryPairs.put(URLDecoder.decode(pair.substring(0, idx), "UTF-8"),
+                        URLDecoder.decode(pair.substring(idx + 1), "UTF-8"));
+            } catch (UnsupportedEncodingException e) {
+                LOGGER.warn("UTF-8 encoding not supported {}", e.getMessage());
+            }
+        }
+        return queryPairs;
     }
 }

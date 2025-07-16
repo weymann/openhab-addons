@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -25,13 +26,20 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.mercedesme.internal.Constants;
+import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
+import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
 import org.openhab.binding.mercedesme.internal.handler.AccountHandlerMock;
 import org.openhab.binding.mercedesme.internal.handler.ThingCallbackListener;
+import org.openhab.binding.mercedesme.internal.server.AuthService;
 import org.openhab.binding.mercedesme.internal.utils.Utils;
+import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.auth.client.oauth2.AccessTokenResponse;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.io.net.http.HttpClientFactory;
+import org.openhab.core.storage.Storage;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
@@ -47,12 +55,12 @@ import org.openhab.core.thing.internal.BridgeImpl;
 class StatusTests {
 
     public static void tearDown(AccountHandlerMock ahm) {
+        ahm.dispose();
         try {
             Thread.sleep(250);
         } catch (InterruptedException e) {
             fail();
         }
-        ahm.dispose();
     }
 
     public static HttpClient getHttpClient(int tokenResponseCode) {
@@ -60,11 +68,15 @@ class StatusTests {
         HttpClient httpClient = mock(HttpClient.class);
         try {
             Request clientRequest = mock(Request.class);
+            when(httpClient.newRequest(anyString())).thenReturn(clientRequest);
             when(httpClient.POST(anyString())).thenReturn(clientRequest);
+            when(clientRequest.followRedirects(anyBoolean())).thenReturn(clientRequest);
             when(clientRequest.header(anyString(), anyString())).thenReturn(clientRequest);
             when(clientRequest.content(any())).thenReturn(clientRequest);
             when(clientRequest.timeout(anyLong(), any())).thenReturn(clientRequest);
+            when(clientRequest.getURI()).thenReturn(null);
             ContentResponse response = mock(ContentResponse.class);
+            when(response.getRequest()).thenReturn(clientRequest);
             when(response.getStatus()).thenReturn(tokenResponseCode);
             String tokenResponse = FileReader.readFileInString("src/test/resources/json/TokenResponse.json");
             when(response.getContentAsString()).thenReturn(tokenResponse);
@@ -79,7 +91,6 @@ class StatusTests {
     void testInvalidConfig() {
         BridgeImpl bi = new BridgeImpl(new ThingTypeUID("test", "account"), "MB");
         Map<String, Object> config = new HashMap<>();
-        config.put("refreshToken", Constants.JUNIT_REFRESH_TOKEN);
         bi.setConfiguration(new Configuration(config));
         AccountHandlerMock ahm = new AccountHandlerMock(bi, null, getHttpClient(404));
         ThingCallbackListener tcl = new ThingCallbackListener();
@@ -92,6 +103,17 @@ class StatusTests {
         tearDown(ahm);
 
         config.put("email", "a@b.c");
+        bi.setConfiguration(new Configuration(config));
+        tcl = new ThingCallbackListener();
+        ahm.setCallback(tcl);
+        ahm.initialize();
+        tsi = tcl.getThingStatus();
+        assertEquals(ThingStatus.OFFLINE, tsi.getStatus(), "Password offline");
+        assertEquals(ThingStatusDetail.CONFIGURATION_ERROR, tsi.getStatusDetail(), "Password config");
+        assertEquals("@text/mercedesme.account.status.password-missing", tsi.getDescription(), "Password text");
+        tearDown(ahm);
+
+        config.put("password", "junit");
         bi.setConfiguration(new Configuration(config));
         tcl = new ThingCallbackListener();
         ahm.setCallback(tcl);
@@ -129,10 +151,10 @@ class StatusTests {
     void testNoTokenStored() {
         BridgeImpl bi = new BridgeImpl(new ThingTypeUID("test", "account"), "MB");
         Map<String, Object> config = new HashMap<>();
-        config.put("refreshInterval", Integer.MAX_VALUE);
+        config.put("refreshInterval", 15);
         config.put("region", "row");
         config.put("email", "a@b.c");
-        config.put("refreshToken", "abc");
+        config.put("password", "abc");
         bi.setConfiguration(new Configuration(config));
         AccountHandlerMock ahm = new AccountHandlerMock(bi, null, getHttpClient(404));
         ThingCallbackListener tcl = new ThingCallbackListener();
@@ -144,9 +166,8 @@ class StatusTests {
         assertEquals(ThingStatusDetail.COMMUNICATION_ERROR, tsi.getStatusDetail(), "Auth details");
         String statusDescription = tsi.getDescription();
         assertNotNull(statusDescription);
-        assertTrue(statusDescription.contains("@text/mercedesme.account.status.authorization-needed"), "Auth text");
+        assertTrue(statusDescription.contains("@text/mercedesme.account.status.login-failure"), "Auth text");
         tearDown(ahm);
-
         AccessTokenResponse token = new AccessTokenResponse();
         token.setExpiresIn(3000);
         token.setAccessToken(Constants.JUNIT_TOKEN);
@@ -165,7 +186,7 @@ class StatusTests {
         config.put("refreshInterval", Integer.MAX_VALUE);
         config.put("region", "row");
         config.put("email", "a@b.c");
-        config.put("refreshToken", "abc");
+        config.put("password", "abc");
         bi.setConfiguration(new Configuration(config));
         String tokenResponse = FileReader.readFileInString("src/test/resources/json/TokenResponse.json");
         AccountHandlerMock ahm = new AccountHandlerMock(bi, tokenResponse, getHttpClient(200));
@@ -179,5 +200,28 @@ class StatusTests {
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.ONLINE, tsi.getStatus(), "Socket Online");
         tearDown(ahm);
+    }
+
+    void testAuth() {
+        HttpClient httpClient = new HttpClient(new SslContextFactory.Client());
+        try {
+            httpClient.start();
+        } catch (Exception e) {
+            fail();
+        }
+        HttpClientFactory httpClientFactory = mock(HttpClientFactory.class);
+        when(httpClientFactory.getCommonHttpClient()).thenReturn(httpClient);
+        AccountConfiguration accountConfiguration = new AccountConfiguration();
+        accountConfiguration.email = "bernd.w@ymann.de";
+        accountConfiguration.password = "pCzPxwH6U#";
+        accountConfiguration.region = "row";
+        AuthService authService = new AuthService(mock(AccessTokenRefreshListener.class), httpClient,
+                accountConfiguration, Locale.GERMAN, mock(Storage.class));
+        try {
+            authService.resumeLogin();
+            Thread.sleep(2000);
+        } catch (InterruptedException | MercedesMeAuthException e) {
+            fail();
+        }
     }
 }

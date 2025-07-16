@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.mercedesme.internal.handler;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +39,7 @@ import org.json.JSONObject;
 import org.openhab.binding.mercedesme.internal.Constants;
 import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
 import org.openhab.binding.mercedesme.internal.discovery.MercedesMeDiscoveryService;
+import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
 import org.openhab.binding.mercedesme.internal.server.AuthService;
 import org.openhab.binding.mercedesme.internal.server.MBWebsocket;
 import org.openhab.binding.mercedesme.internal.utils.Utils;
@@ -90,12 +93,11 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private String capabilitiesEndpoint = "/v1/vehicle/%s/capabilities";
     private String commandCapabilitiesEndpoint = "/v1/vehicle/%s/capabilities/commands";
     private String poiEndpoint = "/v1/vehicle/%s/route";
+    private boolean disposed = true;
 
-    Optional<AuthService> authService = Optional.empty();
     final MBWebsocket mbWebsocket;
+    Optional<AuthService> authService = Optional.empty();
     AccountConfiguration config = new AccountConfiguration();
-    @Nullable
-    ClientMessage message;
 
     public AccountHandler(Bridge bridge, MercedesMeDiscoveryService mmds, HttpClient hc, LocaleProvider lp,
             StorageService store) {
@@ -113,6 +115,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     @Override
     public void initialize() {
+        disposed = false;
         updateStatus(ThingStatus.UNKNOWN);
         config = getConfigAs(AccountConfiguration.class);
         String configValidReason = configValid();
@@ -120,31 +123,76 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, configValidReason);
         } else {
             mbWebsocket.dispose(false);
-            authService = Optional.of(new AuthService(this, httpClient, config, localeProvider.getLocale(), storage,
-                    config.refreshToken));
-            refreshScheduler = Optional
-                    .of(scheduler.scheduleWithFixedDelay(this::refresh, 0, config.refreshInterval, TimeUnit.MINUTES));
+            authService = Optional.of(new AuthService(this, httpClient, config, localeProvider.getLocale(), storage));
+            scheduler.execute(this::refresh);
         }
     }
 
+    /**
+     * Refresh checking token validity, login in case of invalid token
+     */
     public void refresh() {
-        if (!Constants.NOT_SET.equals(authService.get().getToken())) {
-            mbWebsocket.update();
-        } else {
-            // all failed - start manual authorization
-            String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
-                    + Constants.STATUS_AUTH_NEEDED;
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+        if (disposed) {
+            logger.debug("AccountHandler is disposed, skipping refresh");
+            return;
         }
+        authService.ifPresent(auth -> {
+            if (auth.tokenIsValid()) {
+                mbWebsocket.update();
+            } else {
+                // token is not valid - try to resume login
+                resume();
+            }
+        });
+        scheduleRefresh(nextRefreshSeconds());
+    }
+
+    private void scheduleRefresh(long delayInSeconds) {
+        if (disposed) {
+            logger.debug("AccountHandler is disposed, skipping scheduleRefresh");
+            return;
+        }
+        refreshScheduler.ifPresent(job -> {
+            job.cancel(false);
+        });
+        Instant nextSchedule = Instant.now().plus(delayInSeconds, ChronoUnit.SECONDS);
+        logger.trace("Next schedule in {}/{} seconds at {}", delayInSeconds, config.refreshInterval, nextSchedule);
+        refreshScheduler = Optional.of(scheduler.schedule(this::refresh, delayInSeconds, TimeUnit.SECONDS));
+    }
+
+    public void resume() {
+        authService.ifPresent(auth -> {
+            try {
+                if (auth.resumeLogin()) {
+                    mbWebsocket.update();
+                } else {
+                    String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
+                            + Constants.STATUS_LOGIN_FAILURE;
+                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+                }
+            } catch (MercedesMeAuthException e) {
+                String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
+                        + Constants.STATUS_LOGIN_EXCEPTION + " [\"" + e.getMessage() + "\"]";
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+            }
+        });
+    }
+
+    private long nextRefreshSeconds() {
+        // bring in 10% time variance
+        int variance = config.refreshInterval * 60 / 10;
+        long leftLimit = config.refreshInterval * 60 - variance;
+        long rightLimit = config.refreshInterval * 60 + variance;
+        return leftLimit + (long) (Math.random() * (rightLimit - leftLimit));
     }
 
     private String configValid() {
         config = getConfigAs(AccountConfiguration.class);
         String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId();
-        if (Constants.NOT_SET.equals(config.refreshToken)) {
-            return textKey + Constants.STATUS_REFRESH_TOKEN_MISSING;
-        } else if (Constants.NOT_SET.equals(config.email)) {
+        if (Constants.NOT_SET.equals(config.email)) {
             return textKey + Constants.STATUS_EMAIL_MISSING;
+        } else if (Constants.NOT_SET.equals(config.password)) {
+            return textKey + Constants.STATUS_PASSWORD_MISSING;
         } else if (Constants.NOT_SET.equals(config.region)) {
             return textKey + Constants.STATUS_REGION_MISSING;
         } else if (config.refreshInterval < 5) {
@@ -156,11 +204,11 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     @Override
     public void dispose() {
+        disposed = true;
         refreshScheduler.ifPresent(schedule -> {
-            if (!schedule.isCancelled()) {
-                schedule.cancel(true);
-            }
+            schedule.cancel(false);
         });
+        refreshScheduler = Optional.empty();
         eventQueue.clear();
         mbWebsocket.dispose(true);
     }
@@ -177,12 +225,9 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
      */
     @Override
     public void onAccessTokenResponse(AccessTokenResponse tokenResponse) {
-        if (!Constants.NOT_SET.equals(tokenResponse.getAccessToken())) {
-            scheduler.schedule(this::refresh, 2, TimeUnit.SECONDS);
-        } else {
-            // all failed - start manual authorization
+        if (Constants.NOT_SET.equals(tokenResponse.getAccessToken())) {
             String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
-                    + Constants.STATUS_AUTH_NEEDED;
+                    + Constants.STATUS_LOGIN_FAILURE;
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
         }
     }
@@ -462,7 +507,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         if (cm != null) {
             mbWebsocket.addCommand(cm);
         }
-        scheduler.schedule(this::refresh, 2, TimeUnit.SECONDS);
+        scheduleRefresh(2);
     }
 
     public void keepAlive(boolean b) {

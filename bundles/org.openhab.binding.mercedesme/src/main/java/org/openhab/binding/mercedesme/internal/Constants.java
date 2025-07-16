@@ -273,11 +273,12 @@ public class Constants {
     public static final String IMAGE_EXTERIOR_RESOURCE_URL = IMAGE_BASE_URL + "/vehicles/%s";
 
     public static final String STATUS_TEXT_PREFIX = "@text/mercedesme.";
-    public static final String STATUS_AUTH_NEEDED = ".status.authorization-needed";
+    public static final String STATUS_LOGIN_FAILURE = ".status.login-failure";
+    public static final String STATUS_LOGIN_EXCEPTION = ".status.login-exception";
     public static final String STATUS_EMAIL_MISSING = ".status.email-missing";
+    public static final String STATUS_PASSWORD_MISSING = ".status.password-missing";
     public static final String STATUS_REGION_MISSING = ".status.region-missing";
     public static final String STATUS_REFRESH_INVALID = ".status.refresh-invalid";
-    public static final String STATUS_REFRESH_TOKEN_MISSING = ".status.refresh-token-missing";
     public static final String STATUS_BRIDGE_MISSING = ".status.bridge-missing";
 
     public static final String SPACE = " ";
@@ -320,10 +321,10 @@ public class Constants {
     public static final String WEBSOCKET_USER_AGENT_PA = "mycar-store-ap v1.27.0, android 8.0.0, SDK 2.84.3";
 
     // version updates according to https://github.com/weymann/mbapi2020/commit/ede9ab60c1e18293b9436dab568b9195db6381b9
-    public static final String RIS_APPLICATION_VERSION_NA = "3.54.0";
-    public static final String RIS_APPLICATION_VERSION_CN = "1.54.0";
-    public static final String RIS_APPLICATION_VERSION_PA = "1.54.0";
-    public static final String RIS_APPLICATION_VERSION = "1.54.0";
+    public static final String RIS_APPLICATION_VERSION_NA = "3.57.0";
+    public static final String RIS_APPLICATION_VERSION_CN = "1.57.0";
+    public static final String RIS_APPLICATION_VERSION_PA = "1.57.0";
+    public static final String RIS_APPLICATION_VERSION = "1.57.0";
     public static final String RIS_SDK_VERSION = "3.55.0";
     public static final String RIS_SDK_VERSION_CN = "2.132.2";
     public static final String RIS_OS_VERSION = "10";
@@ -334,12 +335,16 @@ public class Constants {
     public static final String X_APPLICATIONNAME_US = "mycar-store-us";
     public static final String X_APPLICATIONNAME_AP = "mycar-store-ap";
 
+    public static final String AUTH_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_8_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1";
+    public static final String AUTH_LANGUAGE = "de-DE,de;q=0.9";
+    public static final String AUTH_CLIENT_ID = "62778dc4-1de3-44f4-af95-115f06a3a008";
+    public static final String AUTH_REDIRECT_URI = "rismycar://login-callback";
+    public static final String AUTH_SCOPE = "email profile ciam-uid phone openid offline_access";
+
     public static final String REGION_EUROPE = "EU";
     public static final String REGION_NORAM = "NA";
     public static final String REGION_APAC = "AP";
     public static final String REGION_CHINA = "CN";
-
-    public static final String SCOPE = "openid email phone profile offline_access ciam-uid";
 
     public static final String MAX_SOC_KEY = "maxsoc";
     public static final String AUTO_UNLOCK_KEY = "autolock";

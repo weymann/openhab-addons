@@ -92,9 +92,4 @@ public class AccountHandlerMock extends AccountHandler {
     public void connect() {
         super.mbWebsocket.onConnect(mock(Session.class));
     }
-
-    @Override
-    public void refresh() {
-        authService.get().getToken();
-    }
 }
