@@ -7,7 +7,6 @@
 	<bridge-type id="owner-account">
 		<label>Owner Account</label>
 		<description>Owner account with email and password credentials</description>
-		<semantic-equipment-tag>WebService</semantic-equipment-tag>
 		<config-description>
 			<parameter name="email" type="text" required="true">
 				<context>email</context>
@@ -35,7 +34,6 @@
 	<bridge-type id="visitor-account">
 		<label>Visitor Account</label>
 		<description>Visitor account with access via QR code</description>
-		<semantic-equipment-tag>WebService</semantic-equipment-tag>
 		<config-description>
 			<parameter name="visitorId" type="text">
 				<label>Visitor ID</label>
@@ -66,7 +64,6 @@
 		</supported-bridge-type-refs>
 		<label>Pool</label>
 		<description>Pool connected with your account</description>
-		<semantic-equipment-tag>Wellness</semantic-equipment-tag>
 		<channels>
 			<channel id="temperature" typeId="temperature">
 				<label>Water Temperature</label>
