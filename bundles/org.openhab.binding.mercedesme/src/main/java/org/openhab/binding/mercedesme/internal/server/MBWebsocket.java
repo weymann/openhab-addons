@@ -225,8 +225,10 @@ public class MBWebsocket {
                 webSocketClient = Optional.of(client);
                 state = WebsocketState.STARTED;
             } catch (Exception e) {
-                logger.info("Websocket start exception: {} - try to resume login", e.getMessage());
-                accountHandler.resume();
+                // catch Exceptions of start stop and declare communication error
+                accountHandler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                        "@text/mercedesme.account.status.websocket-failure");
+                logger.warn("Websocket handling exception: {}", e.getMessage());
             }
         }
     }

@@ -59,6 +59,7 @@ import org.slf4j.LoggerFactory;
 
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
 import com.daimler.mbcarkit.proto.Protos.AcknowledgeAssignedVehicles;
+import com.daimler.mbcarkit.proto.VehicleEvents;
 import com.daimler.mbcarkit.proto.VehicleEvents.AcknowledgeVEPUpdatesByVIN;
 import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
 import com.daimler.mbcarkit.proto.VehicleEvents.VEPUpdate;
@@ -66,6 +67,7 @@ import com.daimler.mbcarkit.proto.Vehicleapi.AcknowledgeAppTwinCommandStatusUpda
 import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByPID;
 import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinCommandStatusUpdatesByVIN;
 import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinPendingCommandsRequest;
+import com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * The {@link AccountHandler} acts as Bridge between MercedesMe Account and the associated vehicles
@@ -85,13 +87,15 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private final Map<String, VehicleHandler> activeVehicleHandlerMap = new HashMap<>();
     private final Map<String, VEPUpdate> vepUpdateMap = new HashMap<>();
     private final Map<String, Map<String, Object>> capabilitiesMap = new HashMap<>();
+    private final List<String> keepAliveList = new ArrayList<>();
 
     private Optional<ScheduledFuture<?>> refreshScheduler = Optional.empty();
     private List<PushMessage> eventQueue = new ArrayList<>();
     private boolean updateRunning = false;
 
-    private String capabilitiesEndpoint = "/v1/vehicle/%s/capabilities";
     private String commandCapabilitiesEndpoint = "/v1/vehicle/%s/capabilities/commands";
+    private String vehicleAttributesEndpoint = "/v1/vehicle/%s/vehicleattributes";
+    private String capabilitiesEndpoint = "/v1/vehicle/%s/capabilities";
     private String poiEndpoint = "/v1/vehicle/%s/route";
     private boolean disposed = true;
 
@@ -138,7 +142,12 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         }
         authService.ifPresent(auth -> {
             if (auth.tokenIsValid()) {
-                mbWebsocket.update();
+                // decide if we need to pull updates from vehicles or keep websocket alive
+                if (keepAliveList.isEmpty()) {
+                    pullUpdates();
+                } else {
+                    mbWebsocket.update();
+                }
             } else {
                 // token is not valid - try to resume login
                 resume();
@@ -179,8 +188,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     }
 
     private long nextRefreshSeconds() {
-        // bring in 10% time variance
-        int variance = config.refreshInterval * 60 / 10;
+        // bring in 15% time variance
+        int variance = config.refreshInterval * 60 / 15;
         long leftLimit = config.refreshInterval * 60 - variance;
         long rightLimit = config.refreshInterval * 60 + variance;
         return leftLimit + (long) (Math.random() * (rightLimit - leftLimit));
@@ -259,6 +268,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         VEPUpdate updateForVin = vepUpdateMap.get(vin);
         if (updateForVin != null) {
             handler.enqueueUpdate(updateForVin);
+        } else {
+            scheduleRefresh(1);
         }
     }
 
@@ -510,8 +521,16 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         scheduleRefresh(2);
     }
 
-    public void keepAlive(boolean b) {
-        mbWebsocket.keepAlive(b);
+    public void keepAlive(String vin, boolean b) {
+        if (b) {
+            keepAliveList.add(vin);
+            mbWebsocket.keepAlive(true);
+        } else {
+            keepAliveList.remove(vin);
+            if (keepAliveList.isEmpty()) {
+                mbWebsocket.keepAlive(false);
+            }
+        }
     }
 
     @Override
@@ -546,5 +565,36 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         } catch (InterruptedException | TimeoutException | ExecutionException e) {
             logger.trace("Error Sending POI {}", e.getMessage());
         }
+    }
+
+    private void pullUpdates() {
+        activeVehicleHandlerMap.entrySet().forEach(entry -> {
+            String vehicleUrl = Utils.getWidgetServer(config.region)
+                    + String.format(vehicleAttributesEndpoint, entry.getKey());
+            logger.trace("Pull update {}", vehicleUrl);
+            Request vehicleRequest = httpClient.newRequest(vehicleUrl);
+            authService.get().addBasicHeaders(vehicleRequest);
+            vehicleRequest.header("X-SessionId", UUID.randomUUID().toString());
+            vehicleRequest.header("X-TrackingId", UUID.randomUUID().toString());
+            vehicleRequest.header("Authorization", authService.get().getToken());
+
+            String reason = null;
+            try {
+                ContentResponse vehicleResponse = vehicleRequest
+                        .timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
+                if (vehicleResponse.getStatus() == 200) {
+                    VEPUpdate update = VehicleEvents.VEPUpdate.parseFrom(vehicleResponse.getContent());
+                    entry.getValue().enqueueUpdate(update);
+                    logger.trace("Pull update delivered {} updates", update.getAttributesCount());
+                    updateStatus(ThingStatus.ONLINE);
+                    return;
+                }
+                reason = Integer.toString(vehicleResponse.getStatus());
+            } catch (InterruptedException | TimeoutException | ExecutionException | InvalidProtocolBufferException e) {
+                reason = e.getMessage();
+            }
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                    "@text/mercedesme.account.status.websocket-failure [\"" + reason + "\"]");
+        });
     }
 }

@@ -975,7 +975,7 @@ public class VehicleHandler extends BaseThingHandler {
         /**
          * Check if Websocket shall be kept alive
          */
-        accountHandler.get().keepAlive(ignitionState == 4 || chargingState);
+        accountHandler.get().keepAlive(config.get().vin, ignitionState == 4 || chargingState);
     }
 
     /**
