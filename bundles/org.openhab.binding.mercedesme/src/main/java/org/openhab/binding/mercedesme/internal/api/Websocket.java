@@ -10,11 +10,9 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.mercedesme.internal.server;
+package org.openhab.binding.mercedesme.internal.api;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -43,8 +41,12 @@ import org.eclipse.jetty.websocket.api.extensions.Frame;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.openhab.binding.mercedesme.internal.Constants;
+import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
 import org.openhab.binding.mercedesme.internal.handler.AccountHandler;
+import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.common.ThreadPoolManager;
+import org.openhab.core.i18n.LocaleProvider;
+import org.openhab.core.storage.Storage;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.slf4j.Logger;
@@ -55,13 +57,14 @@ import com.daimler.mbcarkit.proto.VehicleEvents;
 import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
 
 /**
- * {@link MBWebsocket} as socket endpoint to communicate with Mercedes
+ * {@link Websocket} as socket endpoint to communicate with Mercedes
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - Remove loop cpaturing scheduler thread
  */
 @WebSocket
 @NonNullByDefault
-public class MBWebsocket {
+public class Websocket extends RestApi {
     // timeout stays unlimited until binding decides to close
     private static final int CONNECT_TIMEOUT_MS = 0;
     // standard runtime of Websocket
@@ -73,10 +76,9 @@ public class MBWebsocket {
     // additional 5 minutes after keep alive
     private static final int KEEP_ALIVE_ADDON = 5 * 60 * 1000;
 
-    private final Logger logger = LoggerFactory.getLogger(MBWebsocket.class);
-    private final Map<String, Instant> pingPongMap = new HashMap<>();
+    private final Logger logger = LoggerFactory.getLogger(Websocket.class);
     private final AccountHandler accountHandler;
-    private final HttpClient httpClient;
+    private final Map<String, Instant> pingPongMap = new HashMap<>();
     private final ScheduledExecutorService scheduler = ThreadPoolManager
             .getPoolBasedSequentialScheduledExecutorService("mercedesme-websocket", null);
 
@@ -84,7 +86,6 @@ public class MBWebsocket {
     private Optional<WebSocketClient> webSocketClient = Optional.empty();
     private Optional<Session> session = Optional.empty();
     private List<ClientMessage> commandQueue = new ArrayList<>();
-    private List<File> fileDumps = new ArrayList<>();
     private Instant runTill = Instant.now();
     private WebsocketState state = WebsocketState.STOPPED;
     private boolean keepAlive = false;
@@ -97,15 +98,16 @@ public class MBWebsocket {
         STARTED
     };
 
-    public MBWebsocket(AccountHandler accountHandler, HttpClient httpClient) {
-        this.accountHandler = accountHandler;
-        this.httpClient = httpClient;
+    public Websocket(AccountHandler atrl, HttpClient hc, AccountConfiguration ac, LocaleProvider l,
+            Storage<String> store) {
+        super(atrl, hc, ac, l, store);
+        accountHandler = atrl;
     }
 
     /**
      * Regular update call from AccountHandler to refresh data according to refreshInterval
      */
-    public void update() {
+    public void websocketUpdate() {
         scheduler.execute(this::doRefresh);
     }
 
@@ -131,23 +133,21 @@ public class MBWebsocket {
      *
      * @param command to be sent
      */
-    public void addCommand(ClientMessage command) {
+    public void websocketAddCommand(ClientMessage command) {
         commandQueue.add(command);
+        // add time to execute command and websocket can cover updates
+        runTill = Instant.now().plusMillis(ADDON_MESSAGE_TIME_MS);
         scheduler.execute(this::doRefresh);
     }
 
     /**
      * Dispose websocket in case of disposed AccountHandler. Cleanup stored files and stop web socket client.
      */
-    public void dispose(boolean disposed) {
+    public void websocketDispose(boolean disposed) {
         this.disposed = disposed;
         if (disposed) {
             runTill = Instant.MIN;
             keepAlive = false;
-            fileDumps.forEach(file -> {
-                file.delete();
-            });
-            fileDumps.clear();
             refresher.ifPresent(job -> {
                 job.cancel(false);
                 refresher = Optional.empty();
@@ -161,7 +161,7 @@ public class MBWebsocket {
      *
      * @param alive
      */
-    public void keepAlive(boolean alive) {
+    public void websocketKeepAlive(boolean alive) {
         if (!keepAlive) {
             if (alive) {
                 logger.trace("WebSocket - keep alive start");
@@ -212,8 +212,8 @@ public class MBWebsocket {
             WebSocketClient client = new WebSocketClient(httpClient);
             try {
                 client.setMaxIdleTimeout(CONNECT_TIMEOUT_MS);
-                ClientUpgradeRequest request = accountHandler.getClientUpgradeRequest();
-                String websocketURL = accountHandler.getWSUri();
+                ClientUpgradeRequest request = getClientUpgradeRequest();
+                String websocketURL = Utils.getWebsocketServer(config.region);
                 if (Constants.JUNIT_TOKEN.equals(request.getHeader("Authorization"))) {
                     // avoid unit test requesting real web socket - simply return
                     return;
@@ -278,7 +278,7 @@ public class MBWebsocket {
     private void disconnect() {
         session.ifPresent(session -> {
             // close session normally
-            session.close(1000, "Websocket closed by binding");
+            session.close(1000, "Client shutdown");
         });
     }
 
@@ -308,7 +308,6 @@ public class MBWebsocket {
      * Ping the server to keep the connection alive and to check if the connection is still valid.
      */
     private void ping() {
-        logger.trace("Websocket ping {}", Instant.now().toString());
         session.ifPresent(session -> {
             try {
                 String pingId = UUID.randomUUID().toString();
@@ -318,6 +317,22 @@ public class MBWebsocket {
                 logger.warn("Websocket ping failed {}", e.getMessage());
             }
         });
+    }
+
+    private ClientUpgradeRequest getClientUpgradeRequest() {
+        ClientUpgradeRequest request = new ClientUpgradeRequest();
+        request.setHeader("Authorization", getToken());
+        request.setHeader("X-SessionId", UUID.randomUUID().toString());
+        request.setHeader("X-TrackingId", UUID.randomUUID().toString());
+        request.setHeader("Ris-Os-Name", Constants.RIS_OS_NAME);
+        request.setHeader("Ris-Os-Version", Constants.RIS_OS_VERSION);
+        request.setHeader("Ris-Sdk-Version", Utils.getRisSDKVersion(config.region));
+        request.setHeader("X-Locale",
+                localeProvider.getLocale().getLanguage() + "-" + localeProvider.getLocale().getCountry()); // de-DE
+        request.setHeader("User-Agent", Utils.getApplication(config.region));
+        request.setHeader("X-Applicationname", Utils.getUserAgent(config.region));
+        request.setHeader("Ris-Application-Version", Utils.getRisApplicationVersion(config.region));
+        return request;
     }
 
     /**
@@ -335,7 +350,7 @@ public class MBWebsocket {
 
             }
             PushMessage pm = VehicleEvents.PushMessage.parseFrom(message);
-            logger.trace("WebSocket - Message {}", pm.getMsgCase());
+            logger.trace("Websocket Message {} size {}", pm.getMsgCase(), pm.getAllFields().size());
             accountHandler.enqueueMessage(pm);
             /**
              * https://community.openhab.org/t/mercedes-me/136866/12
@@ -350,23 +365,6 @@ public class MBWebsocket {
              */
         } catch (IOException e) {
             logger.warn("IOException decoding message {}", e.getMessage());
-            try {
-                // write max 10 file dumps
-                if (fileDumps.size() >= 10) {
-                    logger.warn("MercedesMe Max File dump exceeded - please report files from {}",
-                            fileDumps.get(0).getCanonicalPath());
-                } else {
-                    String sizeInfo = blob.length + "-" + length + "-" + offset + "-";
-                    File outputFile = File.createTempFile("mercedesme-" + sizeInfo, null);
-                    FileOutputStream outputStream = new FileOutputStream(outputFile);
-                    outputStream.write(blob);
-                    outputStream.close();
-                    fileDumps.add(outputFile);
-                    logger.warn("MercedesMe File dump {}", outputFile.getCanonicalPath());
-                }
-            } catch (IOException e1) {
-                logger.warn("MercedesMe File dump error {}", e1.getMessage());
-            }
         } catch (Error err) {
             logger.warn("Error decoding message {}", err.getMessage());
         }

@@ -26,7 +26,6 @@ import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
 import org.openhab.binding.mercedesme.internal.discovery.MercedesMeDiscoveryService;
 import org.openhab.core.i18n.LocaleProvider;
 import org.openhab.core.storage.Storage;
-import org.openhab.core.storage.StorageService;
 import org.openhab.core.test.storage.VolatileStorageService;
 import org.openhab.core.thing.Bridge;
 
@@ -53,7 +52,7 @@ public class AccountHandlerMock extends AccountHandler {
 
     public AccountHandlerMock() {
         super(mock(Bridge.class), mock(MercedesMeDiscoveryService.class), mock(HttpClient.class),
-                mock(LocaleProvider.class), mock(StorageService.class));
+                mock(LocaleProvider.class), new VolatileStorageService());
         config = new AccountConfiguration();
     }
 
@@ -90,6 +89,6 @@ public class AccountHandlerMock extends AccountHandler {
     }
 
     public void connect() {
-        super.mbWebsocket.onConnect(mock(Session.class));
+        super.api.onConnect(mock(Session.class));
     }
 }

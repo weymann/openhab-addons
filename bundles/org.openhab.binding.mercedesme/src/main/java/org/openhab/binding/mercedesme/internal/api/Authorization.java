@@ -10,7 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.mercedesme.internal.server;
+package org.openhab.binding.mercedesme.internal.api;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -20,7 +20,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -47,6 +46,7 @@ import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException
 import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.auth.client.oauth2.AccessTokenResponse;
+import org.openhab.core.i18n.LocaleProvider;
 import org.openhab.core.storage.Storage;
 import org.openhab.core.util.StringUtils;
 import org.slf4j.Logger;
@@ -55,31 +55,32 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.JsonSyntaxException;
 
 /**
- * {@link AuthService} helpers for token management
+ * {@link Authorization} for handling the authentication process
  *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class AuthService {
+public class Authorization {
     private static final String CONTENT_TYPE_URL_ENCODED = "application/x-www-form-urlencoded";
     private static final int EXPIRATION_BUFFER = 5;
-    private final Logger logger = LoggerFactory.getLogger(AuthService.class);
+    private final Logger logger = LoggerFactory.getLogger(Authorization.class);
 
     private AccessTokenRefreshListener listener;
-    private AccountConfiguration config;
     private AccessTokenResponse token = Utils.INVALID_TOKEN;
-    private Storage<String> storage;
-    private HttpClient httpClient;
     private String identifier;
-    private Locale locale;
 
-    public AuthService(AccessTokenRefreshListener atrl, HttpClient hc, AccountConfiguration ac, Locale l,
+    protected LocaleProvider localeProvider;
+    protected AccountConfiguration config;
+    protected Storage<String> storage;
+    protected HttpClient httpClient;
+
+    public Authorization(AccessTokenRefreshListener atrl, HttpClient hc, AccountConfiguration ac, LocaleProvider l,
             Storage<String> store) {
         listener = atrl;
         httpClient = hc;
         config = ac;
         identifier = config.email;
-        locale = l;
+        localeProvider = l;
         storage = store;
 
         // restore token from persistence if available
@@ -89,7 +90,7 @@ public class AuthService {
             logger.trace("MB-Auth {} storedToken {}", prefix(), storedToken);
             TokenResponse tokenResponseJson = Utils.GSON.fromJson(storedToken, TokenResponse.class);
             token = decodeToken(tokenResponseJson);
-            if (!tokenIsValid()) {
+            if (!authTokenIsValid()) {
                 token = Utils.INVALID_TOKEN;
                 storage.remove(identifier);
                 logger.trace("MB-Auth {} invalid storedToken {}", prefix(), storedToken);
@@ -99,9 +100,9 @@ public class AuthService {
         }
     }
 
-    public synchronized String getToken() {
+    protected synchronized String getToken() {
         if (token.isExpired(Instant.now(), EXPIRATION_BUFFER)) {
-            if (tokenIsValid()) {
+            if (authTokenIsValid()) {
                 refreshToken();
             }
         }
@@ -156,7 +157,7 @@ public class AuthService {
                 tokenResponseJson.refreshToken = token.getRefreshToken();
             }
             token = decodeToken(tokenResponseJson);
-            if (tokenIsValid()) {
+            if (authTokenIsValid()) {
                 String tokenStore = Utils.GSON.toJson(tokenResponseJson);
                 logger.debug("MB-Auth {} token result {}", prefix(), token.toString());
                 storage.put(identifier, tokenStore);
@@ -197,11 +198,11 @@ public class AuthService {
         return Utils.INVALID_TOKEN;
     }
 
-    public boolean tokenIsValid() {
+    public boolean authTokenIsValid() {
         return !Constants.NOT_SET.equals(token.getAccessToken()) && !Constants.NOT_SET.equals(token.getRefreshToken());
     }
 
-    public boolean resumeLogin() throws MercedesMeAuthException {
+    public boolean authLogin() throws MercedesMeAuthException {
         logger.info("{} Start resume login", prefix());
         /**
          * I need to start an extra client
@@ -432,7 +433,8 @@ public class AuthService {
         req.header("Ris-Os-Name", Constants.RIS_OS_NAME);
         req.header("Ris-Os-Version", Constants.RIS_OS_VERSION);
         req.header("Ris-Sdk-Version", Utils.getRisSDKVersion(config.region));
-        req.header("X-Locale", locale.getLanguage() + "-" + locale.getCountry()); // de-DE
+        req.header("X-Locale",
+                localeProvider.getLocale().getLanguage() + "-" + localeProvider.getLocale().getCountry()); // de-DE
         req.header("User-Agent", Utils.getApplication(config.region));
         req.header("X-Applicationname", Utils.getUserAgent(config.region));
         req.header("Ris-Application-Version", Utils.getRisApplicationVersion(config.region));

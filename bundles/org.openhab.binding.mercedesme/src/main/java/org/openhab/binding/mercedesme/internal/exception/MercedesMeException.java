@@ -15,16 +15,16 @@ package org.openhab.binding.mercedesme.internal.exception;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * The {@link MercedesMeAuthException} is thrown if an exception occurs during authorization
+ * The {@link MercedesMeException} is thrown if an exception occurs during authorization
  *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class MercedesMeAuthException extends Exception {
+public class MercedesMeException extends Exception {
 
-    private static final long serialVersionUID = -5739643283190864467L;
+    private static final long serialVersionUID = 8841726242900964396L;
 
-    public MercedesMeAuthException(String message) {
+    public MercedesMeException(String message) {
         super(message);
     }
 }

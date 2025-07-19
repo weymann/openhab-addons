@@ -353,6 +353,9 @@ public class Constants {
     public static final String MAX_SOC_KEY = "maxsoc";
     public static final String AUTO_UNLOCK_KEY = "autolock";
 
+    public static final String FEATURE_APPENDIX = "-features";
+    public static final String COMMAND_APPENDIX = "-commands";
+
     public static final String JUNIT_TOKEN = "junitTestToken";
     public static final String JUNIT_REFRESH_TOKEN = "junitRefreshToken";
 }

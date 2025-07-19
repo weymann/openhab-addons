@@ -17,7 +17,6 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -26,20 +25,13 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
-import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.mercedesme.internal.Constants;
-import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
-import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
 import org.openhab.binding.mercedesme.internal.handler.AccountHandlerMock;
 import org.openhab.binding.mercedesme.internal.handler.ThingCallbackListener;
-import org.openhab.binding.mercedesme.internal.server.AuthService;
 import org.openhab.binding.mercedesme.internal.utils.Utils;
-import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.auth.client.oauth2.AccessTokenResponse;
 import org.openhab.core.config.core.Configuration;
-import org.openhab.core.io.net.http.HttpClientFactory;
-import org.openhab.core.storage.Storage;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
@@ -200,28 +192,5 @@ class StatusTests {
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.ONLINE, tsi.getStatus(), "Socket Online");
         tearDown(ahm);
-    }
-
-    void testAuth() {
-        HttpClient httpClient = new HttpClient(new SslContextFactory.Client());
-        try {
-            httpClient.start();
-        } catch (Exception e) {
-            fail();
-        }
-        HttpClientFactory httpClientFactory = mock(HttpClientFactory.class);
-        when(httpClientFactory.getCommonHttpClient()).thenReturn(httpClient);
-        AccountConfiguration accountConfiguration = new AccountConfiguration();
-        accountConfiguration.email = "bernd.w@ymann.de";
-        accountConfiguration.password = "pCzPxwH6U#";
-        accountConfiguration.region = "row";
-        AuthService authService = new AuthService(mock(AccessTokenRefreshListener.class), httpClient,
-                accountConfiguration, Locale.GERMAN, mock(Storage.class));
-        try {
-            authService.resumeLogin();
-            Thread.sleep(2000);
-        } catch (InterruptedException | MercedesMeAuthException e) {
-            fail();
-        }
     }
 }
