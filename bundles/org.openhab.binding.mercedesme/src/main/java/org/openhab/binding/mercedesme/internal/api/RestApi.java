@@ -16,10 +16,6 @@ import static org.openhab.binding.mercedesme.internal.Constants.*;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
@@ -32,7 +28,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.openhab.binding.mercedesme.internal.Constants;
 import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
-import org.openhab.binding.mercedesme.internal.exception.MercedesMeException;
+import org.openhab.binding.mercedesme.internal.exception.MercedesMeApiException;
 import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.i18n.LocaleProvider;
@@ -67,42 +63,33 @@ public class RestApi extends Authorization {
         String poiUrl = Utils.getRestAPIServer(config.region) + String.format(poiEndpoint, vin);
         Request poiRequest = httpClient.POST(poiUrl);
         addBasicHeaders(poiRequest);
-        poiRequest.header("X-SessionId", UUID.randomUUID().toString());
-        poiRequest.header("X-TrackingId", UUID.randomUUID().toString());
-        poiRequest.header("Authorization", getToken());
+        addAuthHeaders(poiRequest);
         poiRequest.header(HttpHeader.CONTENT_TYPE, "application/json");
         poiRequest.content(new StringContentProvider(poi.toString(), "utf-8"));
 
         try {
-            ContentResponse cr = poiRequest.timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
+            ContentResponse cr = send(poiRequest);
             logger.trace("Send POI Response {} : {}", cr.getStatus(), cr.getContentAsString());
-        } catch (InterruptedException | TimeoutException | ExecutionException e) {
-            logger.trace("Error Sending POI {}", e.getMessage());
+        } catch (MercedesMeApiException e) {
+            logger.warn("Error Sending POI {}", e.getMessage());
         }
     }
 
-    public VEPUpdate restGetVehicleAttributes(String vin) throws MercedesMeException {
+    public VEPUpdate restGetVehicleAttributes(String vin) throws MercedesMeApiException {
         String vehicleUrl = Utils.getWidgetServer(config.region) + String.format(vehicleAttributesEndpoint, vin);
         logger.trace("Pull update {}", vehicleUrl);
         Request vehicleRequest = httpClient.newRequest(vehicleUrl);
         addBasicHeaders(vehicleRequest);
-        vehicleRequest.header("X-SessionId", UUID.randomUUID().toString());
-        vehicleRequest.header("X-TrackingId", UUID.randomUUID().toString());
-        vehicleRequest.header("Authorization", getToken());
-
-        String reason = "unknown";
-        try {
-            ContentResponse vehicleResponse = vehicleRequest
-                    .timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
-            if (vehicleResponse.getStatus() == 200) {
-                VEPUpdate update = VehicleEvents.VEPUpdate.parseFrom(vehicleResponse.getContent());
-                return update;
+        addAuthHeaders(vehicleRequest);
+        ContentResponse vehicleResponse = send(vehicleRequest);
+        if (vehicleResponse.getStatus() == 200) {
+            try {
+                return VehicleEvents.VEPUpdate.parseFrom(vehicleResponse.getContent());
+            } catch (InvalidProtocolBufferException e) {
+                throw new MercedesMeApiException("Error parsing vehicle attributes: " + e.getMessage());
             }
-            reason = Integer.toString(vehicleResponse.getStatus());
-            throw new MercedesMeException(reason);
-        } catch (InterruptedException | TimeoutException | ExecutionException | InvalidProtocolBufferException e) {
-            reason = e.getMessage();
-            throw new MercedesMeException(reason == null ? "unknown" : reason);
+        } else {
+            throw new MercedesMeApiException("Error retrieving vehicle attributes: " + vehicleResponse.getStatus());
         }
     }
 
@@ -114,13 +101,9 @@ public class RestApi extends Authorization {
             String capabilitiesUrl = Utils.getRestAPIServer(config.region) + String.format(capabilitiesEndpoint, vin);
             Request capabilitiesRequest = httpClient.newRequest(capabilitiesUrl);
             addBasicHeaders(capabilitiesRequest);
-            capabilitiesRequest.header("X-SessionId", UUID.randomUUID().toString());
-            capabilitiesRequest.header("X-TrackingId", UUID.randomUUID().toString());
-            capabilitiesRequest.header("Authorization", getToken());
+            addAuthHeaders(capabilitiesRequest);
 
-            ContentResponse capabilitiesResponse = capabilitiesRequest
-                    .timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
-
+            ContentResponse capabilitiesResponse = send(capabilitiesRequest);
             String featureCapabilitiesJsonString = capabilitiesResponse.getContentAsString();
             if (!storage.containsKey(vin + FEATURE_APPENDIX)) {
                 storage.put(vin + FEATURE_APPENDIX, featureCapabilitiesJsonString);
@@ -151,12 +134,8 @@ public class RestApi extends Authorization {
                     + String.format(commandCapabilitiesEndpoint, vin);
             Request commandCapabilitiesRequest = httpClient.newRequest(commandCapabilitiesUrl);
             addBasicHeaders(commandCapabilitiesRequest);
-            commandCapabilitiesRequest.header("X-SessionId", UUID.randomUUID().toString());
-            commandCapabilitiesRequest.header("X-TrackingId", UUID.randomUUID().toString());
-            commandCapabilitiesRequest.header("Authorization", getToken());
-            ContentResponse commandCapabilitiesResponse = commandCapabilitiesRequest
-                    .timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
-
+            addAuthHeaders(commandCapabilitiesRequest);
+            ContentResponse commandCapabilitiesResponse = send(commandCapabilitiesRequest);
             String commandCapabilitiesJsonString = commandCapabilitiesResponse.getContentAsString();
             if (!storage.containsKey(vin + COMMAND_APPENDIX)) {
                 storage.put(vin + COMMAND_APPENDIX, commandCapabilitiesJsonString);
@@ -178,7 +157,7 @@ public class RestApi extends Authorization {
                 featureMap.put(builder.toString(), value);
             });
             return featureMap;
-        } catch (InterruptedException | TimeoutException | ExecutionException | JSONException e) {
+        } catch (JSONException | MercedesMeApiException e) {
             logger.trace("Error retrieving capabilities: {}", e.getMessage());
             featureMap.clear();
         }

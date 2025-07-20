@@ -347,7 +347,6 @@ public class Websocket extends RestApi {
                 int offsetLength = length - offset;
                 message = new byte[offsetLength];
                 System.arraycopy(blob, offset, message, 0, offsetLength);
-
             }
             PushMessage pm = VehicleEvents.PushMessage.parseFrom(message);
             logger.trace("Websocket Message {} size {}", pm.getMsgCase(), pm.getAllFields().size());

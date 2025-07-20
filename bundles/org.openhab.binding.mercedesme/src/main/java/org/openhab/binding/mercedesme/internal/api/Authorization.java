@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.mercedesme.internal.api;
 
+import static org.openhab.binding.mercedesme.internal.Constants.*;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -42,6 +44,7 @@ import org.json.JSONObject;
 import org.openhab.binding.mercedesme.internal.Constants;
 import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
 import org.openhab.binding.mercedesme.internal.dto.TokenResponse;
+import org.openhab.binding.mercedesme.internal.exception.MercedesMeApiException;
 import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
 import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
@@ -61,13 +64,15 @@ import com.google.gson.JsonSyntaxException;
  */
 @NonNullByDefault
 public class Authorization {
-    private static final String CONTENT_TYPE_URL_ENCODED = "application/x-www-form-urlencoded";
     private static final int EXPIRATION_BUFFER = 5;
     private final Logger logger = LoggerFactory.getLogger(Authorization.class);
 
     private AccessTokenRefreshListener listener;
     private AccessTokenResponse token = Utils.INVALID_TOKEN;
     private String identifier;
+
+    protected static final String CONTENT_TYPE_URL_ENCODED = "application/x-www-form-urlencoded";
+    protected static final String CONTENT_TYPE_JSON = "application/json";
 
     protected LocaleProvider localeProvider;
     protected AccountConfiguration config;
@@ -87,16 +92,15 @@ public class Authorization {
         String storedToken = storage.get(identifier);
         if (storedToken != null) {
             // returns INVALID_TOKEN in case of an error
-            logger.trace("MB-Auth {} storedToken {}", prefix(), storedToken);
             TokenResponse tokenResponseJson = Utils.GSON.fromJson(storedToken, TokenResponse.class);
             token = decodeToken(tokenResponseJson);
             if (!authTokenIsValid()) {
                 token = Utils.INVALID_TOKEN;
                 storage.remove(identifier);
-                logger.trace("MB-Auth {} invalid storedToken {}", prefix(), storedToken);
+                logger.trace("Invalid storedToken {}", storedToken);
             }
         } else {
-            logger.debug("MB-Auth {} No token stored in persistence", prefix());
+            logger.debug("No token stored in persistence");
         }
     }
 
@@ -110,7 +114,7 @@ public class Authorization {
     }
 
     private void refreshToken() {
-        logger.trace("MB-Auth {} refreshToken", prefix());
+        logger.trace("RefreshToken");
         try {
             String url = Utils.getTokenUrl(config.region);
             Request req = httpClient.POST(url);
@@ -134,15 +138,14 @@ public class Authorization {
                 /**
                  * 1) remove token from storage
                  * 2) listener will be informed about INVALID_TOKEN and bridge will go OFFLINE
-                 * 3) user needs to update refreshToken configuration parameter
                  */
                 storage.remove(identifier);
-                logger.warn("MB-Auth {} Failed to refresh token {} {}", prefix(), tokenResponseStatus, tokenResponse);
+                logger.warn("Failed to refresh token {} {}", tokenResponseStatus, tokenResponse);
             }
             listener.onAccessTokenResponse(token);
         } catch (InterruptedException | TimeoutException | ExecutionException | UnsupportedEncodingException
                 | JsonSyntaxException e) {
-            logger.info("{} Failed to refresh token {}", prefix(), e.getMessage());
+            logger.info("Failed to refresh token {}", e.getMessage());
         }
     }
 
@@ -159,15 +162,15 @@ public class Authorization {
             token = decodeToken(tokenResponseJson);
             if (authTokenIsValid()) {
                 String tokenStore = Utils.GSON.toJson(tokenResponseJson);
-                logger.debug("MB-Auth {} token result {}", prefix(), token.toString());
+                logger.debug("Token result {}", token.toString());
                 storage.put(identifier, tokenStore);
             } else {
                 token = Utils.INVALID_TOKEN;
                 storage.remove(identifier);
-                logger.warn("MB-Auth {} Refresh token delivered invalid result {}", prefix(), tokenResponse);
+                logger.warn("Refresh token delivered invalid result {}", tokenResponse);
             }
         } else {
-            logger.debug("MB-Auth {} token refersh delivered not parsable result {}", prefix(), tokenResponse);
+            logger.debug("Token refersh delivered not parsable result {}", tokenResponse);
             token = Utils.INVALID_TOKEN;
         }
     }
@@ -185,7 +188,7 @@ public class Authorization {
                 if (!Constants.NOT_SET.equals(token.getRefreshToken())) {
                     atr.setRefreshToken(token.getRefreshToken());
                 } else {
-                    logger.debug("MB-Auth {} Neither new nor old refresh token available", prefix());
+                    logger.debug("Neither new nor old refresh token available");
                     return Utils.INVALID_TOKEN;
                 }
             }
@@ -193,7 +196,7 @@ public class Authorization {
             atr.setScope(Constants.AUTH_SCOPE);
             return atr;
         } else {
-            logger.debug("MB-Auth {} Neither Token Response is null", prefix());
+            logger.debug("Token Response is null");
         }
         return Utils.INVALID_TOKEN;
     }
@@ -202,14 +205,18 @@ public class Authorization {
         return !Constants.NOT_SET.equals(token.getAccessToken()) && !Constants.NOT_SET.equals(token.getRefreshToken());
     }
 
-    public boolean authLogin() throws MercedesMeAuthException {
-        logger.info("{} Start resume login", prefix());
+    public void authLogin() throws MercedesMeAuthException, MercedesMeApiException {
+        logger.info("Start resume login");
+        if (isJunit()) {
+            // avoid real API calls in JUnit environment
+            throw new MercedesMeAuthException("Unit Test");
+        }
         /**
          * I need to start an extra client
          * Using common HttpClient causes problems with
-         * 2025-07-15 21:48:39.212 [INFO ] [rcedesme.internal.server.AuthService] - [bernd.w@ymann.de] Start resume
+         * 2025-07-15 21:48:39.212 [INFO ] [rcedesme.internal.server.Authorization] - [bernd.w@ymann.de] Start resume
          * login
-         * 2025-07-15 21:48:39.212 [TRACE] [rcedesme.internal.server.AuthService] - Step 1: Resume headers
+         * 2025-07-15 21:48:39.212 [TRACE] [rcedesme.internal.server.Authorization] - Step 1: Resume headers
          * Accept-Encoding: gzip
          * User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 15_8_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)
          * Version/15.6.6 Mobile/15E148 Safari/604.1
@@ -217,7 +224,7 @@ public class Authorization {
          * Accept: text/html,application/xhtml+xml,application/xml;q=0.9,;q=0.8
          *
          *
-         * 2025-07-15 21:48:39.577 [WARN ] [rcedesme.internal.server.AuthService] - Failed request
+         * 2025-07-15 21:48:39.577 [WARN ] [rcedesme.internal.server.Authorization] - Failed request
          * /as/authorization.oauth2client_id=62778dc4-1de3-44f4-af95-115f06a3a008&code_challenge_method=S256&redirect_uri=rismycar%3A%2F%2Flogin-callback&response_type=code&scope=email+profile+ciam-uid+phone+openid+offline_access&code_challenge=q-xTU0kQx3fLkhAO89qo_4shExS7wa6XVoG1DXAYoZ4
          * - org.eclipse.jetty.http.BadMessageException: 500: Request header too large
          **/
@@ -227,16 +234,10 @@ public class Authorization {
             try {
                 loginHttpClient.start();
             } catch (Exception e) {
-                logger.info("{} Client start failed", prefix());
-                return false;
+                throw new MercedesMeAuthException("Failed to start HttpClient: " + e.getMessage());
             }
             String codeVerifier = generateCodeVerifier(32);
-            String codeChallenge = null;
-            try {
-                codeChallenge = generateCodeChallenge(codeVerifier);
-            } catch (NoSuchAlgorithmException e) {
-                return false;
-            }
+            String codeChallenge = generateCodeChallengeSafely(codeVerifier);
             String baseUrl = Utils.getLoginServer(config.region);
             String resumeUrl = null;
 
@@ -251,11 +252,9 @@ public class Authorization {
 
             resumeUrl = baseUrl + "/as/authorization.oauth2?" + FormContentProvider.convert(resumeContent);
             Request resumeRequest = loginHttpClient.newRequest(resumeUrl).followRedirects(true);
-            resumeRequest.header(HttpHeader.USER_AGENT, null);
             resumeRequest.header(HttpHeader.USER_AGENT, Constants.AUTH_USER_AGENT);
             resumeRequest.header(HttpHeader.ACCEPT_LANGUAGE, Constants.AUTH_LANGUAGE);
             resumeRequest.header(HttpHeader.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-            logger.trace("Step 1: Resume headers {}", resumeRequest.getHeaders());
             ContentResponse resumeResponse = send(resumeRequest);
             logger.trace("Step 1: Get resume code {} - {}", resumeResponse.getStatus(),
                     resumeResponse.getRequest().getURI());
@@ -265,18 +264,16 @@ public class Authorization {
                 resumeUrl = params.get("resume");
             }
             if (resumeUrl == null) {
-                // abort if not successful
-                return false;
+                throw new MercedesMeAuthException("Failed to get resume URL, status: " + resumeResponse.getStatus());
             }
 
             // Step 2 - send user agent
             Request agentRequest = loginHttpClient.POST(baseUrl + "/ciam/auth/ua");
-            resumeRequest.header(HttpHeader.USER_AGENT, null);
             agentRequest.header(HttpHeader.USER_AGENT, Constants.AUTH_USER_AGENT);
             agentRequest.header(HttpHeader.ACCEPT_LANGUAGE, Constants.AUTH_LANGUAGE);
             agentRequest.header(HttpHeader.ACCEPT, "*/*");
+            agentRequest.header(HttpHeader.CONTENT_TYPE, CONTENT_TYPE_JSON);
             agentRequest.header(HttpHeader.ORIGIN, baseUrl);
-            agentRequest.header(HttpHeader.CONTENT_TYPE, "application/json");
 
             JSONObject agentContent = new JSONObject();
             agentContent.put("browserName", "Mobile Safari");
@@ -287,18 +284,17 @@ public class Authorization {
             ContentResponse agentResponse = send(agentRequest);
             logger.trace("Step 2: Post Agent {} - {}", agentResponse.getStatus(), agentResponse.getContentAsString());
             if (agentResponse.getStatus() != 200) {
-                return false;
+                throw new MercedesMeAuthException("Failed to post user agent, status: " + agentResponse.getStatus());
             }
 
             // Step 3 - send user name
             Request userRequest = loginHttpClient.POST(baseUrl + "/ciam/auth/login/user");
-            resumeRequest.header(HttpHeader.USER_AGENT, null);
             userRequest.header(HttpHeader.USER_AGENT, Constants.AUTH_USER_AGENT);
             userRequest.header(HttpHeader.ACCEPT_LANGUAGE, Constants.AUTH_LANGUAGE);
-            userRequest.header(HttpHeader.ACCEPT, "application/json, text/plain, */*");
+            userRequest.header(HttpHeader.ACCEPT, CONTENT_TYPE_JSON + ", text/plain, */*");
+            userRequest.header(HttpHeader.CONTENT_TYPE, CONTENT_TYPE_JSON);
             userRequest.header(HttpHeader.ORIGIN, baseUrl);
             userRequest.header(HttpHeader.REFERER, baseUrl + "/ciam/auth/login");
-            userRequest.header(HttpHeader.CONTENT_TYPE, "application/json");
 
             JSONObject userContent = new JSONObject();
             userContent.put("username", config.email);
@@ -307,18 +303,17 @@ public class Authorization {
             ContentResponse userResponse = send(userRequest);
             logger.trace("Step 3: Post username {} - {}", userResponse.getStatus(), userResponse.getContentAsString());
             if (userResponse.getStatus() != 200) {
-                return false;
+                throw new MercedesMeAuthException("Failed to post username, status: " + userResponse.getStatus());
             }
 
             // Step 4 - login
             Request loginRequest = loginHttpClient.POST(baseUrl + "/ciam/auth/login/pass");
-            resumeRequest.header(HttpHeader.USER_AGENT, null);
             loginRequest.header(HttpHeader.USER_AGENT, Constants.AUTH_USER_AGENT);
             loginRequest.header(HttpHeader.ACCEPT_LANGUAGE, Constants.AUTH_LANGUAGE);
-            loginRequest.header(HttpHeader.ACCEPT, "application/json, text/plain, */*");
+            loginRequest.header(HttpHeader.ACCEPT, CONTENT_TYPE_JSON + ", text/plain, */*");
+            loginRequest.header(HttpHeader.CONTENT_TYPE, CONTENT_TYPE_JSON);
             loginRequest.header(HttpHeader.ORIGIN, baseUrl);
             loginRequest.header(HttpHeader.REFERER, baseUrl + "/ciam/auth/login");
-            loginRequest.header(HttpHeader.CONTENT_TYPE, "application/json");
 
             String rid = generateCodeVerifier(24);
             JSONObject loginContent = new JSONObject();
@@ -337,7 +332,8 @@ public class Authorization {
                 preLoginToken = loginResponseJSON.optString("token", null);
             }
             if (preLoginToken == null) {
-                return false;
+                throw new MercedesMeAuthException(
+                        "Failed to login, status: " + loginResponse.getStatus() + ", response: " + loginResponseString);
             }
 
             // Step 5 - resume auth
@@ -346,13 +342,12 @@ public class Authorization {
             authParams.add("token", preLoginToken);
 
             Request authRequest = loginHttpClient.POST(baseUrl + resumeUrl).followRedirects(false);
-            resumeRequest.header(HttpHeader.USER_AGENT, null);
             authRequest.header(HttpHeader.USER_AGENT, Constants.AUTH_USER_AGENT);
             authRequest.header(HttpHeader.ACCEPT_LANGUAGE, Constants.AUTH_LANGUAGE);
             authRequest.header(HttpHeader.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+            authRequest.header(HttpHeader.CONTENT_TYPE, CONTENT_TYPE_URL_ENCODED);
             authRequest.header(HttpHeader.ORIGIN, baseUrl);
             authRequest.header(HttpHeader.REFERER, baseUrl + "/ciam/auth/login");
-            authRequest.header(HttpHeader.CONTENT_TYPE, "application/x-www-form-urlencoded");
             authRequest.content(new StringContentProvider(CONTENT_TYPE_URL_ENCODED,
                     UrlEncoded.encode(authParams, StandardCharsets.UTF_8, false), StandardCharsets.UTF_8));
 
@@ -361,12 +356,10 @@ public class Authorization {
                 String location = authResponse.getHeaders().get(HttpHeader.LOCATION);
                 Map<String, String> params = Utils.getQueryParams(URI.create(location).getQuery());
                 code = params.get("code");
-            } else {
-                logger.warn("{} code request {} {}", prefix(), authResponse.getStatus(),
-                        authResponse.getContentAsString());
             }
             if (code == null) {
-                return false;
+                throw new MercedesMeAuthException("Failed to resume auth, status: " + authResponse.getStatus()
+                        + ", response: " + authResponse.getContentAsString());
             }
 
             // Step 6 - token request
@@ -385,8 +378,7 @@ public class Authorization {
             String tokenResponseString = tokenResponse.getContentAsString();
             if (tokenResponse.getStatus() == 200) {
                 storeToken(tokenResponseString);
-                logger.info("{} Successfully resumed login", prefix());
-                return true;
+                logger.info("Successfully resumed login");
             } else {
                 token = Utils.INVALID_TOKEN;
                 /**
@@ -397,25 +389,23 @@ public class Authorization {
                 storage.remove(identifier);
                 logger.info("Failed resume login {} {}", tokenResponse.getStatus(), tokenResponse.getContentAsString());
             }
-        } catch (MercedesMeAuthException e) {
+        } catch (MercedesMeApiException e) {
             throw e;
         } finally {
             try {
                 loginHttpClient.stop();
             } catch (Exception e) {
-                logger.warn("{} Failed to stop HttpClient {}", prefix(), e.getMessage());
+                logger.warn("Failed to stop HttpClient {}", e.getMessage());
             }
         }
-        return false;
     }
 
-    private ContentResponse send(Request request) throws MercedesMeAuthException {
+    private String generateCodeChallengeSafely(String codeVerifier) throws MercedesMeAuthException {
         try {
-            return request.timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
-        } catch (InterruptedException | TimeoutException | ExecutionException e) {
-            logger.warn("Failed request {}{} - {}", request.getPath(), request.getQuery(), e.getMessage());
+            return generateCodeChallenge(codeVerifier);
+        } catch (NoSuchAlgorithmException e) {
+            throw new MercedesMeAuthException("Failed to generate code challenge: " + e.getMessage());
         }
-        throw new MercedesMeAuthException("Request " + request.getPath() + request.getQuery() + "failed");
     }
 
     private String generateCodeChallenge(String codeVerifier) throws NoSuchAlgorithmException {
@@ -440,7 +430,22 @@ public class Authorization {
         req.header("Ris-Application-Version", Utils.getRisApplicationVersion(config.region));
     }
 
-    private String prefix() {
-        return "[" + config.email + "] ";
+    protected void addAuthHeaders(Request request) {
+        request.header("X-SessionId", UUID.randomUUID().toString());
+        request.header("X-TrackingId", UUID.randomUUID().toString());
+        request.header("Authorization", getToken());
+    }
+
+    protected ContentResponse send(Request request) throws MercedesMeApiException {
+        try {
+            return request.timeout(Constants.REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS).send();
+        } catch (InterruptedException | TimeoutException | ExecutionException e) {
+            logger.warn("Failed request {}{} - {}", request.getPath(), request.getQuery(), e.getMessage());
+            throw new MercedesMeApiException(request.getPath() + request.getQuery() + " - " + e.getMessage());
+        }
+    }
+
+    protected boolean isJunit() {
+        return JUNIT_EMAIL.equals(config.email) && JUNIT_PASSWORD.equals(config.password);
     }
 }

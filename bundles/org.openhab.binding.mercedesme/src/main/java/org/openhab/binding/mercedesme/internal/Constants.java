@@ -275,6 +275,7 @@ public class Constants {
     public static final String STATUS_TEXT_PREFIX = "@text/mercedesme.";
     public static final String STATUS_LOGIN_FAILURE = ".status.login-failure";
     public static final String STATUS_LOGIN_EXCEPTION = ".status.login-exception";
+    public static final String API_EXCEPTION = ".status.api-exception";
     public static final String STATUS_EMAIL_MISSING = ".status.email-missing";
     public static final String STATUS_PASSWORD_MISSING = ".status.password-missing";
     public static final String STATUS_REGION_MISSING = ".status.region-missing";
@@ -356,6 +357,8 @@ public class Constants {
     public static final String FEATURE_APPENDIX = "-features";
     public static final String COMMAND_APPENDIX = "-commands";
 
+    public static final String JUNIT_EMAIL = "test@junit.org";
+    public static final String JUNIT_PASSWORD = "junitPassword";
     public static final String JUNIT_TOKEN = "junitTestToken";
     public static final String JUNIT_REFRESH_TOKEN = "junitRefreshToken";
 }

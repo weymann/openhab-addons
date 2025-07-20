@@ -32,8 +32,8 @@ import org.openhab.binding.mercedesme.internal.Constants;
 import org.openhab.binding.mercedesme.internal.api.Websocket;
 import org.openhab.binding.mercedesme.internal.config.AccountConfiguration;
 import org.openhab.binding.mercedesme.internal.discovery.MercedesMeDiscoveryService;
+import org.openhab.binding.mercedesme.internal.exception.MercedesMeApiException;
 import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
-import org.openhab.binding.mercedesme.internal.exception.MercedesMeException;
 import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.auth.client.oauth2.AccessTokenResponse;
 import org.openhab.core.i18n.LocaleProvider;
@@ -65,6 +65,7 @@ import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinPendingCommandsRequest;
  */
 @NonNullByDefault
 public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefreshListener {
+    private static final int VARIANCE_PERCENT = 15; // 15% variance for refresh interval
 
     private final Logger logger = LoggerFactory.getLogger(AccountHandler.class);
     private final Map<String, Map<String, Object>> vinCapabilitiesMap = new HashMap<>();
@@ -115,7 +116,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     }
 
     /**
-     * Refresh checking token validity, login in case of invalid token
+     * Refresh checking valid authorization and recovery plus selecting update strategy
      */
     public void refresh() {
         if (disposed) {
@@ -123,7 +124,12 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             return;
         }
         if (api.authTokenIsValid()) {
-            // decide if we need to pull updates from vehicles or keep websocket alive
+            /**
+             * Pattern of the update strategy
+             * - if all vehicles are in status idle (no keep alive) pull the status updates from the server
+             * - each vehicle is deciding on the new attributes if it needs to be kept alive (driving or charging)
+             * - if any vehicle needs to be kept alive start websocketUpdate to get frequent updates
+             */
             if (keepAliveList.isEmpty()) {
                 pullUpdates();
             } else {
@@ -145,29 +151,34 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             job.cancel(false);
         });
         Instant nextSchedule = Instant.now().plus(delayInSeconds, ChronoUnit.SECONDS);
-        logger.trace("Next schedule in {}/{} seconds at {}", delayInSeconds, config.refreshInterval, nextSchedule);
+        logger.trace("Next schedule at {}", nextSchedule);
         refreshScheduler = Optional.of(scheduler.schedule(this::refresh, delayInSeconds, TimeUnit.SECONDS));
     }
 
     public void resume() {
         try {
-            if (api.authLogin()) {
-                api.websocketUpdate();
-            } else {
-                String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
-                        + Constants.STATUS_LOGIN_FAILURE;
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
-            }
+            api.authLogin();
         } catch (MercedesMeAuthException e) {
             String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
                     + Constants.STATUS_LOGIN_EXCEPTION + " [\"" + e.getMessage() + "\"]";
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+        } catch (MercedesMeApiException e) {
+            String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId() + Constants.API_EXCEPTION
+                    + " [\"" + e.getMessage() + "\"]";
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
         }
     }
 
+    /**
+     * Don't act like a bot!
+     * Calls to Mercedes server can be easily identified as bots if they are performed with a constant refresh interval.
+     * Introduce a VARIANCE in calling API with plus/minus 15% off from configured refresh interval.
+     *
+     * @return next refresh offset in seconds
+     */
     private long nextRefreshSeconds() {
         // bring in 15% time variance
-        int variance = config.refreshInterval * 60 / 15;
+        int variance = config.refreshInterval * 60 / VARIANCE_PERCENT;
         long leftLimit = config.refreshInterval * 60 - variance;
         long rightLimit = config.refreshInterval * 60 + variance;
         return leftLimit + (long) (Math.random() * (rightLimit - leftLimit));
@@ -426,9 +437,9 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 entry.getValue().enqueueUpdate(update);
                 logger.trace("Pull update delivered {} updates", update.getAttributesCount());
                 updateStatus(ThingStatus.ONLINE);
-            } catch (MercedesMeException e) {
+            } catch (MercedesMeApiException e) {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "@text/mercedesme.account.status.websocket-failure [\"" + e.getMessage() + "\"]");
+                        "@text/mercedesme.account.status.api-exception [\"" + e.getMessage() + "\"]");
             }
         });
     }

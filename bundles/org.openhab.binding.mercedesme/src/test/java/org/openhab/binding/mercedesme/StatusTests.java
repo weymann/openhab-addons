@@ -15,6 +15,7 @@ package org.openhab.binding.mercedesme;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.openhab.binding.mercedesme.internal.Constants.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -94,7 +95,7 @@ class StatusTests {
         assertEquals("@text/mercedesme.account.status.email-missing", tsi.getDescription(), "EMail text");
         tearDown(ahm);
 
-        config.put("email", "a@b.c");
+        config.put("email", JUNIT_EMAIL);
         bi.setConfiguration(new Configuration(config));
         tcl = new ThingCallbackListener();
         ahm.setCallback(tcl);
@@ -105,7 +106,7 @@ class StatusTests {
         assertEquals("@text/mercedesme.account.status.password-missing", tsi.getDescription(), "Password text");
         tearDown(ahm);
 
-        config.put("password", "junit");
+        config.put("password", JUNIT_PASSWORD);
         bi.setConfiguration(new Configuration(config));
         tcl = new ThingCallbackListener();
         ahm.setCallback(tcl);
@@ -145,8 +146,8 @@ class StatusTests {
         Map<String, Object> config = new HashMap<>();
         config.put("refreshInterval", 15);
         config.put("region", "row");
-        config.put("email", "a@b.c");
-        config.put("password", "abc");
+        config.put("email", JUNIT_EMAIL);
+        config.put("password", JUNIT_PASSWORD);
         bi.setConfiguration(new Configuration(config));
         AccountHandlerMock ahm = new AccountHandlerMock(bi, null, getHttpClient(404));
         ThingCallbackListener tcl = new ThingCallbackListener();
@@ -158,7 +159,8 @@ class StatusTests {
         assertEquals(ThingStatusDetail.COMMUNICATION_ERROR, tsi.getStatusDetail(), "Auth details");
         String statusDescription = tsi.getDescription();
         assertNotNull(statusDescription);
-        assertTrue(statusDescription.contains("@text/mercedesme.account.status.login-failure"), "Auth text");
+        assertTrue(statusDescription.contains("@text/mercedesme.account.status.login-exception"),
+                "Auth text: " + statusDescription);
         tearDown(ahm);
         AccessTokenResponse token = new AccessTokenResponse();
         token.setExpiresIn(3000);
@@ -177,8 +179,8 @@ class StatusTests {
         Map<String, Object> config = new HashMap<>();
         config.put("refreshInterval", Integer.MAX_VALUE);
         config.put("region", "row");
-        config.put("email", "a@b.c");
-        config.put("password", "abc");
+        config.put("email", JUNIT_EMAIL);
+        config.put("password", JUNIT_PASSWORD);
         bi.setConfiguration(new Configuration(config));
         String tokenResponse = FileReader.readFileInString("src/test/resources/json/TokenResponse.json");
         AccountHandlerMock ahm = new AccountHandlerMock(bi, tokenResponse, getHttpClient(200));

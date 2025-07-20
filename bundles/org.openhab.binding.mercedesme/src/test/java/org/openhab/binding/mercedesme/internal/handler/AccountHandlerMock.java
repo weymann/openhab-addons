@@ -13,6 +13,7 @@
 package org.openhab.binding.mercedesme.internal.handler;
 
 import static org.mockito.Mockito.mock;
+import static org.openhab.binding.mercedesme.internal.Constants.JUNIT_EMAIL;
 
 import java.util.Locale;
 
@@ -60,7 +61,7 @@ public class AccountHandlerMock extends AccountHandler {
         super(b, mock(MercedesMeDiscoveryService.class), httpClient, localeProvider, storageService);
         if (storedObject != null) {
             Storage<String> storage = storageService.getStorage(Constants.BINDING_ID);
-            storage.put("a@b.c", storedObject);
+            storage.put(JUNIT_EMAIL, storedObject);
         }
         config = new AccountConfiguration();
     }
