@@ -78,7 +78,6 @@ public class RestApi extends Authorization {
 
     public VEPUpdate restGetVehicleAttributes(String vin) throws MercedesMeApiException {
         String vehicleUrl = Utils.getWidgetServer(config.region) + String.format(vehicleAttributesEndpoint, vin);
-        logger.trace("Pull update {}", vehicleUrl);
         Request vehicleRequest = httpClient.newRequest(vehicleUrl);
         addBasicHeaders(vehicleRequest);
         addAuthHeaders(vehicleRequest);

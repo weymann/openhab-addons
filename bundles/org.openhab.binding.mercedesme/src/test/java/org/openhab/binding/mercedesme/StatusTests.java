@@ -189,8 +189,8 @@ class StatusTests {
         ahm.setCallback(tcl);
         ahm.initialize();
         ThingStatusInfo tsi = tcl.getThingStatus();
-        assertEquals(ThingStatus.UNKNOWN, tsi.getStatus(),
-                "Socket Unknown " + tsi.getStatusDetail() + " " + tsi.getDescription());
+        assertEquals(ThingStatus.OFFLINE, tsi.getStatus(),
+                "OFFLINE " + tsi.getStatusDetail() + " " + tsi.getDescription());
         ahm.connect();
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.ONLINE, tsi.getStatus(), "Socket Online");

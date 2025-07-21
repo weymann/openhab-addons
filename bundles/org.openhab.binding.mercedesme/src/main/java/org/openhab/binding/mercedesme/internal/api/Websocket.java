@@ -433,7 +433,7 @@ public class Websocket extends RestApi {
         if (throwable != null) {
             logger.info("Websocket onClosedSession exception: {} - try to resume login", throwable.getMessage());
             accountHandler.handleWebsocketError(throwable);
-            accountHandler.resume();
+            accountHandler.authorize();
         }
         // stop web socket client for closed session
         scheduler.execute(this::stop);

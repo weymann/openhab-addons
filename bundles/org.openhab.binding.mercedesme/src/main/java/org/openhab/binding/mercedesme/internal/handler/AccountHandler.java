@@ -111,7 +111,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         } else {
             api = new Websocket(this, httpClient, config, localeProvider, storage);
             api.websocketDispose(false);
-            scheduler.execute(this::refresh);
+            scheduler.schedule(this::refresh, 2, TimeUnit.SECONDS);
         }
     }
 
@@ -130,14 +130,14 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
              * - each vehicle is deciding on the new attributes if it needs to be kept alive (driving or charging)
              * - if any vehicle needs to be kept alive start websocketUpdate to get frequent updates
              */
-            if (keepAliveList.isEmpty()) {
+            if (keepAliveList.isEmpty() && !activeVehicleHandlerMap.isEmpty()) {
                 pullUpdates();
             } else {
                 api.websocketUpdate();
             }
         } else {
             // token is not valid - try to resume login
-            resume();
+            authorize();
         }
         scheduleRefresh(nextRefreshSeconds());
     }
@@ -155,7 +155,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         refreshScheduler = Optional.of(scheduler.schedule(this::refresh, delayInSeconds, TimeUnit.SECONDS));
     }
 
-    public void resume() {
+    public void authorize() {
         try {
             api.login();
         } catch (MercedesMeAuthException e) {
@@ -217,7 +217,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
      */
     @Override
     public void onAccessTokenResponse(AccessTokenResponse tokenResponse) {
-        if (Constants.NOT_SET.equals(tokenResponse.getAccessToken())) {
+        if (!api.authTokenIsValid()) {
             handleAuthError(new MercedesMeAuthException("Invalid Token"));
         }
     }
@@ -350,15 +350,15 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
      *
      * @param vin of discovered vehicle
      */
-    @SuppressWarnings("null")
     public void discovery(String vin) {
         Map<String, Object> capabilities = vinCapabilitiesMap.get(vin);
         if (capabilities == null) {
+            // no capabilities found - retrieve and store them
             capabilities = api.restGetCapabilities(vin);
             vinCapabilitiesMap.put(vin, capabilities);
-            if (activeVehicleHandlerMap.containsKey(vin)) {
+            VehicleHandler vh = activeVehicleHandlerMap.get(vin);
+            if (vh != null) {
                 Map<String, String> properties = getStringCapabilities(capabilities);
-                VehicleHandler vh = activeVehicleHandlerMap.get(vin);
                 properties.putAll(vh.getThing().getProperties());
                 vh.getThing().setProperties(properties);
             } else {
@@ -414,12 +414,12 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     private void handleAuthError(MercedesMeAuthException e) {
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                STATUS_AUTH_FAILURE + "[\"" + e.getMessage() + "\"]");
+                STATUS_AUTH_FAILURE + " [\"" + e.getMessage() + "\"]");
     }
 
     private void handleApiError(MercedesMeApiException e) {
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                STATUS_API_FAILURE + "[\"" + e.getMessage() + "\"]");
+                STATUS_API_FAILURE + " [\"" + e.getMessage() + "\"]");
     }
 
     public void handleConnected() {
@@ -428,7 +428,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     public void handleWebsocketError(Throwable t) {
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                STATUS_WEBSOCKET_FAILURE + "[\"" + t.getMessage() + "\"]");
+                STATUS_WEBSOCKET_FAILURE + " [\"" + t.getMessage() + "\"]");
     }
 
     /**

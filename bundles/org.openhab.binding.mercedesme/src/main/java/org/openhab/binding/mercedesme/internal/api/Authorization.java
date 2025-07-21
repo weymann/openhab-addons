@@ -31,6 +31,7 @@ import java.util.concurrent.TimeoutException;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.WWWAuthenticationProtocolHandler;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.FormContentProvider;
@@ -100,6 +101,8 @@ public class Authorization {
                 token = Utils.INVALID_TOKEN;
                 storage.remove(identifier);
                 logger.trace("Invalid token for {}", config.email);
+            } else {
+                atrl.onAccessTokenResponse(token);
             }
         } else {
             logger.trace("No token for {} stored, stay on invalid token", config.email);
@@ -214,7 +217,7 @@ public class Authorization {
      * @throws MercedesMeApiException if an error occurs during API calls
      */
     public void login() throws MercedesMeAuthException, MercedesMeApiException {
-        logger.info("Start resume login");
+        logger.info("Start login");
         if (isJunit()) {
             // avoid real API calls in JUnit environment
             throw new MercedesMeAuthException("Unit Test");
@@ -240,6 +243,7 @@ public class Authorization {
          **/
         try {
             loginHttpClient.start();
+            loginHttpClient.getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
             String codeVerifier = generateCodeVerifier(32);
             String codeChallenge = generateCodeChallengeSafely(codeVerifier);
             String resumeUrl = getResumeUrl(loginHttpClient, codeChallenge);
@@ -248,8 +252,11 @@ public class Authorization {
             String preLoginToken = performPasswordLogin(loginHttpClient);
             String authCode = resumeAuthentication(loginHttpClient, resumeUrl, preLoginToken);
             requestAccessToken(loginHttpClient, authCode, codeVerifier);
+        } catch (MercedesMeAuthException | MercedesMeApiException e) {
+            throw e;
         } catch (Exception e) {
-            throw new MercedesMeApiException("Failed to start HttpClient: " + e.getMessage());
+            String message = e.getMessage();
+            throw new MercedesMeApiException(message == null ? "unknown" : message);
         } finally {
             try {
                 loginHttpClient.stop();
@@ -293,7 +300,7 @@ public class Authorization {
         if (resumeUrl != null) {
             return resumeUrl;
         } else {
-            throw new MercedesMeAuthException("Failed to get resume URL, status: " + resumeResponse.getStatus());
+            throw new MercedesMeAuthException("Failed to get resume URL. HTTP " + resumeResponse.getStatus());
         }
     }
 
@@ -320,7 +327,7 @@ public class Authorization {
         ContentResponse agentResponse = send(agentRequest);
         logger.trace("Step 2: Post Agent {} - {}", agentResponse.getStatus(), agentResponse.getContentAsString());
         if (agentResponse.getStatus() != 200) {
-            throw new MercedesMeAuthException("Failed to post user agent, status: " + agentResponse.getStatus());
+            throw new MercedesMeAuthException("Failed to post user agent. HTTP " + agentResponse.getStatus());
         }
     }
 
@@ -344,9 +351,10 @@ public class Authorization {
         userRequest.content(new StringContentProvider(userContent.toString(), "utf-8"));
 
         ContentResponse userResponse = send(userRequest);
-        logger.trace("Step 3: Post username {} - {}", userResponse.getStatus(), userResponse.getContentAsString());
-        if (userResponse.getStatus() != 200) {
-            throw new MercedesMeAuthException("Failed to post username, status: " + userResponse.getStatus());
+        int status = userResponse.getStatus();
+        logger.trace("Step 3: Post username {} - {}", status, userResponse.getContentAsString());
+        if (status != 200) {
+            throw new MercedesMeAuthException("Failed to post username " + config.email + ". HTTP " + status);
         }
     }
 
@@ -376,17 +384,17 @@ public class Authorization {
 
         String preLoginToken = null;
         ContentResponse loginResponse = send(loginRequest);
+        int status = loginResponse.getStatus();
         String loginResponseString = loginResponse.getContentAsString();
-        logger.trace("Step 4: Login {} - {}", loginResponse.getStatus(), loginResponseString);
-        if (loginResponse.getStatus() == 200) {
+        logger.trace("Step 4: Login {} - {}", status, loginResponseString);
+        if (status == 200) {
             JSONObject loginResponseJSON = new JSONObject(loginResponseString);
             preLoginToken = loginResponseJSON.optString("token", null);
         }
         if (preLoginToken != null) {
             return preLoginToken;
         } else {
-            throw new MercedesMeAuthException(
-                    "Failed to login, status: " + loginResponse.getStatus() + ", response: " + loginResponseString);
+            throw new MercedesMeAuthException("Failed to login. HTTP " + status + " " + loginResponseString);
         }
     }
 
@@ -413,7 +421,8 @@ public class Authorization {
                 UrlEncoded.encode(authParams, StandardCharsets.UTF_8, false), StandardCharsets.UTF_8));
 
         ContentResponse authResponse = send(authRequest);
-        if (authResponse.getStatus() < 400) {
+        int status = authResponse.getStatus();
+        if (status < 400) {
             String location = authResponse.getHeaders().get(HttpHeader.LOCATION);
             Map<String, String> params = Utils.getQueryParams(URI.create(location).getQuery());
             code = params.get("code");
@@ -421,8 +430,8 @@ public class Authorization {
         if (code != null) {
             return code;
         } else {
-            throw new MercedesMeAuthException("Failed to resume auth, status: " + authResponse.getStatus()
-                    + ", response: " + authResponse.getContentAsString());
+            throw new MercedesMeAuthException(
+                    "Failed to resume auth HTTP " + status + "  " + authResponse.getContentAsString());
         }
     }
 
@@ -446,8 +455,9 @@ public class Authorization {
         tokenRequest.content(new FormContentProvider(tokenParams));
 
         ContentResponse tokenResponse = send(tokenRequest);
+        int status = tokenResponse.getStatus();
         String tokenResponseString = tokenResponse.getContentAsString();
-        if (tokenResponse.getStatus() == 200) {
+        if (status == 200) {
             storeToken(tokenResponseString);
             logger.info("Successfully resumed login");
         } else {
@@ -458,7 +468,7 @@ public class Authorization {
              * 3) user needs to check response manually
              */
             storage.remove(identifier);
-            logger.info("Failed resume login {} {}", tokenResponse.getStatus(), tokenResponse.getContentAsString());
+            logger.info("Failed resume login {} {}", status, tokenResponse.getContentAsString());
         }
     }
 

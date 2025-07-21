@@ -74,12 +74,10 @@ import com.google.protobuf.Descriptors.FieldDescriptor;
 @NonNullByDefault
 public class Utils {
     private static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
-    private static final List<Integer> PORTS = new ArrayList<>();
     private static final List<CommandOption> FAHRENHEIT_COMMAND_OPTIONS = new ArrayList<>();
     private static final List<CommandOption> CELSIUS_COMMAND_OPTIONS = new ArrayList<>();
-
     private static final int R = 6371; // Radius of the earth
-    private static int port = 8090;
+
     public static TimeZoneProvider timeZoneProvider = new TimeZoneProvider() {
         @Override
         public ZoneId getTimeZone() {
@@ -128,19 +126,6 @@ public class Utils {
         ZonedDateTime zdt = timestamp.atZone(timeZoneProvider.getTimeZone());
         ZonedDateTime endTime = zdt.withHour(0).withMinute(0).withSecond(0).plusMinutes(minutesAfterMidnight);
         return new DateTimeType(endTime);
-    }
-
-    /**
-     * Get free port without other Thread interference from other AccountHandlers
-     *
-     * @return number of free port
-     */
-    public static synchronized int getFreePort() {
-        while (PORTS.contains(port)) {
-            port++;
-        }
-        PORTS.add(port);
-        return port;
     }
 
     /**
