@@ -92,7 +92,7 @@ class StatusTests {
         ThingStatusInfo tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.OFFLINE, tsi.getStatus(), "EMail offline");
         assertEquals(ThingStatusDetail.CONFIGURATION_ERROR, tsi.getStatusDetail(), "EMail config");
-        assertEquals("@text/mercedesme.account.status.email-missing", tsi.getDescription(), "EMail text");
+        assertEquals("@text/mercedesme.account.status.config.email-missing", tsi.getDescription(), "EMail text");
         tearDown(ahm);
 
         config.put("email", JUNIT_EMAIL);
@@ -103,7 +103,7 @@ class StatusTests {
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.OFFLINE, tsi.getStatus(), "Password offline");
         assertEquals(ThingStatusDetail.CONFIGURATION_ERROR, tsi.getStatusDetail(), "Password config");
-        assertEquals("@text/mercedesme.account.status.password-missing", tsi.getDescription(), "Password text");
+        assertEquals("@text/mercedesme.account.status.config.password-missing", tsi.getDescription(), "Password text");
         tearDown(ahm);
 
         config.put("password", JUNIT_PASSWORD);
@@ -114,7 +114,7 @@ class StatusTests {
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.OFFLINE, tsi.getStatus(), "Region offline");
         assertEquals(ThingStatusDetail.CONFIGURATION_ERROR, tsi.getStatusDetail(), "Region config");
-        assertEquals("@text/mercedesme.account.status.region-missing", tsi.getDescription(), "Region text");
+        assertEquals("@text/mercedesme.account.status.config.region-missing", tsi.getDescription(), "Region text");
         tearDown(ahm);
 
         config.put("region", "row");
@@ -136,7 +136,8 @@ class StatusTests {
         tsi = tcl.getThingStatus();
         assertEquals(ThingStatus.OFFLINE, tsi.getStatus(), "Refresh offline");
         assertEquals(ThingStatusDetail.CONFIGURATION_ERROR, tsi.getStatusDetail(), "Refresh config");
-        assertEquals("@text/mercedesme.account.status.refresh-invalid", tsi.getDescription(), "Refresh text");
+        assertEquals("@text/mercedesme.account.status.config.refresh-invalid[\"0\"]", tsi.getDescription(),
+                "Refresh text");
         tearDown(ahm);
     }
 
@@ -159,7 +160,7 @@ class StatusTests {
         assertEquals(ThingStatusDetail.COMMUNICATION_ERROR, tsi.getStatusDetail(), "Auth details");
         String statusDescription = tsi.getDescription();
         assertNotNull(statusDescription);
-        assertTrue(statusDescription.contains("@text/mercedesme.account.status.login-exception"),
+        assertTrue(statusDescription.contains("@text/mercedesme.account.status.auth-failure"),
                 "Auth text: " + statusDescription);
         tearDown(ahm);
         AccessTokenResponse token = new AccessTokenResponse();

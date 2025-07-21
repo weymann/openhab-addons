@@ -272,15 +272,14 @@ public class Constants {
     public static final String IMAGE_BASE_URL = "https://api.mercedes-benz.com/vehicle_images/v2";
     public static final String IMAGE_EXTERIOR_RESOURCE_URL = IMAGE_BASE_URL + "/vehicles/%s";
 
-    public static final String STATUS_TEXT_PREFIX = "@text/mercedesme.";
-    public static final String STATUS_LOGIN_FAILURE = ".status.login-failure";
-    public static final String STATUS_LOGIN_EXCEPTION = ".status.login-exception";
-    public static final String API_EXCEPTION = ".status.api-exception";
-    public static final String STATUS_EMAIL_MISSING = ".status.email-missing";
-    public static final String STATUS_PASSWORD_MISSING = ".status.password-missing";
-    public static final String STATUS_REGION_MISSING = ".status.region-missing";
-    public static final String STATUS_REFRESH_INVALID = ".status.refresh-invalid";
-    public static final String STATUS_BRIDGE_MISSING = ".status.bridge-missing";
+    public static final String STATUS_CONFIG_EMAIL_MISSING = "@text/mercedesme.account.status.config.email-missing";
+    public static final String STATUS_CONFIG_PASSWORD_MISSING = "@text/mercedesme.account.status.config.password-missing";
+    public static final String STATUS_CONFIG_REGION_MISSING = "@text/mercedesme.account.status.config.region-missing";
+    public static final String STATUS_CONFIG_REFRESH_LOW = "@text/mercedesme.account.status.config.refresh-invalid";
+    public static final String STATUS_AUTH_FAILURE = "@text/mercedesme.account.status.auth-failure";
+    public static final String STATUS_API_FAILURE = "@text/mercedesme.account.status.api-failure";
+    public static final String STATUS_WEBSOCKET_FAILURE = "@text/mercedesme.account.status.websocket-failure";
+    public static final String STATUS_BRIDGE_MISSING = "@text/mercedesme.vehicle.status.bridge-missing";
 
     public static final String SPACE = " ";
     public static final String EMPTY = "";

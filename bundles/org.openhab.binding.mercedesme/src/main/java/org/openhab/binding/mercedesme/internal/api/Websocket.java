@@ -47,8 +47,6 @@ import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.common.ThreadPoolManager;
 import org.openhab.core.i18n.LocaleProvider;
 import org.openhab.core.storage.Storage;
-import org.openhab.core.thing.ThingStatus;
-import org.openhab.core.thing.ThingStatusDetail;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -226,9 +224,7 @@ public class Websocket extends RestApi {
                 state = WebsocketState.STARTED;
             } catch (Exception e) {
                 // catch Exceptions of start stop and declare communication error
-                accountHandler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "@text/mercedesme.account.status.websocket-failure");
-                logger.warn("Websocket handling exception: {}", e.getMessage());
+                accountHandler.handleWebsocketError(e);
             }
         }
     }
@@ -242,33 +238,37 @@ public class Websocket extends RestApi {
      * In case of other state it will start the web socket connection.
      */
     private void doRefresh() {
-        if (!disposed) {
-            if (state == WebsocketState.CONNECTED) {
-                logger.trace("Refresh: Websocket fine - state {}", state);
-                if (sendMessage()) {
-                    // add additional runtime to execute and finish command
-                    runTill = runTill.plusMillis(ADDON_MESSAGE_TIME_MS);
-                }
-                ping();
-                if (keepAlive || Instant.now().isBefore(runTill)) {
-                    // doRefresh is called by AccountHandler, websocket endpoint onConnect and addCommand. To avoid
-                    // multiple future calls cancel the current running or future schedule calls.
-                    refresher.ifPresent(job -> {
-                        job.cancel(false);
-                    });
-                    refresher = Optional
-                            .of(scheduler.schedule(this::doRefresh, CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS));
-                } else {
-                    // run time is over - disconnect
-                    logger.debug("Websocket run time is over - disconnect");
-                    scheduler.execute(this::stop);
-                }
-            } else {
+        if (disposed) {
+            logger.trace("Refresh: Websocket disposed - state {}", state);
+            return;
+        }
+
+        switch (state) {
+            case CONNECTED:
+                handleConnectedState();
+                break;
+            default:
                 logger.trace("Refresh: Websocket needs to be started - state {}", state);
                 scheduler.execute(this::start);
-            }
+                break;
+        }
+    }
+
+    private void handleConnectedState() {
+        logger.trace("Refresh: Websocket fine - state {}", state);
+        if (sendMessage()) {
+            // add additional runtime to execute and finish command
+            runTill = runTill.plusMillis(ADDON_MESSAGE_TIME_MS);
+        }
+        sendPing();
+        if (keepAlive || Instant.now().isBefore(runTill)) {
+            // doRefresh is called by AccountHandler, websocket endpoint onConnect and addCommand. To avoid
+            // multiple future calls cancel the current running or future schedule calls.
+            refresher.ifPresent(job -> job.cancel(false));
+            refresher = Optional.of(scheduler.schedule(this::doRefresh, CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS));
         } else {
-            logger.trace("Refresh: Websocket disposed - state {}", state);
+            logger.debug("Websocket run time is over - disconnect");
+            scheduler.execute(this::stop);
         }
     }
 
@@ -307,7 +307,7 @@ public class Websocket extends RestApi {
     /**
      * Ping the server to keep the connection alive and to check if the connection is still valid.
      */
-    private void ping() {
+    private void sendPing() {
         session.ifPresent(session -> {
             try {
                 String pingId = UUID.randomUUID().toString();
@@ -316,6 +316,32 @@ public class Websocket extends RestApi {
             } catch (IOException e) {
                 logger.warn("Websocket ping failed {}", e.getMessage());
             }
+        });
+    }
+
+    private void handlePong(Frame frame) {
+        ByteBuffer buffer = frame.getPayload();
+        byte[] bytes = new byte[frame.getPayloadLength()];
+        for (int i = 0; i < frame.getPayloadLength(); i++) {
+            bytes[i] = buffer.get(i);
+        }
+        String paylodString = new String(bytes);
+        Instant sent = pingPongMap.remove(paylodString);
+        if (sent == null) {
+            logger.debug("Websocket receiced pong without ping {}", paylodString);
+        }
+    }
+
+    private void handlePing(Frame frame) {
+        session.ifPresentOrElse((session) -> {
+            ByteBuffer buffer = frame.getPayload();
+            try {
+                session.getRemote().sendPong(buffer);
+            } catch (IOException e) {
+                logger.warn("Websocket onPing answer exception {}", e.getMessage());
+            }
+        }, () -> {
+            logger.debug("Websocket onPing answer cannot be initiated");
         });
     }
 
@@ -372,27 +398,9 @@ public class Websocket extends RestApi {
     @OnWebSocketFrame
     public void onFrame(Frame frame) {
         if (Frame.Type.PONG.equals(frame.getType())) {
-            ByteBuffer buffer = frame.getPayload();
-            byte[] bytes = new byte[frame.getPayloadLength()];
-            for (int i = 0; i < frame.getPayloadLength(); i++) {
-                bytes[i] = buffer.get(i);
-            }
-            String paylodString = new String(bytes);
-            Instant sent = pingPongMap.remove(paylodString);
-            if (sent == null) {
-                logger.debug("Websocket receiced pong without ping {}", paylodString);
-            }
+            handlePong(frame);
         } else if (Frame.Type.PING.equals(frame.getType())) {
-            session.ifPresentOrElse((session) -> {
-                ByteBuffer buffer = frame.getPayload();
-                try {
-                    session.getRemote().sendPong(buffer);
-                } catch (IOException e) {
-                    logger.warn("Websocket onPing answer exception {}", e.getMessage());
-                }
-            }, () -> {
-                logger.debug("Websocket onPing answer cannot be initiated");
-            });
+            handlePing(frame);
         }
     }
 
@@ -401,7 +409,7 @@ public class Websocket extends RestApi {
         this.session = Optional.of(session);
         state = WebsocketState.CONNECTED;
         pingPongMap.clear();
-        accountHandler.updateStatus(ThingStatus.ONLINE);
+        accountHandler.handleConnected();
         logger.trace("Websocket connected - state {}", state);
         // websocket client is started and connected - time to refresh
         scheduler.execute(this::doRefresh);
@@ -424,9 +432,8 @@ public class Websocket extends RestApi {
         pingPongMap.clear();
         if (throwable != null) {
             logger.info("Websocket onClosedSession exception: {} - try to resume login", throwable.getMessage());
+            accountHandler.handleWebsocketError(throwable);
             accountHandler.resume();
-            accountHandler.updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                    "@text/mercedesme.account.status.websocket-failure [\"" + throwable.getMessage() + "\"]");
         }
         // stop web socket client for closed session
         scheduler.execute(this::stop);

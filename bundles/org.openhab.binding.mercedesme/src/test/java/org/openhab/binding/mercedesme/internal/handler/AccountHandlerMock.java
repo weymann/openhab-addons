@@ -71,10 +71,6 @@ public class AccountHandlerMock extends AccountHandler {
     }
 
     @Override
-    public void getVehicleCapabilities(String vin) {
-    }
-
-    @Override
     public void sendCommand(@Nullable ClientMessage cm) {
         if (cm != null) {
             command = ProtoConverter.clientMessage2Json(cm);

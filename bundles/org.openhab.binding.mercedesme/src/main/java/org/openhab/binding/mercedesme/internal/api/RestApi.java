@@ -72,6 +72,7 @@ public class RestApi extends Authorization {
             logger.trace("Send POI Response {} : {}", cr.getStatus(), cr.getContentAsString());
         } catch (MercedesMeApiException e) {
             logger.warn("Error Sending POI {}", e.getMessage());
+            // don't follow up exception because thing shall not go OFFLINE due to failed POI request
         }
     }
 

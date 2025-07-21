@@ -105,8 +105,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         disposed = false;
         updateStatus(ThingStatus.UNKNOWN);
         config = getConfigAs(AccountConfiguration.class);
-        String configValidReason = configValid();
-        if (!configValidReason.isEmpty()) {
+        String configValidReason = validateConfig();
+        if (!configValidReason.isBlank()) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, configValidReason);
         } else {
             api = new Websocket(this, httpClient, config, localeProvider, storage);
@@ -157,15 +157,11 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     public void resume() {
         try {
-            api.authLogin();
+            api.login();
         } catch (MercedesMeAuthException e) {
-            String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
-                    + Constants.STATUS_LOGIN_EXCEPTION + " [\"" + e.getMessage() + "\"]";
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+            handleAuthError(e);
         } catch (MercedesMeApiException e) {
-            String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId() + Constants.API_EXCEPTION
-                    + " [\"" + e.getMessage() + "\"]";
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+            handleApiError(e);
         }
     }
 
@@ -184,17 +180,16 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         return leftLimit + (long) (Math.random() * (rightLimit - leftLimit));
     }
 
-    private String configValid() {
+    private String validateConfig() {
         config = getConfigAs(AccountConfiguration.class);
-        String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId();
         if (Constants.NOT_SET.equals(config.email)) {
-            return textKey + Constants.STATUS_EMAIL_MISSING;
+            return STATUS_CONFIG_EMAIL_MISSING;
         } else if (Constants.NOT_SET.equals(config.password)) {
-            return textKey + Constants.STATUS_PASSWORD_MISSING;
+            return STATUS_CONFIG_PASSWORD_MISSING;
         } else if (Constants.NOT_SET.equals(config.region)) {
-            return textKey + Constants.STATUS_REGION_MISSING;
+            return STATUS_CONFIG_REGION_MISSING;
         } else if (config.refreshInterval < 5) {
-            return textKey + Constants.STATUS_REFRESH_INVALID;
+            return STATUS_CONFIG_REFRESH_LOW + "[\"" + config.refreshInterval + "\"]";
         } else {
             return Constants.EMPTY;
         }
@@ -223,9 +218,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     @Override
     public void onAccessTokenResponse(AccessTokenResponse tokenResponse) {
         if (Constants.NOT_SET.equals(tokenResponse.getAccessToken())) {
-            String textKey = Constants.STATUS_TEXT_PREFIX + thing.getThingTypeUID().getId()
-                    + Constants.STATUS_LOGIN_FAILURE;
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, textKey);
+            handleAuthError(new MercedesMeAuthException("Invalid Token"));
         }
     }
 
@@ -243,20 +236,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
 
     public void unregisterVin(String vin) {
         activeVehicleHandlerMap.remove(vin);
-    }
-
-    @SuppressWarnings("null")
-    public void getVehicleCapabilities(String vin) {
-        if (storage.containsKey(vin + FEATURE_APPENDIX)) {
-            if (activeVehicleHandlerMap.containsKey(vin)) {
-                activeVehicleHandlerMap.get(vin).setFeatureCapabilities(storage.get(vin + FEATURE_APPENDIX));
-            }
-        }
-        if (storage.containsKey(vin + COMMAND_APPENDIX)) {
-            if (activeVehicleHandlerMap.containsKey(vin)) {
-                activeVehicleHandlerMap.get(vin).setCommandCapabilities(storage.get(vin + COMMAND_APPENDIX));
-            }
-        }
     }
 
     /**
@@ -420,16 +399,6 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         }
     }
 
-    @Override
-    public void updateStatus(ThingStatus ts) {
-        super.updateStatus(ts);
-    }
-
-    @Override
-    public void updateStatus(ThingStatus ts, ThingStatusDetail tsd, @Nullable String tsdt) {
-        super.updateStatus(ts, tsd, tsdt);
-    }
-
     private void pullUpdates() {
         activeVehicleHandlerMap.entrySet().forEach(entry -> {
             try {
@@ -438,10 +407,28 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
                 logger.trace("Pull update delivered {} updates", update.getAttributesCount());
                 updateStatus(ThingStatus.ONLINE);
             } catch (MercedesMeApiException e) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
-                        "@text/mercedesme.account.status.api-exception [\"" + e.getMessage() + "\"]");
+                handleApiError(e);
             }
         });
+    }
+
+    private void handleAuthError(MercedesMeAuthException e) {
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                STATUS_AUTH_FAILURE + "[\"" + e.getMessage() + "\"]");
+    }
+
+    private void handleApiError(MercedesMeApiException e) {
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                STATUS_API_FAILURE + "[\"" + e.getMessage() + "\"]");
+    }
+
+    public void handleConnected() {
+        updateStatus(ThingStatus.ONLINE);
+    }
+
+    public void handleWebsocketError(Throwable t) {
+        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                STATUS_WEBSOCKET_FAILURE + "[\"" + t.getMessage() + "\"]");
     }
 
     /**
