@@ -12,9 +12,6 @@
  */
 package org.openhab.binding.mercedesme.internal.utils;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -24,7 +21,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -264,26 +260,6 @@ public class Utils {
      */
     public static String getTokenUrl(String region) {
         return getLoginServer(region) + "/as/token.oauth2";
-    }
-
-    /**
-     * Decode String as Base64 from stored AccessTokenResponse
-     *
-     * @param token - Base64 String from storage
-     * @return AccessTokenResponse decoded from String, invalid token otherwise
-     */
-    @Deprecated
-    public static AccessTokenResponse fromString(String token) {
-        try {
-            byte[] data = Base64.getDecoder().decode(token);
-            ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data));
-            Object o = ois.readObject();
-            ois.close();
-            return (AccessTokenResponse) o;
-        } catch (IOException | ClassNotFoundException e) {
-            LOGGER.warn("Error converting string to token {}", e.getMessage());
-        }
-        return INVALID_TOKEN;
     }
 
     /**
