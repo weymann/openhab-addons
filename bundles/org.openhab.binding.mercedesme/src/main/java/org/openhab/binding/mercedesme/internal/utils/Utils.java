@@ -13,8 +13,6 @@
 package org.openhab.binding.mercedesme.internal.utils;
 
 import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.time.Duration;
 import java.time.Instant;
@@ -615,20 +613,14 @@ public class Utils {
      * @param url - URL to split
      * @return Map with key-value pairs from query
      * @throws UnsupportedEncodingException if decoding fails
-     * @throws URISyntaxException
-     * @throws MalformedURLException
      */
-    public static Map<String, String> getQueryParams(String query) {
+    public static Map<String, String> getQueryParams(String query) throws UnsupportedEncodingException {
         Map<String, String> queryPairs = new LinkedHashMap<String, String>();
         String[] pairs = query.split("&");
         for (String pair : pairs) {
             int idx = pair.indexOf("=");
-            try {
-                queryPairs.put(URLDecoder.decode(pair.substring(0, idx), "UTF-8"),
-                        URLDecoder.decode(pair.substring(idx + 1), "UTF-8"));
-            } catch (UnsupportedEncodingException e) {
-                LOGGER.warn("UTF-8 encoding not supported {}", e.getMessage());
-            }
+            queryPairs.put(URLDecoder.decode(pair.substring(0, idx), "UTF-8"),
+                    URLDecoder.decode(pair.substring(idx + 1), "UTF-8"));
         }
         return queryPairs;
     }
