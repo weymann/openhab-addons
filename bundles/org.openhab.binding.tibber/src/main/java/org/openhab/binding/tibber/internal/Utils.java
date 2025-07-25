@@ -27,7 +27,6 @@ import org.openhab.binding.tibber.internal.exception.CalculationParameterExcepti
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
-import org.openhab.core.util.DurationUtils;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 import org.slf4j.Logger;
