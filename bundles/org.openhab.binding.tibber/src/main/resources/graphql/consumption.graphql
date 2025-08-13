@@ -1,0 +1,26 @@
+{
+  viewer {
+    home(id: "6425fdcd-ff28-43f8-a526-1ef81f9b89bc") {
+      consumption(
+        resolution: DAILY
+        first: 31
+        after: "MjAyMC0xMi0zMFQwMDowMDowMC4wMDArMDE6MDA="
+      ) {
+        edges {
+          cursor
+          node {
+            from
+            to
+            consumption
+            cost
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+          count
+        }
+      }
+    }
+  }
+}
