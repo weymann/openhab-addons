@@ -13,23 +13,30 @@
 package org.openhab.binding.tibber.internal;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 import static org.openhab.binding.tibber.internal.TibberBindingConstants.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.client.HttpClient;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.tibber.internal.action.TibberActions;
 import org.openhab.binding.tibber.internal.calculator.PriceCalculator;
 import org.openhab.binding.tibber.internal.dto.CurveEntry;
 import org.openhab.binding.tibber.internal.exception.CalculationParameterException;
+import org.openhab.core.i18n.TimeZoneProvider;
+import org.openhab.core.scheduler.CronScheduler;
+import org.openhab.core.test.storage.VolatileStorageService;
+import org.openhab.core.thing.Thing;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -43,6 +50,12 @@ import com.google.gson.JsonParser;
  */
 @NonNullByDefault
 public class TestActions {
+    static TimeZoneProvider timeZoneProvider = new TimeZoneProvider() {
+        @Override
+        public ZoneId getTimeZone() {
+            return ZoneId.systemDefault();
+        }
+    };
 
     static @Nullable TibberActions getActions() {
         String fileName = "src/test/resources/price-query-response.json";
@@ -55,7 +68,8 @@ public class TestActions {
                 spotPrices.addAll(priceInfo.getAsJsonArray("today"));
                 spotPrices.addAll(priceInfo.getAsJsonArray("tomorrow"));
                 PriceCalculator calc = new PriceCalculator(spotPrices);
-                TibberHandlerMock handlerMock = new TibberHandlerMock();
+                TibberHandlerMock handlerMock = new TibberHandlerMock(mock(Thing.class), mock(HttpClient.class),
+                        mock(CronScheduler.class), timeZoneProvider, new VolatileStorageService());
                 handlerMock.setPriceCalculator(calc);
                 TibberActions actions = new TibberActions();
                 actions.setThingHandler(handlerMock);

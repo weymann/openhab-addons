@@ -14,18 +14,10 @@ package org.openhab.binding.tibber.internal.handler;
 
 import static org.openhab.binding.tibber.internal.TibberBindingConstants.*;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -49,6 +41,10 @@ import org.openhab.binding.tibber.internal.action.TibberActions;
 import org.openhab.binding.tibber.internal.calculator.PriceCalculator;
 import org.openhab.binding.tibber.internal.config.TibberConfiguration;
 import org.openhab.binding.tibber.internal.exception.PriceCalculationException;
+import org.openhab.binding.tibber.internal.history.TibberHistory;
+import org.openhab.binding.tibber.internal.history.TibberHistory.TimeWindow;
+import org.openhab.binding.tibber.internal.history.TibberHistoryListener;
+import org.openhab.binding.tibber.internal.history.TibberHistorySeries;
 import org.openhab.binding.tibber.internal.websocket.TibberWebsocket;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.library.types.DecimalType;
@@ -56,6 +52,7 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.CurrencyUnits;
 import org.openhab.core.scheduler.CronScheduler;
 import org.openhab.core.scheduler.ScheduledCompletableFuture;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -68,8 +65,6 @@ import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.TimeSeries;
 import org.openhab.core.types.UnDefType;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,28 +79,30 @@ import com.google.gson.JsonSyntaxException;
  *
  * @author Stian Kjoglum - Initial contribution
  * @author Bernd Weymann - Use common HttpClient, rework of Nullable fields
+ * @author Bernd Weymann - add eenrgy price and taxes
+ * @author Bernd Weymann - use storage for history
  */
 @NonNullByDefault
-public class TibberHandler extends BaseThingHandler {
+public class TibberHandler extends BaseThingHandler implements TibberHistoryListener {
     private static final int REQUEST_TIMEOUT_SEC = 10;
     private final Logger logger = LoggerFactory.getLogger(TibberHandler.class);
-    private final Random random = new Random();
-    private final BundleContext bundleContext;
     private final HttpClient httpClient;
     private final CronScheduler cron;
-    private final Map<String, String> templates = new HashMap<>();
     private final TimeZoneProvider timeZoneProvider;
+    private final StorageService storageService;
 
     private final ConcurrentLinkedQueue<String> messageQueue = new ConcurrentLinkedQueue<>();
     private TibberConfiguration tibberConfig = new TibberConfiguration();
+    private TibberHistory history;
     private @Nullable ScheduledFuture<?> watchdog;
     private @Nullable ScheduledCompletableFuture<?> cronDaily;
     private @Nullable TibberWebsocket webSocket;
     private @Nullable Boolean realtimeEnabled;
     private @Nullable String currencyUnit;
     private Object calculatorLock = new Object();
-    private int retryCounter = 0;
     private boolean isDisposed = true;
+    private int retryCounter = 0;
+    private int dayOfMonth = -1;
 
     private TimeSeries priceCache = new TimeSeries(TimeSeries.Policy.REPLACE);
     private TimeSeries energyCache = new TimeSeries(TimeSeries.Policy.REPLACE);
@@ -115,13 +112,15 @@ public class TibberHandler extends BaseThingHandler {
 
     protected @Nullable PriceCalculator calculator;
 
-    public TibberHandler(Thing thing, HttpClient httpClient, CronScheduler cron, BundleContext bundleContext,
-            TimeZoneProvider timeZoneProvider) {
+    public TibberHandler(Thing thing, HttpClient httpClient, CronScheduler cron, TimeZoneProvider timeZoneProvider,
+            StorageService storageService) {
         super(thing);
         this.httpClient = httpClient;
         this.cron = cron;
-        this.bundleContext = bundleContext;
         this.timeZoneProvider = timeZoneProvider;
+        this.storageService = storageService;
+        dayOfMonth = Instant.now().atZone(timeZoneProvider.getTimeZone()).getDayOfMonth();
+        history = new TibberHistory(storageService, tibberConfig.homeid, this);
     }
 
     @Override
@@ -150,6 +149,29 @@ public class TibberHandler extends BaseThingHandler {
                                 averageCache);
                         break;
                 }
+            } else if (CHANNEL_GROUP_HISTORY.equals(group)) {
+                switch (channelUID.getIdWithoutGroup()) {
+                    case CHANNEL_YEARLY_CONSUMPTION:
+                    case CHANNEL_YEARLY_COST:
+                    case CHANNEL_YEARLY_PRODUCTION:
+                        history.updateHistory(TibberHistory.TimeWindow.ANNUAL.fullUpdate());
+                        break;
+                    case CHANNEL_MONTHLY_CONSUMPTION:
+                    case CHANNEL_MONTHLY_COST:
+                    case CHANNEL_MONTHLY_PRODUCTION:
+                        history.updateHistory(TibberHistory.TimeWindow.MONTHLY.fullUpdate());
+                        break;
+                    case CHANNEL_WEEKLY_CONSUMPTION:
+                    case CHANNEL_WEEKLY_COST:
+                    case CHANNEL_WEEKLY_PRODUCTION:
+                        history.updateHistory(TibberHistory.TimeWindow.WEEKLY.fullUpdate());
+                        break;
+                    case CHANNEL_DAILY_CONSUMPTION:
+                    case CHANNEL_DAILY_COST:
+                    case CHANNEL_DAILY_PRODUCTION:
+                        history.updateHistory(TibberHistory.TimeWindow.DAILY.fullUpdate());
+                        break;
+                }
             }
         }
     }
@@ -170,6 +192,7 @@ public class TibberHandler extends BaseThingHandler {
     @Override
     public void dispose() {
         isDisposed = true;
+        history.dispose(true);
 
         ScheduledCompletableFuture<?> cronDaily = this.cronDaily;
         if (cronDaily != null) {
@@ -195,8 +218,7 @@ public class TibberHandler extends BaseThingHandler {
     public Request getRequest() {
         Request req = httpClient.POST(BASE_URL).timeout(REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS);
         req.header(HttpHeader.AUTHORIZATION, "Bearer " + tibberConfig.token);
-        req.header(HttpHeader.USER_AGENT, Utils.getUserAgent(this));
-
+        req.header(HttpHeader.USER_AGENT, Utils.getUserAgent());
         req.header(HttpHeader.CONTENT_TYPE, JSON_CONTENT_TYPE);
         req.header("cache-control", "no-cache");
         return req;
@@ -205,7 +227,7 @@ public class TibberHandler extends BaseThingHandler {
     private void doInitialize() {
         Request currencyRequest = getRequest();
         String body = String.format(QUERY_CONTAINER,
-                String.format(getTemplate(CURRENCY_QUERY_RESOURCE_PATH), tibberConfig.homeid));
+                String.format(Utils.getTemplate(CURRENCY_QUERY_RESOURCE_PATH), tibberConfig.homeid));
         logger.trace("Query with body {}", body);
         currencyRequest.content(new StringContentProvider(body, "utf-8"));
         try {
@@ -228,6 +250,10 @@ public class TibberHandler extends BaseThingHandler {
                     } else {
                         logger.trace("Currency {} is unknown, falling back to DecimalType", currencyCode);
                     }
+
+                    // set up history handler
+                    history = new TibberHistory(storageService, tibberConfig.homeid, this);
+                    history.dispose(false);
 
                     // create websocket and watchdog
                     webSocket = new TibberWebsocket(this, tibberConfig, httpClient);
@@ -253,7 +279,8 @@ public class TibberHandler extends BaseThingHandler {
 
     private void watchdog() {
         TibberWebsocket webSocket = this.webSocket;
-        if (liveChannelsLinked() && isRealtimeEnabled()) {
+        boolean liveDataLinked = isChannelLinked(CHANNEL_GROUP_LIVE) || isChannelLinked(CHANNEL_GROUP_STATISTICS);
+        if (liveDataLinked && isRealtimeEnabled()) {
             if (webSocket != null) {
                 if (!webSocket.isConnected()) {
                     webSocket.start();
@@ -270,8 +297,24 @@ public class TibberHandler extends BaseThingHandler {
                     webSocket.stop();
                 }
             } else {
-                logger.trace("Websocket is kept offline - either feature disabled ({}) or channel mot linked ({})",
-                        isRealtimeEnabled(), liveChannelsLinked());
+                logger.trace("Websocket is kept offline - either feature disabled ({}) or channel not linked ({})",
+                        isRealtimeEnabled(), liveDataLinked);
+            }
+        }
+        updateHistoryChannels();
+    }
+
+    private void updateHistoryChannels() {
+        // granular daily update of history depending on linked items
+        int today = Instant.now().atZone(timeZoneProvider.getTimeZone()).getDayOfMonth();
+        if (today != dayOfMonth) {
+            dayOfMonth = today;
+            if (isChannelLinked(CHANNEL_GROUP_HISTORY)) {
+                for (TimeWindow window : TimeWindow.values()) {
+                    if (isChannelLinked(window.channelPrefix())) {
+                        history.updateHistory(window.partialUpdate());
+                    }
+                }
             }
         }
     }
@@ -279,7 +322,7 @@ public class TibberHandler extends BaseThingHandler {
     private void updateSpotPrices() {
         Request priceRequest = getRequest();
         String body = String.format(QUERY_CONTAINER,
-                String.format(getTemplate(PRICE_QUERY_RESOURCE_PATH), tibberConfig.homeid));
+                String.format(Utils.getTemplate(PRICE_QUERY_RESOURCE_PATH), tibberConfig.homeid));
         priceRequest.content(new StringContentProvider(body, "utf-8"));
         try {
             ContentResponse cr = priceRequest.send();
@@ -411,7 +454,7 @@ public class TibberHandler extends BaseThingHandler {
         } else {
             Request realtimeRequest = getRequest();
             String body = String.format(QUERY_CONTAINER,
-                    String.format(getTemplate(REALTIME_QUERY_RESOURCE_PATH), tibberConfig.homeid));
+                    String.format(Utils.getTemplate(REALTIME_QUERY_RESOURCE_PATH), tibberConfig.homeid));
             realtimeRequest.content(new StringContentProvider(body, "utf-8"));
 
             try {
@@ -433,11 +476,9 @@ public class TibberHandler extends BaseThingHandler {
         return false;
     }
 
-    private boolean liveChannelsLinked() {
+    private boolean isChannelLinked(String groupOrChannel) {
         return getThing().getChannels().stream().map(Channel::getUID)
-                .filter((channelUID -> channelUID.getAsString().contains(CHANNEL_GROUP_LIVE)
-                        || channelUID.getAsString().contains(CHANNEL_GROUP_STATISTICS)))
-                .anyMatch(this::isLinked);
+                .filter((channelUID -> channelUID.getAsString().contains(groupOrChannel))).anyMatch(this::isLinked);
     };
 
     private void updatePriceInfoRetry() {
@@ -445,16 +486,7 @@ public class TibberHandler extends BaseThingHandler {
             logger.trace("Retry rejected due to disposed thing");
             return;
         }
-        // fulfill https://developer.tibber.com/docs/guides/calling-api
-        // Clients must implement jitter and exponential backoff when retrying queries.
-        if (retryCounter == 0) {
-            retryCounter = 1;
-        } else {
-            retryCounter = Math.min(60, retryCounter * 2);
-        }
-
-        // return increasing time retry + random jitter, max 20 minutes
-        int retryMs = Math.min(1000 * retryCounter + random.nextInt(1000), 20 * 60 * 1000);
+        int retryMs = Utils.dynamicRetryTimeMs(++retryCounter);
         logger.trace("Try to update prices in {} ms", retryMs);
         scheduler.schedule(this::updateSpotPrices, retryMs, TimeUnit.MILLISECONDS);
     }
@@ -465,6 +497,52 @@ public class TibberHandler extends BaseThingHandler {
         } else if (message.contains("liveMeasurement")) {
             messageQueue.add(message);
             scheduler.schedule(this::handleNewMessage, 0, TimeUnit.SECONDS);
+        }
+    }
+
+    @Override
+    public void historyUpdated(TimeWindow window, @Nullable TibberHistorySeries series) {
+        if (series == null) {
+            logger.info("Update status to working {}", window.name());
+            updateStatus(thing.getStatus(), thing.getStatusInfo().getStatusDetail(),
+                    "@text/status.history-update [\"" + window.name() + "\"]");
+        } else {
+            Instant start = Instant.MIN;
+            if (!window.isFullUpdate()) {
+                start = Instant.now().minus(window.daysInWindow(), ChronoUnit.DAYS);
+            }
+            TimeSeries consumptionSeries = history.getStoredSeries(window).getTimeSeries(start,
+                    TibberHistorySeries.PURPOSE_CONSUMPTION);
+            logger.info("Consumption series with size {}", consumptionSeries.size());
+            if (consumptionSeries.size() > 0) {
+                System.out.println("Send consumption series");
+                sendTimeSeries(new ChannelUID(thing.getUID(), CHANNEL_GROUP_HISTORY,
+                        window.channelPrefix() + "-" + "consumption"), consumptionSeries);
+            }
+
+            TimeSeries costSeries = history.getStoredSeries(window).getTimeSeries(start,
+                    TibberHistorySeries.PURPOSE_COST);
+            logger.info("Cost series with size {}", costSeries.size());
+            if (costSeries.size() > 0) {
+                System.out.println("Send cost series");
+                sendTimeSeries(
+                        new ChannelUID(thing.getUID(), CHANNEL_GROUP_HISTORY, window.channelPrefix() + "-" + "cost"),
+                        costSeries);
+
+            }
+
+            TimeSeries productionSeries = history.getStoredSeries(window).getTimeSeries(start,
+                    TibberHistorySeries.PURPOSE_PRODUCTION);
+            logger.info("Production series with size {}", productionSeries.size());
+            if (productionSeries.size() > 0) {
+                System.out.println("Send production series");
+                sendTimeSeries(new ChannelUID(thing.getUID(), CHANNEL_GROUP_HISTORY,
+                        window.channelPrefix() + "-" + "production"), productionSeries);
+            }
+            System.out.println("update status");
+            logger.info("Update status to finished {}", window.name());
+            updateStatus(thing.getStatus(), thing.getStatusInfo().getStatusDetail());
+            logger.info("Update status to finished {} done", window.name());
         }
     }
 
@@ -566,44 +644,6 @@ public class TibberHandler extends BaseThingHandler {
             // value is null
             updateState(new ChannelUID(thing.getUID(), group, channelId), UnDefType.NULL);
         }
-    }
-
-    public String getTemplate(String name) {
-        String template = templates.get(name);
-        if (template == null) {
-            template = getResourceFile(name);
-            if (!template.isBlank()) {
-                templates.put(name, template);
-            } else {
-                template = EMPTY_VALUE;
-            }
-        }
-        return template;
-    }
-
-    private String getResourceFile(String fileName) {
-        try {
-            Bundle myself = bundleContext.getBundle();
-            // do this check for unit tests to avoid NullPointerException
-            if (myself != null) {
-                URL url = myself.getResource(fileName);
-                logger.debug("try to get {}", url);
-                InputStream input = url.openStream();
-                // https://www.baeldung.com/java-scanner-usedelimiter
-                try (Scanner scanner = new Scanner(input).useDelimiter("\\A")) {
-                    String result = scanner.hasNext() ? scanner.next() : "";
-                    String resultReplaceAll = result.replaceAll("[\\n\\r]", "");
-                    scanner.close();
-                    return resultReplaceAll;
-                }
-            } else {
-                // only unit testing
-                return Files.readString(Paths.get("src/main/resources" + fileName));
-            }
-        } catch (IOException e) {
-            logger.warn("no resource found for path {}", fileName);
-        }
-        return EMPTY_VALUE;
     }
 
     /**

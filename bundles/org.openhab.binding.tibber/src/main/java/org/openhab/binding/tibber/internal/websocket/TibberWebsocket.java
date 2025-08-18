@@ -86,7 +86,7 @@ public class TibberWebsocket {
         client.setMaxIdleTimeout(30 * 1000);
 
         ClientUpgradeRequest newRequest = new ClientUpgradeRequest();
-        newRequest.setHeader(HttpHeader.USER_AGENT.asString(), Utils.getUserAgent(this));
+        newRequest.setHeader(HttpHeader.USER_AGENT.asString(), Utils.getUserAgent());
         newRequest.setHeader(HttpHeader.AUTHORIZATION.asString(), "Bearer " + config.token);
         newRequest.setSubProtocols("graphql-transport-ws");
 

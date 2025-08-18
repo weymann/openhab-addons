@@ -41,6 +41,7 @@ public class TibberBindingConstants {
     public static final String CHANNEL_GROUP_PRICE = "price";
     public static final String CHANNEL_GROUP_LIVE = "live";
     public static final String CHANNEL_GROUP_STATISTICS = "statistics";
+    public static final String CHANNEL_GROUP_HISTORY = "history";
 
     // price channels
     public static final String CHANNEL_TOTAL_PRICE = "total-price";
@@ -74,10 +75,23 @@ public class TibberBindingConstants {
     public static final String CHANNEL_DAILY_PRODUCTION = "daily-production";
     public static final String CHANNEL_LAST_HOUR_PRODUCTION = "last-hour-production";
 
+    // history channels
+    public static final String CHANNEL_YEARLY_CONSUMPTION = "yearly-consumption";
+    public static final String CHANNEL_YEARLY_PRODUCTION = "yearly-production";
+    public static final String CHANNEL_YEARLY_COST = "yearly-cost";
+    public static final String CHANNEL_MONTHLY_CONSUMPTION = "monthly-consumption";
+    public static final String CHANNEL_MONTHLY_PRODUCTION = "monthly-production";
+    public static final String CHANNEL_MONTHLY_COST = "monthly-cost";
+    public static final String CHANNEL_WEEKLY_CONSUMPTION = "weekly-consumption";
+    public static final String CHANNEL_WEEKLY_PRODUCTION = "weekly-production";
+    public static final String CHANNEL_WEEKLY_COST = "weekly-cost";
+
     public static final String CURRENCY_QUERY_RESOURCE_PATH = "/graphql/currency.graphql";
     public static final String PRICE_QUERY_RESOURCE_PATH = "/graphql/prices.graphql";
     public static final String REALTIME_QUERY_RESOURCE_PATH = "/graphql/realtime.graphql";
     public static final String WEBSOCKET_SUBSCRIPTION_RESOURCE_PATH = "/graphql/websocket.graphql";
+    public static final String CONSUMPTION_QUERY = "/graphql/consumption.graphql";
+    public static final String PRODUCTION_QUERY = "/graphql/production.graphql";
 
     public static final String SCHEDULE_CONTAINER = "{\"size\":%s, \"cost\":%s, \"schedule\":%s}";
     public static final String QUERY_CONTAINER = "{\"query\":\"%s\"}";
@@ -92,6 +106,9 @@ public class TibberBindingConstants {
             "priceInfo" };
     public static final String[] REALTIME_FEATURE_JSON_PATH = new String[] { "data", "viewer", "home", "features" };
     public static final String[] SOCKET_MESSAGE_JSON_PATH = new String[] { "payload", "data", "liveMeasurement" };
+    public static final String[] HISTORY_CONSUMPTION_JSON_PATH = new String[] { "data", "viewer", "home",
+            "consumption" };
+    public static final String[] HISTORY_PRODUCTION_JSON_PATH = new String[] { "data", "viewer", "home", "production" };
 
     public static final String EMPTY_VALUE = "";
     public static final String NULL_VALUE = "null-value";

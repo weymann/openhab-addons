@@ -12,16 +12,15 @@
  */
 package org.openhab.binding.tibber.internal;
 
-import static org.mockito.Mockito.mock;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.tibber.internal.calculator.PriceCalculator;
 import org.openhab.binding.tibber.internal.handler.TibberHandler;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.scheduler.CronScheduler;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.Thing;
-import org.osgi.framework.BundleContext;
 
 /**
  * The {@link TibberHandlerMock} sets the PriceCalculator for unit testing.
@@ -31,12 +30,18 @@ import org.osgi.framework.BundleContext;
 @NonNullByDefault
 public class TibberHandlerMock extends TibberHandler {
 
-    public TibberHandlerMock() {
-        super(mock(Thing.class), mock(HttpClient.class), mock(CronScheduler.class), mock(BundleContext.class),
-                mock(TimeZoneProvider.class));
+    public TibberHandlerMock(Thing thing, HttpClient httpClient, CronScheduler cron, TimeZoneProvider timeZoneProvider,
+            StorageService storageService) {
+        super(thing, httpClient, cron, timeZoneProvider, storageService);
     }
 
     public void setPriceCalculator(PriceCalculator calc) {
         super.calculator = calc;
+    }
+
+    public void updateToken(String token) {
+        Configuration config = editConfiguration();
+        config.put("token", token);
+        super.updateConfiguration(config);
     }
 }

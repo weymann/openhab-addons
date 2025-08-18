@@ -1,7 +1,7 @@
 {
   viewer {
     home(id: \"%s\") {
-      consumption(
+      production(
         resolution: %s
         last: %s
         %s
@@ -11,10 +11,8 @@
           node {
             from
             to
-            consumption
-            cost
-            consumptionUnit
-            currency
+            production
+            productionUnit
           }
         }
         pageInfo {

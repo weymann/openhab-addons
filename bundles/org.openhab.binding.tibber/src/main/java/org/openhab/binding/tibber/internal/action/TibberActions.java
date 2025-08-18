@@ -168,8 +168,7 @@ public class TibberActions implements ThingActions {
                     result.remove("averagePrice");
                     result.remove("highestPrice");
                 }
-                Gson gson = new Gson();
-                return gson.toJson(result);
+                return Utils.GSON.toJson(result);
             } else {
                 throw new CalculationParameterException("Cannot perform calculation with parameters " + parameterMap);
             }

@@ -14,24 +14,31 @@ package org.openhab.binding.tibber.internal;
 
 import static org.openhab.binding.tibber.internal.TibberBindingConstants.*;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.Scanner;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.tibber.internal.dto.CurveEntry;
 import org.openhab.binding.tibber.internal.exception.CalculationParameterException;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.types.State;
 import org.openhab.core.types.UnDefType;
 import org.osgi.framework.Bundle;
-import org.osgi.framework.FrameworkUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -45,6 +52,15 @@ import com.google.gson.JsonParser;
 @NonNullByDefault
 public class Utils {
     private static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
+    private static final Map<String, String> TEMPLATES = new HashMap<>();
+    private static final Random RANDOM = new Random();
+    private static @Nullable Bundle bundle;
+
+    public static final Gson GSON = new Gson();
+
+    public static void init(Bundle b) {
+        bundle = b;
+    }
 
     /**
      * JSONObjects form Tibber API are deeply nested. Helper function to get a JSONObject from a defined path.
@@ -260,12 +276,66 @@ public class Utils {
     // fulfill https://developer.tibber.com/docs/guides/calling-api
     // Clients must set the User-Agent HTTP header when calling the GraphQL API. Both platform and driver version
     // must be indicated. E.g. Homey/10.0.0 com.tibber/1.8.3.
-    public static String getUserAgent(Object reference) {
-        Bundle b = FrameworkUtil.getBundle(reference.getClass());
-        if (b == null) {
+    public static String getUserAgent() {
+        Bundle localBundle = bundle;
+        if (localBundle == null) {
             return "openHAB5/com.tibber.test";
         } else {
-            return "openHAB/" + b.getVersion().toString();
+            return "openHAB/" + localBundle.getVersion().toString();
         }
+    }
+
+    /**
+     * Calculate the dynamic retry time in milliseconds based on the retry count. The time is calculated using
+     * exponential backoff with a maximum of 1024 seconds ~ 17 minutes. Additional jitter added with max 1000
+     * milliseconds to fulfill https://developer.tibber.com/docs/guides/calling-api
+     *
+     * @param retryCount the number of retries that have been attempted
+     * @return the calculated retry time in milliseconds
+     */
+    public static int dynamicRetryTimeMs(int retryCount) {
+        int exponentialBackoff = Math.min(1024, (int) Math.pow(2, retryCount));
+        return exponentialBackoff * 1000 + RANDOM.nextInt(1000);
+    }
+
+    public static String getTemplate(String name) {
+        String template = TEMPLATES.get(name);
+        if (template == null) {
+            template = getResourceFile(name);
+            System.out.println("getTemplate: " + name + " -> " + template);
+            if (!template.isBlank()) {
+                TEMPLATES.put(name, template);
+            } else {
+                template = EMPTY_VALUE;
+            }
+        }
+        return template;
+    }
+
+    private static String getResourceFile(String fileName) {
+        try {
+            // do this check for unit tests to avoid NullPointerException
+            Bundle localBundle = bundle;
+            System.out.println("getResourceFile: " + fileName + " from bundle " + localBundle);
+            if (localBundle != null) {
+                URL url = localBundle.getResource(fileName);
+                LOGGER.debug("try to get {}", url);
+                InputStream input = url.openStream();
+                // https://www.baeldung.com/java-scanner-usedelimiter
+                try (Scanner scanner = new Scanner(input).useDelimiter("\\A")) {
+                    String result = scanner.hasNext() ? scanner.next() : "";
+                    String resultReplaceAll = result.replaceAll("[\\n\\r]", "");
+                    scanner.close();
+                    System.out.println("getResourceFile: " + fileName + " -> " + resultReplaceAll);
+                    return resultReplaceAll.replaceAll("[\\n\\r]", "");
+                }
+            } else {
+                // only unit testing
+                // return Files.readString(Paths.get("src/main/resources" + fileName)).replaceAll("[\\n\\r]", "");
+            }
+        } catch (IOException e) {
+            LOGGER.warn("no resource found for path {}", fileName);
+        }
+        return EMPTY_VALUE;
     }
 }

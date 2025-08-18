@@ -1,0 +1,149 @@
+{
+  "data": {
+    "viewer": {
+      "home": {
+        "consumption": {
+          "edges": [
+            {
+              "cursor": "MjAyMC0xMC0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2020-10-01T00:00:00.000+02:00",
+                "to": "2020-11-01T00:00:00.000+01:00",
+                "consumption": 368.285,
+                "cost": 88.9567197492,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMC0xMS0wMVQwMDowMDowMC4wMDArMDE6MDA=",
+              "node": {
+                "from": "2020-11-01T00:00:00.000+01:00",
+                "to": "2020-12-01T00:00:00.000+01:00",
+                "consumption": 380.943,
+                "cost": 94.3477829192,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMC0xMi0wMVQwMDowMDowMC4wMDArMDE6MDA=",
+              "node": {
+                "from": "2020-12-01T00:00:00.000+01:00",
+                "to": "2021-01-01T00:00:00.000+01:00",
+                "consumption": 410.985,
+                "cost": 104.1344204592,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wMS0wMVQwMDowMDowMC4wMDArMDE6MDA=",
+              "node": {
+                "from": "2021-01-01T00:00:00.000+01:00",
+                "to": "2021-02-01T00:00:00.000+01:00",
+                "consumption": 486.085,
+                "cost": 131.8114932568,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wMi0wMVQwMDowMDowMC4wMDArMDE6MDA=",
+              "node": {
+                "from": "2021-02-01T00:00:00.000+01:00",
+                "to": "2021-03-01T00:00:00.000+01:00",
+                "consumption": 436.932,
+                "cost": 116.1938050938,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wMy0wMVQwMDowMDowMC4wMDArMDE6MDA=",
+              "node": {
+                "from": "2021-03-01T00:00:00.000+01:00",
+                "to": "2021-04-01T00:00:00.000+02:00",
+                "consumption": 477.768,
+                "cost": 125.3350409934,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wNC0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-04-01T00:00:00.000+02:00",
+                "to": "2021-05-01T00:00:00.000+02:00",
+                "consumption": 91.86,
+                "cost": 24.7883437186,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wNS0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-05-01T00:00:00.000+02:00",
+                "to": "2021-06-01T00:00:00.000+02:00",
+                "consumption": 21.089,
+                "cost": 5.6829195059,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wNi0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-06-01T00:00:00.000+02:00",
+                "to": "2021-07-01T00:00:00.000+02:00",
+                "consumption": 13.751,
+                "cost": 4.0427801813,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wNy0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-07-01T00:00:00.000+02:00",
+                "to": "2021-08-01T00:00:00.000+02:00",
+                "consumption": 13.44,
+                "cost": 4.0794258386,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wOC0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-08-01T00:00:00.000+02:00",
+                "to": "2021-09-01T00:00:00.000+02:00",
+                "consumption": 32.276,
+                "cost": 9.9001988358,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            },
+            {
+              "cursor": "MjAyMS0wOS0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+              "node": {
+                "from": "2021-09-01T00:00:00.000+02:00",
+                "to": "2021-10-01T00:00:00.000+02:00",
+                "consumption": 46.586,
+                "cost": 17.0218628874,
+                "consumptionUnit": "kWh",
+                "currency": "EUR"
+              }
+            }
+          ],
+          "pageInfo": {
+            "hasNextPage": true,
+            "endCursor": "MjAyMS0wOS0wMVQwMDowMDowMC4wMDArMDI6MDA=",
+            "count": 12
+          }
+        }
+      }
+    }
+  }
+}
