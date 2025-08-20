@@ -1,5 +1,5 @@
-/*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+/**
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,7 +14,6 @@ package org.openhab.binding.amazonechocontrol.internal.dto.response;
 
 import java.util.List;
 
-import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.amazonechocontrol.internal.dto.smarthome.JsonSmartHomeDevice;
@@ -41,7 +40,7 @@ public class SmartHomeTO {
                 && endpoints.items instanceof List<EndPointItemTO> items) {
 
             return items.stream().map(item -> item.legacyAppliance).filter(java.util.Objects::nonNull)
-                    .map(device -> (@NonNull JsonSmartHomeDevice) device).toList();
+                    .map(device -> (JsonSmartHomeDevice) device).toList();
         }
         return List.of();
     }
