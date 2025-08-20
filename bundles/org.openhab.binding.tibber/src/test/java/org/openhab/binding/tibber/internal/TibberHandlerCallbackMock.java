@@ -12,20 +12,22 @@
  */
 package org.openhab.binding.tibber.internal;
 
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 
+import java.nio.channels.Channel;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.config.core.ConfigDescription;
-import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.Bridge;
-import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelGroupUID;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
@@ -33,9 +35,9 @@ import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.type.ChannelGroupTypeUID;
 import org.openhab.core.thing.type.ChannelTypeUID;
-import org.openhab.core.types.Command;
-import org.openhab.core.types.State;
 import org.openhab.core.types.TimeSeries;
+
+import javafx.scene.web.HTMLEditorSkin.Command;
 
 /**
  * The {@link TibberHandlerCallbackMock} sets the callback for handler
@@ -44,76 +46,73 @@ import org.openhab.core.types.TimeSeries;
  */
 @NonNullByDefault
 public class TibberHandlerCallbackMock implements ThingHandlerCallback {
+    ThingStatusInfo thingStatusInfo = new ThingStatusInfo(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, null);
 
     @Override
     public void stateUpdated(ChannelUID channelUID, State state) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void postCommand(ChannelUID channelUID, Command command) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void sendTimeSeries(ChannelUID channelUID, TimeSeries timeSeries) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void statusUpdated(Thing thing, ThingStatusInfo thingStatus) {
         System.out.println("Status updated: " + thing.getUID() + " -> " + thingStatus);
+        thingStatusInfo = thingStatus;
+    }
+
+    public void waitFor(ThingStatus status) {
+        synchronized (thingStatusInfo) {
+            if (!thingStatusInfo.getStatus().equals(status)) {
+                try {
+                    thingStatusInfo.wait(5000);
+                } catch (InterruptedException e) {
+                    fail(e.getMessage());
+                }
+            }
+        }
+        if (!thingStatusInfo.getStatus().equals(status)) {
+            fail("Thing status " + status + " not reached within 5 seconds");
+        }
     }
 
     @Override
     public void thingUpdated(Thing thing) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void validateConfigurationParameters(Thing thing, Map<String, Object> configurationParameters) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void validateConfigurationParameters(Channel channel, Map<String, Object> configurationParameters) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public @Nullable ConfigDescription getConfigDescription(ChannelTypeUID channelTypeUID) {
-        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public @Nullable ConfigDescription getConfigDescription(ThingTypeUID thingTypeUID) {
-        // TODO Auto-generated method stub
         return null;
     }
 
     @Override
     public void configurationUpdated(Thing thing) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void migrateThingType(Thing thing, ThingTypeUID thingTypeUID, Configuration configuration) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
     public void channelTriggered(Thing thing, ChannelUID channelUID, String event) {
-        // TODO Auto-generated method stub
-
     }
 
     @Override
@@ -141,5 +140,4 @@ public class TibberHandlerCallbackMock implements ThingHandlerCallback {
     public @Nullable Bridge getBridge(ThingUID bridgeUID) {
         return mock(Bridge.class);
     }
-
 }
