@@ -57,9 +57,15 @@ public class Utils {
         JsonObject iterator = json;
         for (int i = 0; i < path.length; i++) {
             if (iterator.has(path[i])) {
-                iterator = iterator.getAsJsonObject(path[i]);
+                JsonElement element = iterator.get(path[i]);
+                if (element.isJsonObject()) {
+                    iterator = element.getAsJsonObject();
+                } else {
+                    LOGGER.warn("Unable to resolve complete path {} from {}", Utils.path(path), json);
+                    return new JsonObject();
+                }
             } else {
-                LOGGER.error("Unable to resolve path {} from {}", Utils.path(path), json);
+                LOGGER.warn("Unable to resolve path {} from {}", Utils.path(path), json);
                 return new JsonObject();
                 // all paths are tested according to Tibber API. If this happens binding needs to be adapted
             }

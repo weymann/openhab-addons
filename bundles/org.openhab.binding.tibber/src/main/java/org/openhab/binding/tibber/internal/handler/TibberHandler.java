@@ -21,8 +21,10 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
@@ -51,6 +53,7 @@ import org.openhab.binding.tibber.internal.config.TibberConfiguration;
 import org.openhab.binding.tibber.internal.exception.PriceCalculationException;
 import org.openhab.binding.tibber.internal.websocket.TibberWebsocket;
 import org.openhab.core.i18n.TimeZoneProvider;
+import org.openhab.core.library.CoreItemFactory;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.CurrencyUnits;
@@ -63,6 +66,9 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.thing.binding.ThingHandlerService;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
 import org.openhab.core.types.State;
@@ -206,6 +212,7 @@ public class TibberHandler extends BaseThingHandler {
         Request currencyRequest = getRequest();
         String body = String.format(QUERY_CONTAINER,
                 String.format(getTemplate(CURRENCY_QUERY_RESOURCE_PATH), tibberConfig.homeid));
+        System.out.println("Tibber query: " + body); // for debugging purposes
         logger.trace("Query with body {}", body);
         currencyRequest.content(new StringContentProvider(body, "utf-8"));
         try {
@@ -217,6 +224,7 @@ public class TibberHandler extends BaseThingHandler {
                 JsonObject jsonResponse = (JsonObject) JsonParser.parseString(currencyResponse);
                 JsonObject currency = Utils.getJsonObject(jsonResponse, CURRENCY_QUERY_JSON_PATH);
                 if (!currency.isEmpty()) {
+                    addPriceChannnels(true);
                     updateStatus(ThingStatus.ONLINE);
 
                     // check if currency is supported
@@ -239,6 +247,15 @@ public class TibberHandler extends BaseThingHandler {
                     String cronHour = (hour < 0) ? "*" : String.valueOf(hour);
                     cronDaily = cron.schedule(this::updateSpotPrices, String.format(CRON_DAILY_AT, cronHour));
                     return;
+                } else {
+                    // there's no subscription for priceInfo in the response - remove price channels!
+                    addPriceChannnels(false);
+                    updateStatus(ThingStatus.ONLINE);
+                    System.out.println("No currency found in response: " + currencyResponse);
+
+                    // create websocket and watchdog
+                    webSocket = new TibberWebsocket(this, tibberConfig, httpClient);
+                    watchdog = scheduler.scheduleWithFixedDelay(this::watchdog, 0, 1, TimeUnit.MINUTES);
                 }
             } else {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
@@ -249,6 +266,25 @@ public class TibberHandler extends BaseThingHandler {
                     "@text/status.initial-call-failed  [\"" + e.getMessage() + "\"]");
         }
         watchdog = scheduler.schedule(this::doInitialize, 1, TimeUnit.MINUTES);
+    }
+
+    private void addPriceChannnels(boolean add) {
+        if ((add && thing.getChannel(CHANNEL_SPOT_PRICE) != null)
+                || (!add && thing.getChannel(CHANNEL_SPOT_PRICE) == null)) {
+            // don't add channel if already available OR remove channel if not available
+            return;
+        }
+        ThingBuilder thingBuilder = editThing();
+        List<Channel> channels = new ArrayList<>();
+        PRICE_COST_CHANNELS.forEach((channelId, channelType) -> {
+            channels.add(ChannelBuilder.create(new ChannelUID(thing.getUID(), channelId), CoreItemFactory.NUMBER)
+                    .withType(new ChannelTypeUID(BINDING_ID, channelType)).build());
+        });
+        if (add) {
+            updateThing(thingBuilder.withChannels(channels).build());
+        } else {
+            updateThing(thingBuilder.withoutChannels(channels).build());
+        }
     }
 
     private void watchdog() {

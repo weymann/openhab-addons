@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.tibber.internal;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -73,6 +74,9 @@ public class TibberBindingConstants {
     public static final String CHANNEL_TOTAL_PRODUCTION = "total-production";
     public static final String CHANNEL_DAILY_PRODUCTION = "daily-production";
     public static final String CHANNEL_LAST_HOUR_PRODUCTION = "last-hour-production";
+
+    public static final Map<String, String> PRICE_COST_CHANNELS = Map.of(CHANNEL_SPOT_PRICE, "price",
+            CHANNEL_PRICE_LEVELS, "price-level", CHANNEL_AVERAGE, "price", CHANNEL_DAILY_COST, "cost");
 
     public static final String CURRENCY_QUERY_RESOURCE_PATH = "/graphql/currency.graphql";
     public static final String PRICE_QUERY_RESOURCE_PATH = "/graphql/prices.graphql";
