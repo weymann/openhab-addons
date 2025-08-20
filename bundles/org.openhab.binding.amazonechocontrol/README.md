@@ -4,7 +4,7 @@ This binding can control Amazon Echo devices (Alexa) and Smarthome devices conne
 
 Upgrade notice:
 
-- The `lastVoiceCommand` channel of the `amazonechocontrol` binding changed its behavior in version 5.0.0.
+- The `lastVoiceCommand` channel of the `amazonechocontrol` binding changed its behavior in version 4.3.8.
 Due to a wrong implementation the channel changed it's state to an empty string if the same command was received again.
 This has been corrected.
 If you want to be notified about every state update, please adjust your rule triggers to "received update".
