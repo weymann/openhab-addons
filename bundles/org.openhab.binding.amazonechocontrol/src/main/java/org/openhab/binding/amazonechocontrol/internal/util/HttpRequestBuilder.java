@@ -421,12 +421,10 @@ public class HttpRequestBuilder {
     public record HttpResponse(int statusCode, HttpFields headers, String content) {
         @Override
         public boolean equals(@Nullable Object o) {
-            if (this == o) {
+            if (this == o)
                 return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
+            if (o == null || getClass() != o.getClass())
                 return false;
-            }
             HttpResponse response = (HttpResponse) o;
             return statusCode == response.statusCode && Objects.equals(headers, response.headers)
                     && Objects.equals(content, response.content);
