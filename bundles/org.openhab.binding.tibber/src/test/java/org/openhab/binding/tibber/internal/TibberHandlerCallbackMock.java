@@ -1,5 +1,5 @@
-/*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+/**
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,14 +15,17 @@ package org.openhab.binding.tibber.internal;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 
-import java.nio.channels.Channel;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.config.core.ConfigDescription;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelGroupUID;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -35,9 +38,9 @@ import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.type.ChannelGroupTypeUID;
 import org.openhab.core.thing.type.ChannelTypeUID;
+import org.openhab.core.types.Command;
+import org.openhab.core.types.State;
 import org.openhab.core.types.TimeSeries;
-
-import javafx.scene.web.HTMLEditorSkin.Command;
 
 /**
  * The {@link TibberHandlerCallbackMock} sets the callback for handler
@@ -62,15 +65,18 @@ public class TibberHandlerCallbackMock implements ThingHandlerCallback {
 
     @Override
     public void statusUpdated(Thing thing, ThingStatusInfo thingStatus) {
-        System.out.println("Status updated: " + thing.getUID() + " -> " + thingStatus);
-        thingStatusInfo = thingStatus;
+        synchronized (this) {
+            thingStatusInfo = thingStatus;
+            this.notifyAll();
+        }
     }
 
     public void waitFor(ThingStatus status) {
-        synchronized (thingStatusInfo) {
-            if (!thingStatusInfo.getStatus().equals(status)) {
+        Instant stopWait = Instant.now().plus(10, ChronoUnit.SECONDS);
+        synchronized (this) {
+            while (!thingStatusInfo.getStatus().equals(status) && Instant.now().isBefore(stopWait)) {
                 try {
-                    thingStatusInfo.wait(5000);
+                    this.wait(500);
                 } catch (InterruptedException e) {
                     fail(e.getMessage());
                 }

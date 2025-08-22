@@ -17,8 +17,6 @@ import static org.openhab.binding.tibber.internal.TibberBindingConstants.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.net.http.HttpClient;
-import java.nio.channels.Channel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Instant;
@@ -42,11 +40,13 @@ import javax.measure.Unit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.StringContentProvider;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpStatus;
+import org.openhab.binding.tibber.internal.Utils;
 import org.openhab.binding.tibber.internal.action.TibberActions;
 import org.openhab.binding.tibber.internal.calculator.PriceCalculator;
 import org.openhab.binding.tibber.internal.config.TibberConfiguration;
@@ -59,6 +59,7 @@ import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.CurrencyUnits;
 import org.openhab.core.scheduler.CronScheduler;
 import org.openhab.core.scheduler.ScheduledCompletableFuture;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -68,11 +69,14 @@ import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
+import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.State;
 import org.openhab.core.types.TimeSeries;
 import org.openhab.core.types.UnDefType;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonArray;
@@ -80,8 +84,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
-
-import javafx.scene.web.HTMLEditorSkin.Command;
 
 /**
  * The {@link TibberHandler} is responsible for handling queries to/from Tibber API.
@@ -217,7 +219,6 @@ public class TibberHandler extends BaseThingHandler {
         Request initialize = getRequest();
         String body = String.format(QUERY_CONTAINER,
                 String.format(getTemplate(CURRENCY_QUERY_RESOURCE_PATH), tibberConfig.homeid));
-        System.out.println("Tibber query: " + body); // for debugging purposes
         logger.trace("Query with body {}", body);
         initialize.content(new StringContentProvider(body, "utf-8"));
         try {
@@ -249,7 +250,7 @@ public class TibberHandler extends BaseThingHandler {
                             // Tibber customer BUT if he has a Tibber Pulse hardware user can retrieve live values.
                             // https://community.openhab.org/t/tibber-oh5/164158/52
                             // remove price and cost channels
-                            addPriceChannnels(false);
+                            addPriceChannels(false);
                             updateStatus(ThingStatus.ONLINE);
                             logger.info("No currency found in response: {}", initialResponse);
                             // create websocket and watchdog
@@ -260,7 +261,7 @@ public class TibberHandler extends BaseThingHandler {
                             if (!currentJson.isEmpty()) {
                                 // case: regular user
                                 // user can get all data and add channels if necessary
-                                addPriceChannnels(true);
+                                addPriceChannels(true);
                                 updateStatus(ThingStatus.ONLINE);
 
                                 // check if currency is supported
@@ -309,7 +310,7 @@ public class TibberHandler extends BaseThingHandler {
         }
     }
 
-    private void addPriceChannnels(boolean add) {
+    protected void addPriceChannels(boolean add) {
         logger.trace("Add? {}. Has spot price channel? {}", add,
                 thing.getChannel(new ChannelUID(thing.getUID(), CHANNEL_GROUP_PRICE, CHANNEL_SPOT_PRICE)) != null);
         boolean hasPriceChannels = thing
@@ -331,25 +332,6 @@ public class TibberHandler extends BaseThingHandler {
             channels.forEach(channel -> {
                 updateThing(thingBuilder.withChannel(channel).build());
             });
-        } else {
-            updateThing(thingBuilder.withoutChannels(channels).build());
-        }
-    }
-
-    private void addPriceChannnels(boolean add) {
-        if ((add && thing.getChannel(CHANNEL_SPOT_PRICE) != null)
-                || (!add && thing.getChannel(CHANNEL_SPOT_PRICE) == null)) {
-            // don't add channel if already available OR remove channel if not available
-            return;
-        }
-        ThingBuilder thingBuilder = editThing();
-        List<Channel> channels = new ArrayList<>();
-        PRICE_COST_CHANNELS.forEach((channelId, channelType) -> {
-            channels.add(ChannelBuilder.create(new ChannelUID(thing.getUID(), channelId), CoreItemFactory.NUMBER)
-                    .withType(new ChannelTypeUID(BINDING_ID, channelType)).build());
-        });
-        if (add) {
-            updateThing(thingBuilder.withChannels(channels).build());
         } else {
             updateThing(thingBuilder.withoutChannels(channels).build());
         }

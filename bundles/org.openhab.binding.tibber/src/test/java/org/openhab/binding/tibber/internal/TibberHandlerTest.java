@@ -1,5 +1,5 @@
-/*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+/**
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,7 +18,6 @@ import static org.mockito.Mockito.*;
 import static org.openhab.binding.tibber.internal.TibberBindingConstants.TIBBER_THING_TYPE;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -27,12 +26,14 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpStatus;
 import org.junit.jupiter.api.Test;
 import org.openhab.binding.tibber.internal.handler.TibberHandler;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.i18n.TimeZoneProvider;
 import org.openhab.core.scheduler.CronScheduler;
 import org.openhab.core.thing.ThingStatus;
@@ -77,7 +78,7 @@ public class TibberHandlerTest {
         config.put("homeid", "testHomeId");
         thing.setConfiguration(config);
 
-        TibberHandler handler = new TibberHandler(thing, httpClientMock, mock(CronScheduler.class),
+        TibberHandlerMock handler = new TibberHandlerMock(thing, httpClientMock, mock(CronScheduler.class),
                 mock(BundleContext.class), mock(TimeZoneProvider.class));
         TibberHandlerCallbackMock callback = new TibberHandlerCallbackMock();
         handler.setCallback(callback);
