@@ -97,6 +97,7 @@ import com.daimler.mbcarkit.proto.VehicleCommands.ZEVPreconditioningStart;
 import com.daimler.mbcarkit.proto.VehicleCommands.ZEVPreconditioningStop;
 import com.daimler.mbcarkit.proto.VehicleCommands.ZEVPreconditioningType;
 import com.daimler.mbcarkit.proto.VehicleEvents;
+import com.daimler.mbcarkit.proto.VehicleEvents.ChargeProgram;
 import com.daimler.mbcarkit.proto.VehicleEvents.ChargeProgramParameters;
 import com.daimler.mbcarkit.proto.VehicleEvents.ChargeProgramsValue;
 import com.daimler.mbcarkit.proto.VehicleEvents.TemperaturePointsValue;
@@ -128,7 +129,7 @@ public class VehicleHandler extends BaseThingHandler {
     private Map<String, UOMObserver> unitStorage = new HashMap<>();
     private int ignitionState = -1;
     private boolean chargingState = false;
-    private int selectedChargeProgram = -1;
+    private int selectedChargeProgram = ChargeProgram.DEFAULT_CHARGE_PROGRAM_VALUE;
     private int activeTemperaturePoint = -1;
     private Map<Integer, QuantityType<Temperature>> temperaturePointsStorage = new HashMap<>();
     private JSONObject chargeGroupValueStorage = new JSONObject();
@@ -181,8 +182,9 @@ public class VehicleHandler extends BaseThingHandler {
 
     @Override
     public void dispose() {
-        if (accountHandler != null) {
-            accountHandler.unregisterVin(config.vin);
+        AccountHandler localAccountHandler = accountHandler;
+        if (localAccountHandler != null) {
+            localAccountHandler.unregisterVin(config.vin);
         }
         eventQueue.clear();
         super.dispose();
@@ -906,19 +908,31 @@ public class VehicleHandler extends BaseThingHandler {
                     vas = atts.get(MB_KEY_SELECTED_CHARGE_PROGRAM);
                     if (vas != null) {
                         selectedChargeProgram = (int) vas.getIntValue();
+                        logger.trace("Charge Program selected value found {}", selectedChargeProgram);
+                    } else {
+                        logger.trace("Charge Program selected value not found, full update? {}", fullUpdate);
+                        if (fullUpdate) {
+                            logger.trace("Charge Program selected value found {}", selectedChargeProgram);
+                            selectedChargeProgram = ChargeProgram.DEFAULT_CHARGE_PROGRAM_VALUE;
+                        }
                     }
+                    logger.trace("Charge Program selected {}", selectedChargeProgram);
                     if (selectedChargeProgram != -1) {
-                        ChargeProgramParameters cpp = cpv.getChargeProgramParameters(selectedChargeProgram);
-                        ChannelStateMap programMap = new ChannelStateMap(OH_CHANNEL_PROGRAM, GROUP_CHARGE,
-                                DecimalType.valueOf(Integer.toString(selectedChargeProgram)));
-                        updateChannel(programMap);
-                        ChannelStateMap maxSocMap = new ChannelStateMap(OH_CHANNEL_MAX_SOC, GROUP_CHARGE,
-                                QuantityType.valueOf((double) cpp.getMaxSoc(), Units.PERCENT));
-                        updateChannel(maxSocMap);
-                        socChanged.set(true);
-                        ChannelStateMap autoUnlockMap = new ChannelStateMap(OH_CHANNEL_AUTO_UNLOCK, GROUP_CHARGE,
-                                OnOffType.from(cpp.getAutoUnlock()));
-                        updateChannel(autoUnlockMap);
+                        try {
+                            ChargeProgramParameters cpp = cpv.getChargeProgramParameters(selectedChargeProgram);
+                            ChannelStateMap programMap = new ChannelStateMap(OH_CHANNEL_PROGRAM, GROUP_CHARGE,
+                                    DecimalType.valueOf(Integer.toString(selectedChargeProgram)));
+                            updateChannel(programMap);
+                            ChannelStateMap maxSocMap = new ChannelStateMap(OH_CHANNEL_MAX_SOC, GROUP_CHARGE,
+                                    QuantityType.valueOf((double) cpp.getMaxSoc(), Units.PERCENT));
+                            updateChannel(maxSocMap);
+                            socChanged.set(true);
+                            ChannelStateMap autoUnlockMap = new ChannelStateMap(OH_CHANNEL_AUTO_UNLOCK, GROUP_CHARGE,
+                                    OnOffType.from(cpp.getAutoUnlock()));
+                            updateChannel(autoUnlockMap);
+                        } catch (IndexOutOfBoundsException indexException) {
+                            logger.trace("Charge Program index {} not valid", selectedChargeProgram);
+                        }
                     } else {
                         logger.trace("Charge Program index {} not valid", selectedChargeProgram);
                     }

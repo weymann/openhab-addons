@@ -52,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
 import com.daimler.mbcarkit.proto.VehicleEvents;
 import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
+import com.google.protobuf.util.JsonFormat;
 
 /**
  * {@link Websocket} as socket endpoint to communicate with Mercedes
@@ -146,8 +147,9 @@ public class Websocket extends RestApi {
         if (disposed) {
             runTill = Instant.MIN;
             keepAlive = false;
-            if (refresher != null) {
-                refresher.cancel(false);
+            ScheduledFuture<?> localRefresher = refresher;
+            if (localRefresher != null) {
+                localRefresher.cancel(false);
             }
             refresher = null;
             scheduler.execute(this::stop);
@@ -262,8 +264,9 @@ public class Websocket extends RestApi {
         if (keepAlive || Instant.now().isBefore(runTill)) {
             // doRefresh is called by AccountHandler, websocket endpoint onConnect and addCommand. To avoid
             // multiple future calls cancel the current running or future schedule calls.
-            if (refresher != null) {
-                refresher.cancel(false);
+            ScheduledFuture<?> localRefresher = refresher;
+            if (localRefresher != null) {
+                localRefresher.cancel(false);
                 refresher = scheduler.schedule(this::doRefresh, CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
             }
         } else {
@@ -381,6 +384,8 @@ public class Websocket extends RestApi {
             }
             PushMessage pm = VehicleEvents.PushMessage.parseFrom(message);
             accountHandler.enqueueMessage(pm);
+            logger.trace("{}", JsonFormat.printer().print(pm));
+
             /**
              * https://community.openhab.org/t/mercedes-me/136866/12
              * Release Websocket thread as early as possible to avoid exceptions
