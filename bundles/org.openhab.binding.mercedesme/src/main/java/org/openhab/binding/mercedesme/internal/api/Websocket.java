@@ -52,7 +52,6 @@ import org.slf4j.LoggerFactory;
 import com.daimler.mbcarkit.proto.Client.ClientMessage;
 import com.daimler.mbcarkit.proto.VehicleEvents;
 import com.daimler.mbcarkit.proto.VehicleEvents.PushMessage;
-import com.google.protobuf.util.JsonFormat;
 
 /**
  * {@link Websocket} as socket endpoint to communicate with Mercedes
@@ -384,8 +383,7 @@ public class Websocket extends RestApi {
             }
             PushMessage pm = VehicleEvents.PushMessage.parseFrom(message);
             accountHandler.enqueueMessage(pm);
-            logger.trace("{}", JsonFormat.printer().print(pm));
-
+            logger.trace("Websocket Message {} size {}", pm.getMsgCase(), pm.getAllFields().size());
             /**
              * https://community.openhab.org/t/mercedes-me/136866/12
              * Release Websocket thread as early as possible to avoid exceptions
