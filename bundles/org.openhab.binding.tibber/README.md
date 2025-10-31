@@ -56,6 +56,7 @@ All read-only.
 | tax               | Number:EnergyPrice   | Taxes and additional expenses              | yes          |
 | level             | Number               | Price levels for today and tomorrow        | yes          |
 | average           | Number:EnergyPrice   | Average price from last 24 hours           | yes          |
+| event             | Trigger              | Price event                                | no           |
 
 Channel `spot-price` is _deprecated_ and will be removed in the next major update.
 It's still available as advanced channel.
@@ -78,6 +79,8 @@ After initial setup the average values will stay NULL until the next day because
 
 Please note time series are not supported by the default [rrd4j](https://www.openhab.org/addons/persistence/rrd4j/) persistence.
 The items connected to the above channels needs to be stored in e.g. [InfluxDB](https://www.openhab.org/addons/persistence/influxdb/) or [InMemory](https://www.openhab.org/addons/persistence/inmemory/).
+
+Channel `event` is triggered with `DAY_AHEAD_PRICE_UPDATE` after successful fetch of new day-ahead prices during runtime or after thing initialization.
 
 ### `live` group
 
@@ -474,4 +477,15 @@ Number:Energy               Tibber_API_Last_Hour_Consumption    "Last Hour Consu
 Number:Energy               Tibber_API_Total_Production         "Total Production"           {channel="tibber:tibberapi:xyz:statistics#total-production"}
 Number:Energy               Tibber_API_Daily_Production         "Daily Production"           {channel="tibber:tibberapi:xyz:statistics#daily-production"}
 Number:Energy               Tibber_API_Last_Hour_Production     "Last Hour Production"       {channel="tibber:tibberapi:xyz:statistics#last-hour-production"}
+```
+
+### Rule listen to day-ahead price update
+
+```java
+rule "Tibber day-ahead price update"
+when
+    Channel 'tibber:tibberapi:xyz:price#event' triggered
+then
+    logInfo("Tibber Update","Price event {}",receivedEvent)
+end
 ```

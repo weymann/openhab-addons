@@ -90,4 +90,14 @@
 		</tags>
 		<state readOnly="true" pattern="%.0f %unit%"></state>
 	</channel-type>
+	<channel-type id="price-event">
+		<kind>trigger</kind>
+		<label>Price Event</label>
+		<description>Price event</description>
+		<event>
+			<options>
+				<option value="DAY_AHEAD_PRICE_UPDATE">Day-ahead price update</option>
+			</options>
+		</event>
+	</channel-type>
 </thing:thing-descriptions>
