@@ -486,6 +486,6 @@ rule "Tibber day-ahead price update"
 when
     Channel 'tibber:tibberapi:xyz:price#event' triggered
 then
-    logInfo("Tibber Update","Price event {}",receivedEvent)
+    logInfo("Tibber Update","Price event {}", receivedEvent)
 end
 ```
