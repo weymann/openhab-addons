@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="energychartsinfo"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Sample Thing Type -->
+	<thing-type id="energychartsinfo">
+		<label>EnergyChartsInfo Binding Thing</label>
+		<description>Sample thing for EnergyChartsInfo Binding</description>
+
+		<channels>
+			<channel id="price" typeId="price"/>
+		</channels>
+
+		<config-description>
+			<parameter name="priceProvider" type="text" required="true">
+				<label>Price Provider</label>
+				<description>Select service which shall provide prices</description>
+				<options>
+					<option value="energychartsinfo">Energy Charts Info</option>
+					<option value="energyforecast">Energy Forecast - Token required!</option>
+				</options>
+			</parameter>
+			<parameter name="region" type="text" required="true">
+				<label>Region</label>
+				<description>Select price region</description>
+			</parameter>
+			<parameter name="token" type="text" required="false">
+				<label>Token</label>
+				<description>Token for price provider query</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="h" min="1">
+				<label>Refresh Interval</label>
+				<description>Interval the device is polled in sec.</description>
+				<default>1</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Sample Channel Type -->
+	<channel-type id="price">
+		<item-type>Number:EnergyPrice</item-type>
+		<label>Energy Price</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
+		<description>Future energy prices </description>
+	</channel-type>
+</thing:thing-descriptions>
