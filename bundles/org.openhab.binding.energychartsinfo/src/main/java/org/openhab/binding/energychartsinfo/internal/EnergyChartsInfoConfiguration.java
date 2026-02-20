@@ -25,8 +25,10 @@ public class EnergyChartsInfoConfiguration {
     /**
      * Sample configuration parameters. Replace with your own.
      */
-    public String priceProvider = "energychartsinfo";
-    public String region = "DE-LU";
+    public String zone = "";
+    public String country = "";
     public String token = "";
-    public int refreshInterval = 600;
+    public double fixCost = 0.0;
+    public double vat = 0.0;
+    public long refreshInterval = 120;
 }

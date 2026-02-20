@@ -30,6 +30,16 @@ public class EnergyChartsInfoBindingConstants {
     public static final ThingTypeUID THING_TYPE_ENERGY_CHARTS_INFO = new ThingTypeUID(BINDING_ID, "energychartsinfo");
 
     public static final String CHARTS_INFO_URL = "https://api.energy-charts.info/";
+    public static final String ENERGY_FORECAST_URL = "https://www.energyforecast.de/api/v1/predictions/next_96_hours";
 
-    public static final String CHANNEL_PRICE = "price";
+    public static final String CHANNEL_GROUP_PRICE = "price";
+    public static final String CHANNEL_GROUP_RENEWABLES = "renewables";
+
+    public static final String CHANNEL_DAY_AHEAD = "day-ahead";
+    public static final String CHANNEL_FORECAST = "forecast";
+
+    public static final String CHANNEL_REN_SHARE = "total";
+    public static final String CHANNEL_SOLAR_SHARE = "solar";
+    public static final String CHANNEL_WIND_ONSHORE_SHARE = "wind-onshore";
+    public static final String CHANNEL_WIND_OFFSHORE_SHARE = "wind-offshore";
 }

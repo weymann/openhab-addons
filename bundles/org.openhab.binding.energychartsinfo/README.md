@@ -1,95 +1,62 @@
 # EnergyChartsInfo Binding
 
-_Give some details about what this binding is meant for - a protocol, system, specific device._
-
-_If possible, provide some resources like pictures (only PNG is supported currently), a video, etc. to give an impression of what can be done with this binding._
-_You can place such resources into a `doc` folder next to this README.md._
-
-_Put each sentence in a separate line to improve readability of diffs._
-
-## Supported Things
-
-_Please describe the different supported things / devices including their ThingTypeUID within this section._
-_Which different types are supported, which models were tested etc.?_
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
-
-- `bridge`: Short description of the Bridge, if any
-- `sample`: Short description of the Thing with the ThingTypeUID `sample`
-
-## Discovery
-
-_Describe the available auto-discovery features here._
-_Mention for what it works and what needs to be kept in mind when using it._
-
+Binding provides energy information & pricing from [Frauenhofer Institue for Solar Energysystems ISE](https://www.energy-charts.info/).
+Pricing forecast is provided by [Energy Forecast Provider](https://www.energyforecast.de/).
+ 
 ## Binding Configuration
 
-_If your binding requires or supports general configuration settings, please create a folder ```cfg``` and place the configuration file ```<bindingId>.cfg``` inside it._
-_In this section, you should link to this file and provide some information about the options._
-_The file could e.g. look like:_
+### `energychartsinfo` Thing Configuration
 
-```
-# Configuration for the EnergyChartsInfo Binding
-#
-# Default secret key for the pairing of the EnergyChartsInfo Thing.
-# It has to be between 10-40 (alphanumeric) characters.
-# This may be changed by the user for security reasons.
-secret=openHABSecret
-```
+Thing provides data from two different services which are both relying on [Energy Charts Info API](https://api.energy-charts.info/).
+Licensing [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) by [Bundesnetzagentur](https://www.smard.de/home).
 
-_Note that it is planned to generate some part of this based on the information that is available within ```src/main/resources/OH-INF/binding``` of your binding._
+Check for correct configuration
 
-_If your binding does not offer any generic configurations, you can remove this section completely._
+- available [bidding zones](https://api.energy-charts.info/#/prices/day_ahead_price_price_get) for day-ahead pricing
+- available [countries](https://api.energy-charts.info/) for energy information
 
-## Thing Configuration
+| Name          | Type    | Description                             | Default | Required |
+|---------------|---------|-----------------------------------------|---------|----------|
+| zone          | text    | Bidding zone for price queries          | N/A     | yes      |
+| country       | text    | Password to access the device           | N/A     | yes      |
 
-_Describe what is needed to manually configure a thing, either through the UI or via a thing-file._
-_This should be mainly about its mandatory and optional configuration parameters._
+[Energy Forecast](https://www.energyforecast.de/) service which is providing a forecast beyond day-ahead spot pricing.
+Access to forecast pricing requires [Registration](https://www.energyforecast.de/users/sign_up).
+If no token is configured the `forecast` channel will stay empty.
 
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
+Forecast doesn't serve all bidding zones.
+Check [API](https://www.energyforecast.de/api-docs/index.html) if your bidding zone is present.
 
-### `sample` Thing Configuration
-
-| Name            | Type    | Description                           | Default | Required | Advanced |
-|-----------------|---------|---------------------------------------|---------|----------|----------|
-| hostname        | text    | Hostname or IP address of the device  | N/A     | yes      | no       |
-| password        | text    | Password to access the device         | N/A     | yes      | no       |
-| refreshInterval | integer | Interval the device is polled in sec. | 600     | no       | yes      |
+| Name          | Type      | Description                                                                       | Default   | Required |
+|---------------|-----------|-----------------------------------------------------------------------------------|-----------|----------|
+| token         | text      | Token for energy forecast service to provide forecast data                        | N/A       | no       |
+| fixCost       | decimal   | Fix costs in ct/kWh which will be added on top of the forecast price, e.g. 15,3   | 0         | no       |
+| vat           | decimal   | VAT in percent which will be added on top of the forecast price, e.g. 19,0        | 0         | no       |
 
 ## Channels
 
-_Here you should provide information about available channel types, what their meaning is and how they can be used._
+All channels delivering forecast information. 
+Attaching items which are bound only to `rrd4j` persistence will not work.
+If you don't have a database installed [InMemory persistence](https://www.openhab.org/addons/persistence/inmemory/) can be used.
 
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
+### Group `price`
 
-| Channel | Type   | Read/Write | Description                 |
-|---------|--------|------------|-----------------------------|
-| control | Switch | RW         | This is the control channel |
+| Channel       | Type                  | Description                               |
+|---------------|-----------------------|-------------------------------------------|
+| day-ahead     | Number:EnergyPrice    | Day-Ahead energy price                    |
+| forecast      | Number:EnergyPrice    | Forecast energy price                     |
+
+`forecast` only delivers data if token for energy forecast service.
+Depending on your booked tariff you'll receive values for the next 48 or 96 hours.
+
+### Group `renewables`
+
+| Channel           | Type                  | Description                               |
+|-------------------|-----------------------|-------------------------------------------|
+| total             | Number:Dimensionless  | Production share of all renewables        |
+| solar             | Number:Dimensionless  | Production share of solar                 |
+| wind-onshore      | Number:Dimensionless  | Production share of wind onshore          |
+| wind-offshore     | Number:Dimensionless  | Production share of wind offshore         |
 
 ## Full Example
 
-_Provide a full usage example based on textual configuration files._
-_*.things, *.items examples are mandatory as textual configuration is well used by many users._
-_*.sitemap examples are optional._
-
-### Thing Configuration
-
-```java
-Example thing configuration goes here.
-```
-
-### Item Configuration
-
-```java
-Example item configuration goes here.
-```
-
-### Sitemap Configuration
-
-```perl
-Optional Sitemap configuration goes here.
-Remove this section, if not needed.
-```
-
-## Any custom content here!
-
-_Feel free to add additional sections for whatever you think should also be mentioned about your binding!_

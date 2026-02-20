@@ -6,43 +6,101 @@
 
 	<!-- Sample Thing Type -->
 	<thing-type id="energychartsinfo">
-		<label>EnergyChartsInfo Binding Thing</label>
+		<label>Energy Info</label>
 		<description>Sample thing for EnergyChartsInfo Binding</description>
 
-		<channels>
-			<channel id="price" typeId="price"/>
-		</channels>
+		<channel-groups>
+			<channel-group id="price" typeId="price-group"/>
+			<channel-group id="renewables" typeId="renewables-group"/>
+		</channel-groups>
 
 		<config-description>
-			<parameter name="priceProvider" type="text" required="true">
-				<label>Price Provider</label>
-				<description>Select service which shall provide prices</description>
+			<parameter name="zone" type="text" required="true">
+				<label>Bidding Zone</label>
+				<description>Bidding zone for price queries</description>
 				<options>
-					<option value="energychartsinfo">Energy Charts Info</option>
-					<option value="energyforecast">Energy Forecast - Token required!</option>
+					<option value="AT">Austria</option>
+					<option value="BE">Belgium</option>
+					<option value="CH">Switzerland</option>
+					<option value="CZ">Czech Republic</option>
+					<option value="DE-LU">Germany, Luxembourg</option>
+					<option value="DK1">Denmark 1</option>
+					<option value="DK2">Denmark 2</option>
+					<option value="FR">France</option>
+					<option value="HU">Hungary</option>
+					<option value="IT-North">Italy North</option>
+					<option value="NL">Netherlands</option>
+					<option value="NO2">Norway 2</option>
+					<option value="PL">Poland</option>
+					<option value="SE4">Sweden 4</option>
+					<option value="SI">Slovenia</option>
 				</options>
 			</parameter>
-			<parameter name="region" type="text" required="true">
-				<label>Region</label>
-				<description>Select price region</description>
+			<parameter name="country" type="text" required="false">
+				<label>Country</label>
+				<description>Two digit country code if zone doesn't e.g. Germany Pricing=DE-LU, country=de</description>
 			</parameter>
 			<parameter name="token" type="text" required="false">
-				<label>Token</label>
-				<description>Token for price provider query</description>
+				<label>Energy Forecast Token</label>
+				<description>Token for energy forecast service to provide forecast data</description>
 			</parameter>
-			<parameter name="refreshInterval" type="integer" unit="h" min="1">
-				<label>Refresh Interval</label>
-				<description>Interval the device is polled in sec.</description>
-				<default>1</default>
-				<advanced>true</advanced>
+			<parameter name="fixCost" type="decimal" required="false">
+				<label>Energy Forecast Fix Cost</label>
+				<description>Fix costs in ct/kWh which will be added on top of the forecast price, e.g. 15,3</description>
+				<default>0</default>
+			</parameter>
+			<parameter name="vat" type="decimal" required="false">
+				<label>Energy Forecast Value Added Tax</label>
+				<description>VAT in percent which will be added on top of the forecast price, e.g. 19,0</description>
+				<default>0</default>
 			</parameter>
 		</config-description>
 	</thing-type>
 
-	<!-- Sample Channel Type -->
+	<channel-group-type id="price-group">
+		<label>Pricing</label>
+		<channels>
+			<channel id="day-ahead" typeId="price">
+				<label>Day-Ahead Price</label>
+				<description>Day-Ahead energy price</description>
+			</channel>
+			<channel id="forecast" typeId="price">
+				<label>Forecast Price</label>
+				<description>Forecast energy price</description>
+			</channel>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="renewables-group">
+		<label>Renewables Production Shares</label>
+		<channels>
+			<channel id="total" typeId="share">
+				<label>Renewables Total</label>
+				<description>Production share of all renewables</description>
+			</channel>
+			<channel id="solar" typeId="share">
+				<label>Solar Share</label>
+				<description>Production share of solar </description>
+			</channel>
+			<channel id="wind-onshore" typeId="share">
+				<label>Wind Onshore Share</label>
+				<description>Production share of wind onshore </description>
+			</channel>
+			<channel id="wind-offshore" typeId="share">
+				<label>Wind Offshore Share</label>
+				<description>Production share of wind offshore </description>
+			</channel>
+		</channels>
+	</channel-group-type>
+
 	<channel-type id="price">
-		<item-type>Number:EnergyPrice</item-type>
-		<label>Energy Price</label><!-- Use uppercase words, except prepositions. 2-3 words, max 25 chars -->
-		<description>Future energy prices </description>
+		<item-type unitHint="EUR/kWh">Number:EnergyPrice</item-type>
+		<label>Energy Price</label>
+		<state pattern="%.3f %unit%"/>
+	</channel-type>
+	<channel-type id="share">
+		<item-type unitHint="%">Number:Dimensionless</item-type>
+		<label>Renewable Share</label>
+		<state pattern="%.1f %unit%"/>
 	</channel-type>
 </thing:thing-descriptions>
