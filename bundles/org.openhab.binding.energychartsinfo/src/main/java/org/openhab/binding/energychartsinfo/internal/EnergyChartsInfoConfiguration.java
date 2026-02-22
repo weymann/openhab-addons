@@ -30,5 +30,6 @@ public class EnergyChartsInfoConfiguration {
     public String token = "";
     public double fixCost = 0.0;
     public double vat = 0.0;
+    public String resolution = "PT15M";
     public long refreshInterval = 120;
 }

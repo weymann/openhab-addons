@@ -15,7 +15,11 @@ package org.openhab.binding.energychartsinfo.internal;
 import static org.openhab.binding.energychartsinfo.internal.EnergyChartsInfoBindingConstants.*;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -96,8 +100,8 @@ public class EnergyChartsInfoHandler extends BaseThingHandler {
             dayAheadRequest.param("bzn", config.zone);
             ContentResponse response = dayAheadRequest.send();
             logger.info("Energy charts info pricare response: {}", response.getStatus());
-            sendTimeSeries(CHANNEL_GROUP_PRICE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_DAY_AHEAD,
-                    decodeEnergyChartPrices(response.getContentAsString()));
+            TimeSeries timeSeries = decodeEnergyChartPrices(response.getContentAsString());
+            sendTimeSeries(CHANNEL_GROUP_PRICE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_DAY_AHEAD, timeSeries);
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
             logger.warn("Error while fetching energy charts info data: {}", e.getMessage());
         }
@@ -113,10 +117,9 @@ public class EnergyChartsInfoHandler extends BaseThingHandler {
             forecastRequest.param("token", config.token);
 
             ContentResponse response = forecastRequest.send();
-            int responseStatus = response.getStatus();
             logger.info("Energy price forecast response: {}", response.getStatus());
-            sendTimeSeries(CHANNEL_GROUP_PRICE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_FORECAST,
-                    decodeEnergyForecastPrices(response.getContentAsString()));
+            TimeSeries timeSeries = decodeEnergyForecastPrices(response.getContentAsString());
+            sendTimeSeries(CHANNEL_GROUP_PRICE + ChannelUID.CHANNEL_GROUP_SEPARATOR + CHANNEL_FORECAST, timeSeries);
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
             logger.warn("Error while fetching energy charts info data: {}", e.getMessage());
         }
@@ -143,19 +146,30 @@ public class EnergyChartsInfoHandler extends BaseThingHandler {
         }
     }
 
-    public static TimeSeries decodeEnergyChartPrices(String prices) {
+    public TimeSeries decodeEnergyChartPrices(String prices) {
         JSONObject pricesJson = new JSONObject(prices);
         TimeSeries timeSeries = new TimeSeries(TimeSeries.Policy.REPLACE);
         JSONArray timestanps = pricesJson.getJSONArray("unix_seconds");
         for (int i = 0; i < timestanps.length(); i++) {
             Instant start = Instant.ofEpochSecond(((Number) timestanps.get(i)).longValue());
             double price = pricesJson.getJSONArray("price").getDouble(i) / 1000.0;
+            if (config.fixCost > 0) {
+                // fix costs are given in cents per kWh, so we need to divide by 100 to get EUR/kWh
+                price += config.fixCost / 100.0;
+            }
+            if (config.vat > 0) {
+                price *= (1 + config.vat / 100);
+            }
             timeSeries.add(start, QuantityType.valueOf(price + " EUR/kWh"));
         }
-        return timeSeries;
+        if (!"PT15M".equals(config.resolution)) {
+            return resampleTimeSeriesHourly(timeSeries);
+        } else {
+            return timeSeries;
+        }
     }
 
-    public static TimeSeries decodeRenewableShares(JSONObject shares, String type) {
+    public TimeSeries decodeRenewableShares(JSONObject shares, String type) {
         TimeSeries timeSeries = new TimeSeries(TimeSeries.Policy.REPLACE);
         JSONArray timestanps = shares.getJSONArray("unix_seconds");
         JSONArray shareForType = shares.getJSONArray(type);
@@ -167,15 +181,41 @@ public class EnergyChartsInfoHandler extends BaseThingHandler {
         return timeSeries;
     }
 
-    public static TimeSeries decodeEnergyForecastPrices(String prices) {
+    public TimeSeries decodeEnergyForecastPrices(String prices) {
         JSONArray priceArray = new JSONArray(prices);
         TimeSeries timeSeries = new TimeSeries(TimeSeries.Policy.REPLACE);
         priceArray.forEach(item -> {
             JSONObject jsonObject = (JSONObject) item;
             Instant start = Instant.parse(jsonObject.getString("start"));
             timeSeries.add(start, QuantityType.valueOf(jsonObject.getDouble("price") + " EUR/kWh"));
-
         });
-        return timeSeries;
+        if (!"PT15M".equals(config.resolution)) {
+            return resampleTimeSeriesHourly(timeSeries);
+        } else {
+            return timeSeries;
+        }
+    }
+
+    private TimeSeries resampleTimeSeriesHourly(TimeSeries timeSeries) {
+        logger.info("Resampling time series to hourly resolution");
+        TreeMap<Instant, List<Double>> hourlySums = new TreeMap<>();
+        timeSeries.getStates().forEach(entry -> {
+            Instant timestamp = entry.timestamp().truncatedTo(ChronoUnit.HOURS);
+            double price = ((QuantityType<?>) entry.state()).doubleValue();
+            List<Double> sumPerHour = hourlySums.get(timestamp);
+            if (sumPerHour != null) {
+                sumPerHour.add(price);
+            } else {
+                sumPerHour = new ArrayList<>();
+                sumPerHour.add(price);
+                hourlySums.put(timestamp, sumPerHour);
+            }
+        });
+        TimeSeries hourlySeries = new TimeSeries(TimeSeries.Policy.REPLACE);
+        hourlySums.forEach((timestamp, prices) -> {
+            double price = prices.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            hourlySeries.add(timestamp, QuantityType.valueOf(price + " EUR/kWh"));
+        });
+        return hourlySeries;
     }
 }

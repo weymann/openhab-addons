@@ -35,6 +35,7 @@
 					<option value="SE4">Sweden 4</option>
 					<option value="SI">Slovenia</option>
 				</options>
+				<limitToOptions>false</limitToOptions>
 			</parameter>
 			<parameter name="country" type="text" required="false">
 				<label>Country</label>
@@ -53,6 +54,15 @@
 				<label>Energy Forecast Value Added Tax</label>
 				<description>VAT in percent which will be added on top of the forecast price, e.g. 19,0</description>
 				<default>0</default>
+			</parameter>
+			<parameter name="resolution" type="text" required="false">
+				<label>Price Resolution</label>
+				<description>Price resolution in minutes</description>
+				<options>
+					<option value="PT15M">15 minutes</option>
+					<option value="PT60M">60 minutes</option>
+				</options>
+				<default>15</default>
 			</parameter>
 		</config-description>
 	</thing-type>
