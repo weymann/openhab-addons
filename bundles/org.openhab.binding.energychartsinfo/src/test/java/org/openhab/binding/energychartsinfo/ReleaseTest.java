@@ -28,6 +28,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 @NonNullByDefault
 public class ReleaseTest {
     private static HttpClient httpClient = new HttpClient(new SslContextFactory.Client());
+    private String token = "YOUR_TOKEN";
 
     public static void main(String[] args) {
         new ReleaseTest();
@@ -37,9 +38,8 @@ public class ReleaseTest {
         try {
             httpClient.start();
             // ContentResponse response = httpClient.GET("https://api.energy-charts.info/price?bzn=DE-LU");
-            ContentResponse response = httpClient.GET(
-                    "https://www.energyforecast.de/api/v1/predictions/next_48_hours?token=6b085dc5a42a798a9d0fe4618b");
-
+            ContentResponse response = httpClient
+                    .GET("https://www.energyforecast.de/api/v1/predictions/next_48_hours?token=" + token);
             System.out.println(response.getContentAsString());
             httpClient.stop();
         } catch (Exception e) {
