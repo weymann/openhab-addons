@@ -67,15 +67,13 @@ public class CallbackMock implements ThingHandlerCallback {
     public void waitForStatus(ThingStatus expectedStatus) {
         synchronized (this) {
             Instant start = Instant.now();
-            Instant check = Instant.now();
             while (!expectedStatus.equals(statusInfo.getStatus())
-                    && Duration.between(start, check).getSeconds() < STATUS_DURATION_TIMEOUT_SEC) {
+                    && Duration.between(start, Instant.now()).getSeconds() < STATUS_DURATION_TIMEOUT_SEC) {
                 try {
                     this.wait(100);
                 } catch (InterruptedException e) {
                     fail(e.getMessage());
                 }
-                check = Instant.now();
             }
         }
         // if method is exited without reaching ONLINE e.g. through timeout fail
@@ -99,15 +97,13 @@ public class CallbackMock implements ThingHandlerCallback {
     public @Nullable State getState(String channel) {
         synchronized (stateMap) {
             Instant start = Instant.now();
-            Instant check = Instant.now();
             while (stateMap.get(channel) == null
-                    && Duration.between(start, check).getSeconds() < STATUS_DURATION_TIMEOUT_SEC) {
+                    && Duration.between(start, Instant.now()).getSeconds() < STATUS_DURATION_TIMEOUT_SEC) {
                 try {
                     stateMap.wait(100);
                 } catch (InterruptedException e) {
                     fail("Interruppted waiting for ONLINE");
                 }
-                check = Instant.now();
             }
         }
         return stateMap.get(channel);
