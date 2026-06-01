@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon:addon id="brightsky" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:addon="https://openhab.org/schemas/addon/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/addon/v1.0.0 https://openhab.org/schemas/addon-1.0.0.xsd">
+
+	<type>binding</type>
+	<name>BrightSky Binding</name>
+	<description>
+		Provides current weather observations from the German Weather Service (DWD)
+		via the BrightSky API. No API
+		key required. Coverage: Germany only.
+	</description>
+	<connection>cloud</connection>
+
+</addon:addon>

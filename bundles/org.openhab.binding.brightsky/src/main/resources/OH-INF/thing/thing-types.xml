@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="brightsky"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- ================================================================== -->
+	<!-- Thing: weather-location -->
+	<!-- ================================================================== -->
+	<thing-type id="weather-location">
+		<label>Weather Location</label>
+		<description>
+			Provides current weather observations from the nearest DWD ground station
+			via the BrightSky API. Requires
+			a latitude/longitude or a DWD station ID.
+		</description>
+		<category>Weather</category>
+
+		<channel-groups>
+			<channel-group id="current" typeId="current-weather"/>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="latitude" type="decimal" required="false">
+				<label>Latitude</label>
+				<description>Geographic latitude of the location (-90 to 90). Required unless a station ID is set.</description>
+				<unitLabel>°</unitLabel>
+				<advanced>false</advanced>
+			</parameter>
+			<parameter name="longitude" type="decimal" required="false">
+				<label>Longitude</label>
+				<description>Geographic longitude of the location (-180 to 180). Required unless a station ID is set.</description>
+				<unitLabel>°</unitLabel>
+				<advanced>false</advanced>
+			</parameter>
+			<parameter name="stationId" type="text" required="false">
+				<label>DWD Station ID</label>
+				<description>Optional DWD station ID (e.g. 00433 for Berlin-Tempelhof). Overrides latitude/longitude.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" required="false" min="5" unit="min">
+				<label>Refresh Interval</label>
+				<description>How often to poll the BrightSky API for updated observations. Minimum 5 minutes.</description>
+				<default>30</default>
+				<unitLabel>min</unitLabel>
+				<advanced>false</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- ================================================================== -->
+	<!-- Channel Group Type: current-weather -->
+	<!-- ================================================================== -->
+	<channel-group-type id="current-weather">
+		<label>Current Weather</label>
+		<description>Live observations from the nearest DWD ground station.</description>
+		<channels>
+			<channel id="temperature" typeId="temperature"/>
+			<channel id="dew-point" typeId="dew-point"/>
+			<channel id="humidity" typeId="humidity"/>
+			<channel id="pressure" typeId="pressure"/>
+			<channel id="wind-speed" typeId="wind-speed"/>
+			<channel id="wind-direction" typeId="wind-direction"/>
+			<channel id="wind-gust-speed" typeId="wind-gust-speed"/>
+			<channel id="wind-gust-direction" typeId="wind-gust-direction"/>
+			<channel id="precipitation" typeId="precipitation"/>
+			<channel id="cloud-cover" typeId="cloud-cover"/>
+			<channel id="visibility" typeId="visibility"/>
+			<channel id="sunshine" typeId="sunshine"/>
+			<channel id="solar" typeId="solar"/>
+			<channel id="condition" typeId="condition"/>
+			<channel id="icon" typeId="icon"/>
+			<channel id="observation-time" typeId="observation-time"/>
+		</channels>
+	</channel-group-type>
+
+	<!-- ================================================================== -->
+	<!-- Channel Types -->
+	<!-- ================================================================== -->
+
+	<channel-type id="temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Temperature</label>
+		<description>Air temperature at 2 m above ground.</description>
+		<category>Temperature</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="dew-point">
+		<item-type>Number:Temperature</item-type>
+		<label>Dew Point</label>
+		<description>Dew point temperature.</description>
+		<category>Temperature</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="humidity">
+		<item-type>Number:Dimensionless</item-type>
+		<label>Relative Humidity</label>
+		<description>Relative humidity in percent.</description>
+		<category>Humidity</category>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="pressure">
+		<item-type>Number:Pressure</item-type>
+		<label>Air Pressure</label>
+		<description>Mean sea level pressure.</description>
+		<category>Pressure</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="wind-speed">
+		<item-type>Number:Speed</item-type>
+		<label>Wind Speed</label>
+		<description>Average wind speed over the last 10 minutes.</description>
+		<category>Wind</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="wind-direction">
+		<item-type>Number:Angle</item-type>
+		<label>Wind Direction</label>
+		<description>Average wind direction over the last 10 minutes (0–360°, meteorological convention).</description>
+		<category>Wind</category>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="wind-gust-speed">
+		<item-type>Number:Speed</item-type>
+		<label>Wind Gust Speed</label>
+		<description>Maximum wind gust speed in the last 10 minutes.</description>
+		<category>Wind</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="wind-gust-direction">
+		<item-type>Number:Angle</item-type>
+		<label>Wind Gust Direction</label>
+		<description>Direction of the strongest wind gust in the last 10 minutes.</description>
+		<category>Wind</category>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="precipitation">
+		<item-type>Number:Length</item-type>
+		<label>Precipitation</label>
+		<description>Total precipitation in the last 10 minutes.</description>
+		<category>Rain</category>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="cloud-cover">
+		<item-type>Number:Dimensionless</item-type>
+		<label>Cloud Cover</label>
+		<description>Fraction of the sky covered by clouds, in percent.</description>
+		<category>Sun_Clouds</category>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="visibility">
+		<item-type>Number:Length</item-type>
+		<label>Visibility</label>
+		<description>Horizontal visibility in metres.</description>
+		<state readOnly="true" pattern="%d %unit%"/>
+	</channel-type>
+
+	<channel-type id="sunshine">
+		<item-type>Number:Time</item-type>
+		<label>Sunshine Duration</label>
+		<description>Total sunshine duration in the last 30 minutes.</description>
+		<category>Sun</category>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="solar">
+		<item-type>Number:Energy</item-type>
+		<label>Solar Irradiance</label>
+		<description>Solar energy received per square metre in the last 30 minutes (kWh/m²).</description>
+		<category>Sun</category>
+		<state readOnly="true" pattern="%.3f %unit%"/>
+	</channel-type>
+
+	<channel-type id="condition">
+		<item-type>String</item-type>
+		<label>Condition</label>
+		<description>Current weather condition reported by the DWD station.</description>
+		<state readOnly="true">
+			<options>
+				<option value="dry">Dry</option>
+				<option value="fog">Fog</option>
+				<option value="rain">Rain</option>
+				<option value="sleet">Sleet</option>
+				<option value="snow">Snow</option>
+				<option value="hail">Hail</option>
+				<option value="thunderstorm">Thunderstorm</option>
+				<option value="null">Unknown</option>
+			</options>
+		</state>
+	</channel-type>
+
+	<channel-type id="icon">
+		<item-type>String</item-type>
+		<label>Weather Icon</label>
+		<description>Icon key representing the current conditions (e.g. "cloudy", "sunny", "partly-cloudy-day").</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="observation-time">
+		<item-type>DateTime</item-type>
+		<label>Observation Time</label>
+		<description>Timestamp of the most recent weather observation.</description>
+		<category>Time</category>
+		<state readOnly="true" pattern="%1$tY-%1$tm-%1$td %1$tH:%1$tM"/>
+	</channel-type>
+
+</thing:thing-descriptions>
