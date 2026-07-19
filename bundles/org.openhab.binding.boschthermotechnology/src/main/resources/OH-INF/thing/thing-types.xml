@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="boschthermotechnology"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Account Bridge: one SingleKey ID / PointT login, see ADR-002 -->
+	<bridge-type id="account">
+		<label>Bosch Thermotechnology Account</label>
+		<description>
+			Represents one SingleKey ID (Bosch/Buderus) login. After adding this bridge, open the URL
+			shown in
+			the
+			"authUrl" configuration parameter in a browser, log in, then paste the resulting
+			redirect URL into the
+			"pasteAuthorizationRedirectUrl" configuration parameter to complete
+			authorization. See ADR-002 for the full flow.
+		</description>
+
+		<config-description>
+			<parameter name="authUrl" type="text" readOnly="true">
+				<label>Authorization URL</label>
+				<description>
+					Automatically filled in during initialization. Open this URL in a browser and log in with
+					your
+					Bosch/Buderus account. Empty once authorization is complete.
+				</description>
+			</parameter>
+			<parameter name="pasteAuthorizationRedirectUrl" type="text">
+				<label>Authorization Redirect URL</label>
+				<description>
+					One-time setup only: paste the full redirect URL from your browser's address bar here after
+					logging in
+					at SingleKey ID. The value is consumed immediately and never stored.
+				</description>
+			</parameter>
+		</config-description>
+	</bridge-type>
+
+	<!-- Gateway Thing: one per Bosch/Buderus heating gateway registered to the account -->
+	<thing-type id="gateway">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="account"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Gateway</label>
+		<description>A single Bosch/Buderus heating gateway, reachable via the PointT cloud API.</description>
+
+		<channel-groups>
+			<channel-group id="system" typeId="system-group">
+				<label>System</label>
+			</channel-group>
+			<channel-group id="heating-circuit" typeId="heating-circuit-group">
+				<label>Heating Circuit</label>
+			</channel-group>
+			<channel-group id="dhw" typeId="dhw-group">
+				<label>Domestic Hot Water</label>
+			</channel-group>
+			<channel-group id="heat-source" typeId="heat-source-group">
+				<label>Heat Source</label>
+			</channel-group>
+			<channel-group id="notifications" typeId="notifications-group">
+				<label>Notifications</label>
+			</channel-group>
+		</channel-groups>
+
+		<properties>
+			<property name="vendor">Bosch Thermotechnology</property>
+		</properties>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id assigned by the PointT API. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<description>Interval the gateway's resources are polled, in seconds.</description>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Channel Group Types -->
+	<channel-group-type id="system-group">
+		<label>System</label>
+		<channels>
+			<channel id="outdoor-temperature" typeId="outdoor-temperature"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="heating-circuit-group">
+		<label>Heating Circuit</label>
+		<channels>
+			<channel id="manual-room-setpoint" typeId="manual-room-setpoint"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="dhw-group">
+		<label>Domestic Hot Water</label>
+		<channels>
+			<channel id="charge-duration" typeId="dhw-charge-duration"/>
+			<channel id="single-charge-setpoint" typeId="dhw-single-charge-setpoint"/>
+			<channel id="operation-mode" typeId="dhw-operation-mode"/>
+			<channel id="charge" typeId="dhw-charge"/>
+			<channel id="reduce-temp-on-alarm" typeId="dhw-reduce-temp-on-alarm"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="heat-source-group">
+		<label>Heat Source</label>
+		<channels>
+			<channel id="ch-status" typeId="heat-source-ch-status"/>
+			<channel id="actual-supply-temperature" typeId="heat-source-actual-supply-temperature"/>
+			<channel id="return-temperature" typeId="heat-source-return-temperature"/>
+			<channel id="number-of-starts" typeId="heat-source-number-of-starts"/>
+			<channel id="working-time-total-system" typeId="heat-source-working-time-total-system"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="notifications-group">
+		<label>Notifications</label>
+		<channels>
+			<channel id="active" typeId="notifications-active"/>
+		</channels>
+	</channel-group-type>
+
+	<!-- Channel Types -->
+	<channel-type id="outdoor-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Outdoor Temperature</label>
+		<description>Outdoor temperature reported by the gateway (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="manual-room-setpoint">
+		<item-type>Number:Temperature</item-type>
+		<label>Manual Room Setpoint</label>
+		<description>Manual room setpoint of heating circuit hc1.</description>
+		<state min="5" max="30" step="0.5" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="dhw-charge-duration">
+		<item-type>Number:Time</item-type>
+		<label>DHW Charge Duration</label>
+		<description>Domestic hot water single-charge duration of dhw1.</description>
+		<state min="15" max="2880" step="1" pattern="%d %unit%"/>
+	</channel-type>
+
+	<channel-type id="dhw-single-charge-setpoint">
+		<item-type>Number:Temperature</item-type>
+		<label>DHW Single Charge Setpoint</label>
+		<description>Domestic hot water single-charge temperature setpoint of dhw1.</description>
+		<state min="50" max="70" step="0.5" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="dhw-operation-mode">
+		<item-type>Number</item-type>
+		<label>DHW Operation Mode</label>
+		<description>
+			Domestic hot water operation mode of dhw1. The PointT API itself reports/expects the
+			String values
+			"Off"/"Eco+"/"Eco"/"Comfort"/"Auto" - the numeric codes below are a
+			binding-internal mapping onto those Strings, see
+			GatewayHandler.
+		</description>
+		<state>
+			<options>
+				<option value="0">Off</option>
+				<option value="1">Eco+</option>
+				<option value="2">Eco</option>
+				<option value="3">Comfort</option>
+				<option value="4">Auto</option>
+			</options>
+		</state>
+	</channel-type>
+
+	<channel-type id="heat-source-ch-status">
+		<item-type>String</item-type>
+		<label>Heat Source CH Status</label>
+		<description>
+			Raw central heating status reported by the heat source. TODO: confirm the exact value
+			shape (boolean,
+			numeric code, or string) against a live gateway - currently passed through
+			as-is.
+		</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="heat-source-actual-supply-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Actual Supply Temperature</label>
+		<description>Actual supply (flow) temperature of the heat source.</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="heat-source-return-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Return Temperature</label>
+		<description>Return temperature of the heat source.</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="heat-source-number-of-starts">
+		<item-type>Number</item-type>
+		<label>Number Of Starts</label>
+		<description>Number of times the heat source has started.</description>
+		<state readOnly="true" pattern="%d"/>
+	</channel-type>
+
+	<channel-type id="heat-source-working-time-total-system">
+		<item-type>Number:Time</item-type>
+		<label>Total Working Time</label>
+		<description>
+			Total working time of the heat source. TODO: confirm the reported unit against a live
+			gateway - currently
+			assumed to be hours.
+		</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="notifications-active">
+		<item-type>String</item-type>
+		<label>Active Notifications</label>
+		<description>
+			Raw active notifications/faults reported by the gateway, as a JSON string. TODO: confirm
+			the exact
+			response shape against a live gateway and consider splitting into dedicated
+			channels (e.g. a trigger channel per
+			fault) once known.
+		</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="dhw-charge">
+		<item-type>Switch</item-type>
+		<label>DHW Instant Charge</label>
+		<description>Starts or stops a domestic hot water instant charge of dhw1.</description>
+	</channel-type>
+
+	<channel-type id="dhw-reduce-temp-on-alarm">
+		<item-type>Switch</item-type>
+		<label>DHW Reduce Temperature On Alarm</label>
+		<description>Reduces the domestic hot water temperature when an alarm is active.</description>
+	</channel-type>
+</thing:thing-descriptions>

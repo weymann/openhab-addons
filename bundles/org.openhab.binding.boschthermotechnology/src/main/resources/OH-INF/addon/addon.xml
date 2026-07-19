@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon:addon id="boschthermotechnology" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:addon="https://openhab.org/schemas/addon/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/addon/v1.0.0 https://openhab.org/schemas/addon-1.0.0.xsd">
+
+	<type>binding</type>
+	<name>Bosch Thermotechnology Binding</name>
+	<description>Binding for Bosch/Buderus heating systems connected via the Bosch Thermotechnology PointT cloud
+		API
+		(SingleKey ID login).</description>
+	<connection>cloud</connection>
+
+</addon:addon>
