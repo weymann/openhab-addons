@@ -15,6 +15,7 @@ package org.openhab.binding.boschthermotechnology.internal.api;
 import static org.openhab.binding.boschthermotechnology.internal.BoschThermotechnologyBindingConstants.POINTT_API_BASE_URL;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -27,6 +28,7 @@ import org.eclipse.jetty.http.HttpMethod;
 import org.eclipse.jetty.http.HttpStatus;
 import org.openhab.binding.boschthermotechnology.internal.dto.GatewayDto;
 import org.openhab.binding.boschthermotechnology.internal.dto.ResourceDto;
+import org.openhab.binding.boschthermotechnology.internal.dto.ResourceListEntryDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,6 +98,71 @@ public class PointTApiClient {
             return resource;
         } catch (JsonSyntaxException e) {
             throw new PointTApiException("Could not parse resource response for path " + path, e);
+        }
+    }
+
+    /**
+     * Reads a single resource, treating HTTP 404 as "does not exist" rather than a hard failure.
+     * Used by {@code ChildThingDiscoveryService} to probe for resources that have no list
+     * endpoint (pool, ventilation zone, AC unit, water softener - see ADR-006).
+     *
+     * @return an empty {@link Optional} if the gateway responded with HTTP 404 for this path
+     * @throws PointTAuthException if the token is rejected (HTTP 401/403)
+     * @throws PointTApiException on any other communication or parsing failure - callers must not
+     *             treat this as "resource absent", only a genuine 404 means that
+     */
+    public Optional<ResourceDto> tryGetResource(String accessToken, String gatewayId, String path)
+            throws PointTApiException {
+        try {
+            return Optional.of(getResource(accessToken, gatewayId, path));
+        } catch (PointTApiException e) {
+            if (e.getHttpStatus() == HttpStatus.NOT_FOUND_404) {
+                logger.debug("Resource {} not present on gateway {} (HTTP 404)", path, gatewayId);
+                return Optional.empty();
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Lists the ids of a list-style resource ({@code heatingCircuits}, {@code dhwCircuits},
+     * {@code solarCircuits}, {@code zones/list}) - see {@link ResourceListEntryDto}.
+     *
+     * @return the discovered ids, or an empty list if the gateway responded with HTTP 404 for this
+     *         path (list-style resources that genuinely do not apply to this gateway)
+     * @throws PointTAuthException if the token is rejected (HTTP 401/403)
+     * @throws PointTApiException on any other communication or parsing failure
+     */
+    public List<String> listResourceIds(String accessToken, String gatewayId, String listPath)
+            throws PointTApiException {
+        String url = resourceUrl(gatewayId, listPath);
+        String body;
+        try {
+            body = get(accessToken, url);
+        } catch (PointTApiException e) {
+            if (e.getHttpStatus() == HttpStatus.NOT_FOUND_404) {
+                logger.debug("List resource {} not present on gateway {} (HTTP 404)", listPath, gatewayId);
+                return List.of();
+            }
+            throw e;
+        }
+
+        try {
+            List<ResourceListEntryDto> entries = gson.fromJson(body, new TypeToken<List<ResourceListEntryDto>>() {
+            }.getType());
+            if (entries == null) {
+                return List.of();
+            }
+            List<String> ids = new java.util.ArrayList<>();
+            for (ResourceListEntryDto entry : entries) {
+                String id = entry.id;
+                if (id != null && !id.isBlank()) {
+                    ids.add(id);
+                }
+            }
+            return List.copyOf(ids);
+        } catch (JsonSyntaxException e) {
+            throw new PointTApiException("Could not parse list response for path " + listPath, e);
         }
     }
 
@@ -177,7 +244,8 @@ public class PointTApiClient {
             throw new PointTAuthException("PointT API rejected the access token (HTTP " + status + ")");
         }
         if (!HttpStatus.isSuccess(status)) {
-            throw new PointTApiException("PointT API request to " + request.getURI() + " failed with HTTP " + status);
+            throw new PointTApiException("PointT API request to " + request.getURI() + " failed with HTTP " + status,
+                    status);
         }
         return body;
     }

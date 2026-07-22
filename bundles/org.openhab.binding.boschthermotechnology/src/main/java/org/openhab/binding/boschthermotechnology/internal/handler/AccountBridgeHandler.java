@@ -59,7 +59,7 @@ import org.slf4j.LoggerFactory;
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
-public class AccountBridgeHandler extends BaseBridgeHandler {
+public class AccountBridgeHandler extends BaseBridgeHandler implements PointTAccessProvider {
 
     private static final String STORAGE_KEY_REFRESH_TOKEN = "refreshToken";
     private static final Duration TOKEN_EXPIRY_SAFETY_MARGIN = Duration.ofSeconds(60);
@@ -161,6 +161,7 @@ public class AccountBridgeHandler extends BaseBridgeHandler {
     /**
      * @return a ready-to-use API client for calling the PointT API.
      */
+    @Override
     public PointTApiClient getApiClient() {
         return apiClient;
     }
@@ -170,6 +171,7 @@ public class AccountBridgeHandler extends BaseBridgeHandler {
      * has not reached its expected expiry yet. Intended for a {@code GatewayHandler} to call after
      * the PointT API itself rejected a token that the clock still considered valid.
      */
+    @Override
     public synchronized void invalidateAccessToken() {
         accessTokenExpiresAt = Instant.EPOCH;
     }
@@ -183,6 +185,7 @@ public class AccountBridgeHandler extends BaseBridgeHandler {
      *             the refresh token itself was rejected - the user must repeat the manual login
      * @throws PointTApiException on any other communication failure while refreshing
      */
+    @Override
     public synchronized String getValidAccessToken() throws PointTApiException {
         String currentAccessToken = accessToken;
         if (currentAccessToken != null

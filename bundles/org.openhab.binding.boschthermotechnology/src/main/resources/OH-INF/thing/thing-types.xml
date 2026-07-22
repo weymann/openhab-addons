@@ -37,27 +37,33 @@
 		</config-description>
 	</bridge-type>
 
-	<!-- Gateway Thing: one per Bosch/Buderus heating gateway registered to the account -->
-	<thing-type id="gateway">
+	<!--
+		Gateway Bridge: one per Bosch/Buderus gateway registered to the account (one entry from
+		GET /gateways/), see ADR-005/ADR-006. Converted from a plain thing-type to a bridge-type -
+		it now only carries channels that genuinely belong to the physical box itself, regardless
+		of hardware class (heat pump/boiler, RAC, water softener, ...). Everything functional
+		(heating circuits, DHW, pool, PV, RAC, ventilation, multi-zone thermostats, energy
+		monitoring, water softener) is discovered underneath as a sibling child thing by
+		ChildThingDiscoveryService, never nested inside one another.
+	-->
+	<bridge-type id="gateway">
 		<supported-bridge-type-refs>
 			<bridge-type-ref id="account"/>
 		</supported-bridge-type-refs>
 
 		<label>Bosch Thermotechnology Gateway</label>
-		<description>A single Bosch/Buderus heating gateway, reachable via the PointT cloud API.</description>
+		<description>
+			A single Bosch/Buderus gateway, reachable via the PointT cloud API. Depending on its
+			hardware class, child
+			things (heat pump, PV, pool, RAC unit, ventilation zone,
+			multi-zone thermostats, energy monitoring, water softener)
+			are discovered underneath
+			once this bridge is online - see ADR-005/ADR-006.
+		</description>
 
 		<channel-groups>
 			<channel-group id="system" typeId="system-group">
 				<label>System</label>
-			</channel-group>
-			<channel-group id="heating-circuit" typeId="heating-circuit-group">
-				<label>Heating Circuit</label>
-			</channel-group>
-			<channel-group id="dhw" typeId="dhw-group">
-				<label>Domestic Hot Water</label>
-			</channel-group>
-			<channel-group id="heat-source" typeId="heat-source-group">
-				<label>Heat Source</label>
 			</channel-group>
 			<channel-group id="notifications" typeId="notifications-group">
 				<label>Notifications</label>
@@ -75,7 +81,270 @@
 			</parameter>
 			<parameter name="refreshInterval" type="integer" unit="s" min="1">
 				<label>Refresh Interval</label>
-				<description>Interval the gateway's resources are polled, in seconds.</description>
+				<description>Interval the gateway's own system resources are polled, in seconds.</description>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</bridge-type>
+
+	<!--
+		Heat Pump Thing: heating circuits, DHW circuits, and heat sources of one gateway,
+		see ADR-005/ADR-006. The heating-circuit/dhw-circuit/heat-source channel groups below are
+		NOT declared as fixed group instances here - HeatpumpHandler adds one dynamic instance per
+		circuit/heat source id it discovers on the gateway (heating-circuit-hc1, dhw-circuit-dhw1,
+		...), using the channel-group-types declared further down. Group names are keyed by the
+		circuit's own id, not its position in the discovery response, so an API reordering can never
+		silently remap an existing Item link onto a different physical circuit (see the $QA comment
+		on HeatpumpHandler.discoverCircuitsAndStartPolling). This supports gateways with more than
+		one circuit or a cascade of heat sources, which the previous fixed hc1/dhw1 model could not
+		represent.
+	-->
+	<thing-type id="heatpump">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Heat Pump</label>
+		<description>
+			Heating circuits, domestic hot water circuits, and heat sources of one Bosch/Buderus
+			heat pump or boiler.
+			Channel groups are added dynamically per discovered circuit - see
+			HeatpumpHandler.
+		</description>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this heat pump belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<description>Interval the heat pump's resources are polled, in seconds.</description>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Photovoltaic Thing: PV inverter plus solar-thermal collector readings of one gateway -->
+	<thing-type id="pv">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Photovoltaic</label>
+		<description>
+			Photovoltaic inverter status and solar-thermal collector readings of one gateway.
+			Grouped in one thing per
+			team decision, even though PV (electricity) and solar-thermal
+			(hot water) are technically distinct systems - kept as
+			two separately labeled channel
+			groups below so they are not conflated in the UI.
+		</description>
+
+		<channel-groups>
+			<channel-group id="photovoltaic" typeId="photovoltaic-group">
+				<label>Photovoltaic</label>
+			</channel-group>
+			<channel-group id="solar-thermal" typeId="solar-thermal-group">
+				<label>Solar Thermal</label>
+			</channel-group>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this PV/solar-thermal system belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Pool Thing: pool heating status of one gateway -->
+	<thing-type id="pool">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Pool</label>
+		<description>Pool heating status of one gateway.</description>
+
+		<channels>
+			<channel id="enabled" typeId="pool-enabled"/>
+			<channel id="setpoint-temperature" typeId="pool-setpoint-temperature"/>
+			<channel id="current-temperature" typeId="pool-current-temperature"/>
+		</channels>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this pool belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Ventilation Zone Thing: one HRV ventilation zone, whether on a heat-pump gateway (HeatPump-With-Ventilation-* SystemType)
+		or a standalone HRV gateway (Ventilation SystemType) - see ADR-006 -->
+	<thing-type id="ventilation-zone">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Ventilation Zone</label>
+		<description>One HRV ventilation zone of a gateway.</description>
+
+		<channels>
+			<channel id="operation-mode" typeId="ventilation-operation-mode"/>
+			<channel id="filter-remaining-time" typeId="ventilation-filter-remaining-time"/>
+		</channels>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this ventilation zone belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Zone Thermostat Thing: one multi-zone RF room thermostat (zones/zone{n}), a subsystem structurally separate from the
+		heating-circuit resource tree - see myapp-api-analysis.md -->
+	<thing-type id="zone-thermostat">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Zone Thermostat</label>
+		<description>One multi-zone RF room thermostat.</description>
+
+		<channels>
+			<channel id="manual-room-setpoint" typeId="zone-manual-room-setpoint"/>
+			<channel id="average-current-temperature" typeId="zone-average-current-temperature"/>
+			<channel id="child-lock" typeId="zone-child-lock"/>
+		</channels>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this zone thermostat belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="zoneId" type="text" required="true">
+				<label>Zone ID</label>
+				<description>The zone number (e.g. "1" for zone1) as returned by zones/list. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!--
+		Energy Monitoring Thing: historical recordings (recordings/*), always proposed alongside
+		heatpump since it depends on the same heat source existing - see ADR-006.
+		TODO ($Dev): the recordings/* endpoints may return a time series (YRecording, per
+		myapp-api-analysis.md) rather than a single scalar - confirm the exact response shape
+		against a live gateway before release. Until then these channels are populated with
+		whatever scalar value (if any) getResource() returns, which may need reworking once the
+		real shape is known.
+	-->
+	<thing-type id="energy-monitoring">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Energy Monitoring</label>
+		<description>Historical energy-monitoring recordings of one gateway's heat source(s).</description>
+
+		<channels>
+			<channel id="actual-ch-power" typeId="energy-actual-ch-power"/>
+			<channel id="actual-dhw-power" typeId="energy-actual-dhw-power"/>
+			<channel id="total-consumed-energy" typeId="energy-total-consumed-energy"/>
+		</channels>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this energy monitoring belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- AC Unit Thing: one room air-conditioning (RAC) unit - see ADR-005 -->
+	<thing-type id="ac-unit">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Air Conditioner</label>
+		<description>One room air-conditioning (RAC) unit.</description>
+
+		<channels>
+			<channel id="operation-mode" typeId="ac-operation-mode"/>
+			<channel id="fan-speed" typeId="ac-fan-speed"/>
+			<channel id="temperature-setpoint" typeId="ac-temperature-setpoint"/>
+		</channels>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this AC unit belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
+				<default>60</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!--
+		Water Softener Thing: placeholder shell, no channels yet - see ADR-006. The PointT resource
+		path prefix for water softeners was not confirmed by either reverse-engineering source this
+		project is based on (buderus-reverse.md, myapp-api-analysis.md); only the device-type string
+		"watersoftener" is known (PointtConstants.POINT_DEVICE_TYPE_WATER_SOFTENER in the decompiled
+		app). WaterSoftenerHandler intentionally goes OFFLINE/CONFIGURATION_PENDING until this is
+		captured from a live gateway.
+	-->
+	<thing-type id="water-softener">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="gateway"/>
+		</supported-bridge-type-refs>
+
+		<label>Bosch Thermotechnology Water Softener</label>
+		<description>
+			One water softener. Not yet functional - see ADR-006: the resource path for this
+			device class is
+			unconfirmed.
+		</description>
+
+		<config-description>
+			<parameter name="gatewayId" type="text" required="true">
+				<label>Gateway ID</label>
+				<description>The gateway id this water softener belongs to. Filled in automatically by discovery.</description>
+			</parameter>
+			<parameter name="refreshInterval" type="integer" unit="s" min="1">
+				<label>Refresh Interval</label>
 				<default>60</default>
 				<advanced>true</advanced>
 			</parameter>
@@ -87,9 +356,32 @@
 		<label>System</label>
 		<channels>
 			<channel id="outdoor-temperature" typeId="outdoor-temperature"/>
+			<channel id="away-mode-enabled" typeId="away-mode-enabled"/>
+			<channel id="silent-mode-enabled" typeId="silent-mode-enabled"/>
+			<channel id="season-optimizer-mode" typeId="season-optimizer-mode"/>
+			<channel id="holiday-mode-active" typeId="holiday-mode-active"/>
 		</channels>
 	</channel-group-type>
 
+	<channel-group-type id="notifications-group">
+		<label>Notifications</label>
+		<channels>
+			<channel id="active" typeId="notifications-active"/>
+		</channels>
+	</channel-group-type>
+
+	<!--
+		Documents the channel shape of each dynamic heating-circuit-{circuitId} instance
+		HeatpumpHandler builds at runtime (heating-circuit-hc1, heating-circuit-hc2, ...) - group
+		names are keyed by the circuit's own id, not a list position, see the heatpump thing-type
+		comment above. Not currently instantiated by typeId from Java - HeatpumpHandler builds the
+		equivalent individual channels directly via ChannelBuilder against the underlying
+		channel-types below, since dynamic/repeatable channel groups are added per-instance rather
+		than expanded from a channel-group-type the way the static "system"/"notifications" groups
+		on the gateway bridge-type are. Kept here so the intended shape is documented in one place;
+		revisit if a future refactor switches to building actual ChannelGroup instances from this
+		type instead.
+	-->
 	<channel-group-type id="heating-circuit-group">
 		<label>Heating Circuit</label>
 		<channels>
@@ -97,7 +389,8 @@
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="dhw-group">
+	<!-- Documents the channel shape of each dynamic dhw-circuit-{n} instance - see heating-circuit-group above -->
+	<channel-group-type id="dhw-circuit-group">
 		<label>Domestic Hot Water</label>
 		<channels>
 			<channel id="charge-duration" typeId="dhw-charge-duration"/>
@@ -108,6 +401,7 @@
 		</channels>
 	</channel-group-type>
 
+	<!-- Documents the channel shape of the dynamic heat-source-{n} instance(s) - see heating-circuit-group above -->
 	<channel-group-type id="heat-source-group">
 		<label>Heat Source</label>
 		<channels>
@@ -119,10 +413,19 @@
 		</channels>
 	</channel-group-type>
 
-	<channel-group-type id="notifications-group">
-		<label>Notifications</label>
+	<channel-group-type id="photovoltaic-group">
+		<label>Photovoltaic</label>
 		<channels>
-			<channel id="active" typeId="notifications-active"/>
+			<channel id="enabled" typeId="pv-enabled"/>
+			<channel id="inverter-info" typeId="pv-inverter-info"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="solar-thermal-group">
+		<label>Solar Thermal</label>
+		<channels>
+			<channel id="collector-temperature" typeId="solar-collector-temperature"/>
+			<channel id="yield" typeId="solar-yield"/>
 		</channels>
 	</channel-group-type>
 
@@ -134,24 +437,59 @@
 		<state readOnly="true" pattern="%.1f %unit%"/>
 	</channel-type>
 
+	<channel-type id="away-mode-enabled">
+		<item-type>Switch</item-type>
+		<label>Away Mode</label>
+		<description>Enables or disables away mode for the whole gateway.</description>
+	</channel-type>
+
+	<channel-type id="silent-mode-enabled">
+		<item-type>Switch</item-type>
+		<label>Silent Mode</label>
+		<description>Enables or disables silent (noise-reduced) mode for the whole gateway.</description>
+	</channel-type>
+
+	<channel-type id="season-optimizer-mode">
+		<item-type>String</item-type>
+		<label>Season Optimizer Mode</label>
+		<description>
+			Raw season optimizer mode reported/expected by the gateway. TODO ($Dev): confirm the
+			exact enumeration of
+			values against a live gateway - currently passed through as-is,
+			analogous to heat-source-ch-status.
+		</description>
+	</channel-type>
+
+	<channel-type id="holiday-mode-active">
+		<item-type>String</item-type>
+		<label>Active Holiday Mode</label>
+		<description>
+			Raw summary of the currently active holiday mode, as reported by
+			holidayMode/activeModes. Read-only by
+			design - creating/editing/deleting holiday modes
+			is deliberately not modeled as a channel, see ADR-005.
+		</description>
+		<state readOnly="true"/>
+	</channel-type>
+
 	<channel-type id="manual-room-setpoint">
 		<item-type>Number:Temperature</item-type>
 		<label>Manual Room Setpoint</label>
-		<description>Manual room setpoint of heating circuit hc1.</description>
+		<description>Manual room setpoint of this heating circuit.</description>
 		<state min="5" max="30" step="0.5" pattern="%.1f %unit%"/>
 	</channel-type>
 
 	<channel-type id="dhw-charge-duration">
 		<item-type>Number:Time</item-type>
 		<label>DHW Charge Duration</label>
-		<description>Domestic hot water single-charge duration of dhw1.</description>
+		<description>Domestic hot water single-charge duration of this DHW circuit.</description>
 		<state min="15" max="2880" step="1" pattern="%d %unit%"/>
 	</channel-type>
 
 	<channel-type id="dhw-single-charge-setpoint">
 		<item-type>Number:Temperature</item-type>
 		<label>DHW Single Charge Setpoint</label>
-		<description>Domestic hot water single-charge temperature setpoint of dhw1.</description>
+		<description>Domestic hot water single-charge temperature setpoint of this DHW circuit.</description>
 		<state min="50" max="70" step="0.5" pattern="%.1f %unit%"/>
 	</channel-type>
 
@@ -159,11 +497,11 @@
 		<item-type>Number</item-type>
 		<label>DHW Operation Mode</label>
 		<description>
-			Domestic hot water operation mode of dhw1. The PointT API itself reports/expects the
-			String values
-			"Off"/"Eco+"/"Eco"/"Comfort"/"Auto" - the numeric codes below are a
-			binding-internal mapping onto those Strings, see
-			GatewayHandler.
+			Domestic hot water operation mode of this DHW circuit. The PointT API itself
+			reports/expects the String
+			values "Off"/"Eco+"/"Eco"/"Comfort"/"Auto" - the numeric
+			codes below are a binding-internal mapping onto those
+			Strings, see HeatpumpHandler.
 		</description>
 		<state>
 			<options>
@@ -236,12 +574,160 @@
 	<channel-type id="dhw-charge">
 		<item-type>Switch</item-type>
 		<label>DHW Instant Charge</label>
-		<description>Starts or stops a domestic hot water instant charge of dhw1.</description>
+		<description>Starts or stops a domestic hot water instant charge of this DHW circuit.</description>
 	</channel-type>
 
 	<channel-type id="dhw-reduce-temp-on-alarm">
 		<item-type>Switch</item-type>
 		<label>DHW Reduce Temperature On Alarm</label>
 		<description>Reduces the domestic hot water temperature when an alarm is active.</description>
+	</channel-type>
+
+	<channel-type id="pv-enabled">
+		<item-type>Switch</item-type>
+		<label>PV Enabled</label>
+		<description>Enables or disables photovoltaic integration.</description>
+	</channel-type>
+
+	<channel-type id="pv-inverter-info">
+		<item-type>String</item-type>
+		<label>PV Inverter Info</label>
+		<description>
+			Raw photovoltaic inverter information, as a JSON string. TODO ($Dev): confirm the exact
+			response shape
+			against a live gateway and consider splitting into dedicated channels
+			once known.
+		</description>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="solar-collector-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Solar Collector Temperature</label>
+		<description>Solar-thermal collector temperature (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="solar-yield">
+		<item-type>Number:Energy</item-type>
+		<label>Solar Yield</label>
+		<description>Solar-thermal yield (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="pool-enabled">
+		<item-type>Switch</item-type>
+		<label>Pool Enabled</label>
+		<description>Enables or disables pool heating.</description>
+	</channel-type>
+
+	<channel-type id="pool-setpoint-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Pool Setpoint Temperature</label>
+		<description>Pool water temperature setpoint.</description>
+		<state pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="pool-current-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Pool Current Temperature</label>
+		<description>Current pool water temperature (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="ventilation-operation-mode">
+		<item-type>String</item-type>
+		<label>Ventilation Operation Mode</label>
+		<description>
+			Raw ventilation operation mode reported/expected by the gateway. TODO ($Dev): confirm
+			the exact
+			enumeration of values against a live gateway.
+		</description>
+	</channel-type>
+
+	<channel-type id="ventilation-filter-remaining-time">
+		<item-type>Number:Time</item-type>
+		<label>Ventilation Filter Remaining Time</label>
+		<description>Remaining filter run time before replacement is due (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="zone-manual-room-setpoint">
+		<item-type>Number:Temperature</item-type>
+		<label>Zone Manual Room Setpoint</label>
+		<description>
+			Manual room setpoint of this zone thermostat. TODO ($Dev): the underlying resource path
+			(zones/zone{n}/{heatCoolMode}/manualRoomSetpoint) is parameterized by a heat/cool mode
+			segment - ZoneThermostatHandler
+			currently assumes "heat" as the default; confirm against
+			a live gateway whether "cool" needs its own channel.
+		</description>
+		<state min="5" max="30" step="0.5" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="zone-average-current-temperature">
+		<item-type>Number:Temperature</item-type>
+		<label>Zone Average Current Temperature</label>
+		<description>Average current room temperature of this zone thermostat (read-only).</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="zone-child-lock">
+		<item-type>Switch</item-type>
+		<label>Zone Child Lock</label>
+		<description>Enables or disables the child lock of this zone thermostat.</description>
+	</channel-type>
+
+	<channel-type id="energy-actual-ch-power">
+		<item-type>Number:Power</item-type>
+		<label>Actual Central Heating Power</label>
+		<description>
+			Actual central heating power. TODO ($Dev): confirm whether this resource returns a
+			single scalar or a time
+			series (YRecording, per myapp-api-analysis.md) against a live
+			gateway - see the thing-type description.
+		</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="energy-actual-dhw-power">
+		<item-type>Number:Power</item-type>
+		<label>Actual DHW Power</label>
+		<description>Actual domestic hot water power. Same time-series caveat as actual-ch-power.</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="energy-total-consumed-energy">
+		<item-type>Number:Energy</item-type>
+		<label>Total Consumed Energy</label>
+		<description>Total consumed energy of the heat source. Same time-series caveat as actual-ch-power.</description>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="ac-operation-mode">
+		<item-type>String</item-type>
+		<label>AC Operation Mode</label>
+		<description>
+			Raw RAC operation mode reported/expected by the gateway. TODO ($Dev): confirm the exact
+			enumeration of
+			values against a live gateway.
+		</description>
+	</channel-type>
+
+	<channel-type id="ac-fan-speed">
+		<item-type>String</item-type>
+		<label>AC Fan Speed</label>
+		<description>
+			Raw RAC fan speed reported/expected by the gateway. TODO ($Dev): confirm the exact
+			enumeration of values
+			against a live gateway.
+		</description>
+	</channel-type>
+
+	<channel-type id="ac-temperature-setpoint">
+		<item-type>Number:Temperature</item-type>
+		<label>AC Temperature Setpoint</label>
+		<description>RAC temperature setpoint.</description>
+		<state pattern="%.1f %unit%"/>
 	</channel-type>
 </thing:thing-descriptions>

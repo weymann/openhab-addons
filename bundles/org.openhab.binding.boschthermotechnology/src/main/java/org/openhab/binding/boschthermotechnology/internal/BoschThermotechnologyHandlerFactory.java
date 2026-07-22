@@ -24,9 +24,18 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.boschthermotechnology.internal.api.PointTApiClient;
 import org.openhab.binding.boschthermotechnology.internal.api.SingleKeyIdAuthClient;
+import org.openhab.binding.boschthermotechnology.internal.discovery.ChildThingDiscoveryService;
 import org.openhab.binding.boschthermotechnology.internal.discovery.GatewayDiscoveryService;
+import org.openhab.binding.boschthermotechnology.internal.handler.AcUnitHandler;
 import org.openhab.binding.boschthermotechnology.internal.handler.AccountBridgeHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.EnergyMonitoringHandler;
 import org.openhab.binding.boschthermotechnology.internal.handler.GatewayHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.HeatpumpHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.PoolHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.PvHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.VentilationZoneHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.WaterSoftenerHandler;
+import org.openhab.binding.boschthermotechnology.internal.handler.ZoneThermostatHandler;
 import org.openhab.core.config.discovery.DiscoveryService;
 import org.openhab.core.io.net.http.HttpClientFactory;
 import org.openhab.core.storage.Storage;
@@ -46,9 +55,13 @@ import org.osgi.service.component.annotations.Reference;
 import com.google.gson.Gson;
 
 /**
- * The {@link BoschThermotechnologyHandlerFactory} creates {@link AccountBridgeHandler} and
- * {@link GatewayHandler} instances, and registers/unregisters a {@link GatewayDiscoveryService}
- * for each account bridge.
+ * The {@link BoschThermotechnologyHandlerFactory} creates every handler this binding defines and
+ * registers/unregisters their discovery services: {@link AccountBridgeHandler} plus a
+ * {@link GatewayDiscoveryService} per account bridge (unchanged, ADR-004), and - since
+ * ADR-005/ADR-006 - {@link GatewayHandler} plus a {@link ChildThingDiscoveryService} per gateway
+ * bridge, and the eight plain child handlers ({@link HeatpumpHandler}, {@link PvHandler},
+ * {@link PoolHandler}, {@link VentilationZoneHandler}, {@link ZoneThermostatHandler},
+ * {@link EnergyMonitoringHandler}, {@link AcUnitHandler}, {@link WaterSoftenerHandler}).
  *
  * <p>
  * TODO ($Dev): this uses constructor-based {@code @Reference}/{@code @Activate} injection, which
@@ -62,10 +75,18 @@ import com.google.gson.Gson;
 @Component(configurationPid = "binding.boschthermotechnology", service = ThingHandlerFactory.class)
 public class BoschThermotechnologyHandlerFactory extends BaseThingHandlerFactory {
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_ACCOUNT, THING_TYPE_GATEWAY);
+    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_ACCOUNT, THING_TYPE_GATEWAY,
+            THING_TYPE_HEATPUMP, THING_TYPE_PV, THING_TYPE_POOL, THING_TYPE_VENTILATION_ZONE,
+            THING_TYPE_ZONE_THERMOSTAT, THING_TYPE_ENERGY_MONITORING, THING_TYPE_AC_UNIT, THING_TYPE_WATER_SOFTENER);
 
     private final HttpClientFactory httpClientFactory;
     private final StorageService storageService;
+
+    /**
+     * Shared by both discovery-service kinds ({@code GatewayDiscoveryService} per account bridge,
+     * {@code ChildThingDiscoveryService} per gateway bridge) - safe because a {@link ThingUID}
+     * already encodes the thing type, so account and gateway bridge UIDs never collide as keys.
+     */
     private final Map<ThingUID, ServiceRegistration<?>> discoveryServiceRegistrations = new ConcurrentHashMap<>();
 
     @Activate
@@ -93,7 +114,7 @@ public class BoschThermotechnologyHandlerFactory extends BaseThingHandlerFactory
             // accounts separate without needing to prefix keys manually.
             Storage<String> tokenStorage = storageService.getStorage(bridge.getUID().getAsString());
             AccountBridgeHandler bridgeHandler = new AccountBridgeHandler(bridge, authClient, apiClient, tokenStorage);
-            GatewayDiscoveryService discoveryService = registerDiscoveryService(bridgeHandler);
+            GatewayDiscoveryService discoveryService = registerGatewayDiscoveryService(bridgeHandler);
             // In addition to the user manually triggering a scan from the Inbox, also scan once
             // automatically every time the bridge reaches ONLINE (fresh login or a restored
             // session), so newly registered gateways show up without a manual step.
@@ -101,8 +122,38 @@ public class BoschThermotechnologyHandlerFactory extends BaseThingHandlerFactory
             return bridgeHandler;
         }
 
-        if (THING_TYPE_GATEWAY.equals(thingTypeUID)) {
-            return new GatewayHandler(thing);
+        if (THING_TYPE_GATEWAY.equals(thingTypeUID) && thing instanceof Bridge bridge) {
+            GatewayHandler gatewayHandler = new GatewayHandler(bridge);
+            ChildThingDiscoveryService discoveryService = registerChildThingDiscoveryService(gatewayHandler);
+            // Mirrors the account bridge's own automatic scan-on-online behavior (ADR-004) one
+            // level down - see GatewayHandler.updateStatus(...).
+            gatewayHandler.setChildDiscoveryScanTrigger(() -> discoveryService.startScan(null));
+            return gatewayHandler;
+        }
+
+        if (THING_TYPE_HEATPUMP.equals(thingTypeUID)) {
+            return new HeatpumpHandler(thing);
+        }
+        if (THING_TYPE_PV.equals(thingTypeUID)) {
+            return new PvHandler(thing);
+        }
+        if (THING_TYPE_POOL.equals(thingTypeUID)) {
+            return new PoolHandler(thing);
+        }
+        if (THING_TYPE_VENTILATION_ZONE.equals(thingTypeUID)) {
+            return new VentilationZoneHandler(thing);
+        }
+        if (THING_TYPE_ZONE_THERMOSTAT.equals(thingTypeUID)) {
+            return new ZoneThermostatHandler(thing);
+        }
+        if (THING_TYPE_ENERGY_MONITORING.equals(thingTypeUID)) {
+            return new EnergyMonitoringHandler(thing);
+        }
+        if (THING_TYPE_AC_UNIT.equals(thingTypeUID)) {
+            return new AcUnitHandler(thing);
+        }
+        if (THING_TYPE_WATER_SOFTENER.equals(thingTypeUID)) {
+            return new WaterSoftenerHandler(thing);
         }
 
         return null;
@@ -110,7 +161,7 @@ public class BoschThermotechnologyHandlerFactory extends BaseThingHandlerFactory
 
     @Override
     protected void removeHandler(ThingHandler thingHandler) {
-        if (thingHandler instanceof AccountBridgeHandler) {
+        if (thingHandler instanceof AccountBridgeHandler || thingHandler instanceof GatewayHandler) {
             ServiceRegistration<?> registration = discoveryServiceRegistrations
                     .remove(thingHandler.getThing().getUID());
             if (registration != null) {
@@ -120,11 +171,19 @@ public class BoschThermotechnologyHandlerFactory extends BaseThingHandlerFactory
         super.removeHandler(thingHandler);
     }
 
-    private GatewayDiscoveryService registerDiscoveryService(AccountBridgeHandler bridgeHandler) {
+    private GatewayDiscoveryService registerGatewayDiscoveryService(AccountBridgeHandler bridgeHandler) {
         GatewayDiscoveryService discoveryService = new GatewayDiscoveryService(bridgeHandler);
         ServiceRegistration<?> registration = bundleContext.registerService(DiscoveryService.class.getName(),
                 discoveryService, new Hashtable<>());
         discoveryServiceRegistrations.put(bridgeHandler.getThing().getUID(), registration);
+        return discoveryService;
+    }
+
+    private ChildThingDiscoveryService registerChildThingDiscoveryService(GatewayHandler gatewayHandler) {
+        ChildThingDiscoveryService discoveryService = new ChildThingDiscoveryService(gatewayHandler);
+        ServiceRegistration<?> registration = bundleContext.registerService(DiscoveryService.class.getName(),
+                discoveryService, new Hashtable<>());
+        discoveryServiceRegistrations.put(gatewayHandler.getThing().getUID(), registration);
         return discoveryService;
     }
 }

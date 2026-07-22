@@ -20,6 +20,12 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
  * checked exception because callers (thing handlers) must always decide how to map it to a
  * {@code ThingStatus} - it is never safe to silently ignore.
  *
+ * <p>
+ * Since ADR-006, the HTTP status (where known) is carried along via {@link #getHttpStatus()} so
+ * that {@code ChildThingDiscoveryService}'s existence probes ({@code tryGetResource} on
+ * {@code PointTApiClient}) can distinguish "404, resource genuinely absent" from any other
+ * failure, which must not be interpreted as absence.
+ *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
@@ -27,11 +33,28 @@ public class PointTApiException extends Exception {
 
     private static final long serialVersionUID = 1L;
 
+    /** {@code -1} if no HTTP response was ever received (e.g. connection/timeout failure). */
+    private final int httpStatus;
+
     public PointTApiException(String message) {
-        super(message);
+        this(message, -1);
     }
 
     public PointTApiException(String message, Throwable cause) {
         super(message, cause);
+        this.httpStatus = -1;
+    }
+
+    public PointTApiException(String message, int httpStatus) {
+        super(message);
+        this.httpStatus = httpStatus;
+    }
+
+    /**
+     * @return the HTTP status code that caused this exception, or {@code -1} if none is known
+     *         (e.g. a connection/timeout failure before any response was received).
+     */
+    public int getHttpStatus() {
+        return httpStatus;
     }
 }
