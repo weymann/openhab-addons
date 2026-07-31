@@ -46,7 +46,7 @@ public interface PointTAccessProvider {
      *             the refresh token itself was rejected
      * @throws PointTApiException on any other communication failure while refreshing
      */
-    String getValidAccessToken() throws PointTApiException;
+    String getValidAccessToken() throws PointTAuthException, PointTApiException;
 
     /**
      * Forces the next call to {@link #getValidAccessToken()} to refresh, even if the cached token

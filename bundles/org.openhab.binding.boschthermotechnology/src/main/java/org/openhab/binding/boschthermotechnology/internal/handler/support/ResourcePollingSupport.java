@@ -106,7 +106,15 @@ public class ResourcePollingSupport {
      * Reads every bound resource and updates the corresponding channel state. Public so a handler
      * can also trigger an immediate out-of-cycle poll (e.g. {@code scheduler.execute(this::poll)}
      * from a {@code RefreshType} command), exactly as {@code GatewayHandler} did before ADR-006.
+     *
+     * <p>
+     * {@code @SuppressWarnings("null")}: {@code binding.stateReader().apply(value)} triggers an
+     * "unsafe interpretation of method return type as @NonNull" compiler info - {@code
+     * java.util.function.Function} is not designed with null type annotations in mind, so this is
+     * noise, not a real null-safety issue (same rationale as the Mockito test classes, see
+     * {@code rules/testing-rules.md}).
      */
+    @SuppressWarnings("null")
     public void poll() {
         try {
             String accessToken = accessProvider.getValidAccessToken();
@@ -133,7 +141,13 @@ public class ResourcePollingSupport {
      * handler's own {@code handleCommand(ChannelUID, Command)} for anything that is not a
      * {@code RefreshType} (handlers keep handling {@code RefreshType} themselves, since that maps
      * to {@link #poll()}, not a write).
+     *
+     * <p>
+     * {@code @SuppressWarnings("null")}: {@code writer.apply(command)} triggers the same
+     * "unsafe interpretation of method return type as @NonNull" compiler info as {@link #poll()}
+     * above, for the same reason - {@code java.util.function.Function} is not null-annotated.
      */
+    @SuppressWarnings("null")
     public void handleCommand(String channelId, Command command) {
         ChannelResourceBinding binding = bindingsByChannelId.get(channelId);
         if (binding == null) {
