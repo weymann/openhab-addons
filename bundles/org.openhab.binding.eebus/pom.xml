@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.openhab.addons.bundles</groupId>
+    <artifactId>org.openhab.addons.reactor.bundles</artifactId>
+    <version>5.3.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>org.openhab.binding.eebus</artifactId>
+
+  <name>openHAB Add-ons :: Bundles :: EEBus Binding</name>
+
+  <properties>
+    <!-- ADR-001: ship/spine and their transitive dependency graph are embedded via the
+         reactor's default maven-dependency-plugin "embed-dependencies" execution
+         (includeScope=runtime). slf4j-api is excluded here so it stays on Import-Package,
+         resolved against the single shared SLF4J binding provided by the openHAB/Karaf
+         runtime instead of a private, bundle-local copy. -->
+    <dep.noembedding>slf4j-api</dep.noembedding>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.openmuc.jeebus</groupId>
+      <artifactId>spine</artifactId>
+      <version>4.0.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmuc.jeebus</groupId>
+      <artifactId>ship</artifactId>
+      <version>2.2.0</version>
+    </dependency>
+
+    <!-- ADR-001 (2026-07-31 correction): the reactor's embed-dependencies execution sets
+         excludeTransitive=true, so it only ever embeds artifacts declared directly in
+         *this* pom.xml - never anything pulled in only transitively through spine/ship.
+         Every entry below is therefore a transitive runtime dependency of spine or ship,
+         pinned to the exact version resolved by `mvn dependency:tree -Dscope=runtime`
+         against this module, and declared here purely so it gets embedded. None of these
+         are used directly by binding code. slf4j-api is deliberately NOT declared here -
+         see the note further down. -->
+
+    <!-- transitive via spine -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.21.0</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <version>2.21</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>2.21.0</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-jakarta-xmlbind-annotations</artifactId>
+      <version>2.21.0</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.xml.bind</groupId>
+      <artifactId>jakarta.xml.bind-api</artifactId>
+      <version>4.0.5</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.activation</groupId>
+      <artifactId>jakarta.activation-api</artifactId>
+      <version>2.1.0</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.jvnet.jaxb</groupId>
+      <artifactId>jaxb-plugins-runtime</artifactId>
+      <version>4.0.12</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>jaxb-core</artifactId>
+      <version>4.0.6</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>txw2</artifactId>
+      <version>4.0.6</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.angus</groupId>
+      <artifactId>angus-activation</artifactId>
+      <version>2.0.3</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.sun.istack</groupId>
+      <artifactId>istack-commons-runtime</artifactId>
+      <version>4.1.2</version>
+      <type>jar</type>
+    </dependency>
+
+    <!-- transitive via ship -->
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.13.2</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.google.errorprone</groupId>
+      <artifactId>error_prone_annotations</artifactId>
+      <version>2.41.0</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.jmdns</groupId>
+      <artifactId>jmdns</artifactId>
+      <version>3.6.3</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <version>1.83</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcutil-jdk18on</artifactId>
+      <version>1.83</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <version>1.83</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.findbugs</groupId>
+      <artifactId>jsr305</artifactId>
+      <version>3.0.2</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-common</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-buffer</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-base</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-http</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-codec-compression</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-resolver</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-unix-common</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-handler</artifactId>
+      <version>4.2.10.Final</version>
+      <type>jar</type>
+    </dependency>
+  </dependencies>
+
+</project>

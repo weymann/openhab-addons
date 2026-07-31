@@ -1,0 +1,112 @@
+# ADR-001: this file does NOT control embedding (that is the reactor's
+# maven-dependency-plugin `embed-dependencies` execution, includeScope=runtime,
+# excludeTransitive=true - see docs/ADR/001-embed-third-party-dependencies.md).
+# It exists solely to correct bnd's automatically generated Import-Package
+# for the OSGi manifest.
+#
+# netty-codec-compression (embedded transitively via netty-codec-http, needed
+# for the WebSocket handshake) contains encoder/decoder classes for several
+# OPTIONAL compression backends (Brotli, Zstd, LZ4, LZMA, JZlib/zlib, LZF).
+# None of these backend libraries are embedded (see pom.xml) because this
+# binding never uses HTTP content-encoding - SHIP is a raw WebSocket/TLS
+# protocol. Without this override, bnd's static bytecode analysis treats
+# every one of these as a MANDATORY Import-Package, and karaf-feature-verification
+# fails one missing package at a time (already seen for
+# com.aayushatharva.brotli4j). Marking them resolution:=optional keeps them
+# out of the way of feature verification while still declaring the
+# capability accurately, should the backing library ever actually be
+# installed at runtime.
+# com.oracle.svm.* / org.graalvm.*: GraalVM native-image (Substrate VM) support
+# annotations and SDK types (@TargetClass/@Substitute-style classes, polyglot
+# API), present for optional native-image compatibility in one or more of the
+# embedded JAXB/Jackson/Netty-ecosystem jars (angus-activation declares an
+# optional/provided dependency on org.graalvm.sdk:graal-sdk, for example).
+# This binding is never built as a GraalVM native image, so no GraalVM
+# artifact is embedded - same pattern as the compression codecs above.
+# Broadened to the full com.oracle.svm.* / org.graalvm.* namespace (not just
+# the one sub-package that first surfaced) to avoid further one-at-a-time
+# karaf-feature-verification failures for GraalVM-only support code.
+#
+# The following are all optional integrations documented directly in the
+# netty-handler/netty-common/netty-buffer 4.2.10.Final POMs (verified against
+# Maven Central, not guessed) that this binding never uses, since standard
+# JDK TLS and SLF4J logging are sufficient:
+#   - io.netty.internal.tcnative     -> optional OpenSSL-native TLS engine
+#   - org.bouncycastle.jsse          -> optional BouncyCastle TLS engine
+#                                        (netty-handler loads it via
+#                                        Class.forName reflection)
+#   - org.conscrypt                  -> optional Google Conscrypt TLS provider
+#   - sun.misc / sun.nio.ch / jdk.jfr -> JDK-internal, netty-common's own
+#                                        (Felix-based) manifest already marks
+#                                        these optional; replicated here since
+#                                        we regenerate the manifest ourselves
+#   - sun.security.ssl / sun.security.x509 -> JDK-internal, referenced by
+#                                        Netty's optional ALPN/SelfSignedCertificate
+#                                        support code (netty-handler's own POM
+#                                        notes needing --add-exports for
+#                                        sun.security.x509 for this reason)
+#   - org.apache.commons.logging     -> optional Netty logging backend
+#   - org.apache.logging.log4j.*     -> optional Netty logging backend
+#   - reactor.blockhound             -> optional BlockHound test integration
+# org.openhab.core.*: without this line, bnd falls back to its own default
+# versioning heuristic and stamps every org.openhab.core.* import with a
+# strict version range derived from the exact core build we compile
+# against (e.g. "[5.3,6)"), which then refuses to resolve against any
+# other openHAB 5.x minor release (confirmed by diffing this bundle's
+# generated MANIFEST.MF against org.openhab.binding.mercedesme's, a binding
+# with no local bnd.bnd: its org.openhab.core.* imports carry NO version
+# attribute at all, while every other provided package - Gson, javax.measure,
+# Jetty, SLF4J - does get a normal range). That versionless behavior for
+# org.openhab.core.* is evidently a default the reactor provides when a
+# module has no bnd.bnd of its own; by writing our own Import-Package
+# instruction below (needed for the optional-package overrides), we
+# replaced that default instead of extending it. This line restores it.
+# Netty-common shades/relocates org.jctools to
+# io.netty.util.internal.shaded.org.jctools.* at its own build time and
+# stamps OSGi @Version package-info annotations onto the relocated
+# packages. Once embedded here, bnd picks those annotations up and
+# auto-exports the package (and separately imports it too) - the only
+# embedded package that does this, since it is the only one carrying such
+# annotations. This violates the "nothing embedded is exported" intent
+# (see the Consequences/Positive section above) and was only found by
+# diffing this bundle's manifest against org.openhab.binding.mercedesme's.
+# Force it fully private: excluded from Export-Package, and excluded from
+# Import-Package so bnd does not try to wire it externally either - we
+# always use our own embedded copy.
+#
+# Export-Package is intentionally "export nothing" (bare "!*"), matching the
+# ADR's Consequences/Positive statement that nothing embedded is exported. A
+# trailing bare "*" here (i.e. "export everything bnd can see") previously
+# caused bnd to sweep in unrelated content from elsewhere on its scan path -
+# surfaced as "Invalid package name: 'repository.org.apache.felix...'" /
+# 'resources.system...'" warnings for Karaf distro paths, and as a hard
+# failure ("Same component name org.openhab.addons used in multiple
+# component implementations") from two unrelated openHAB core SCR
+# components getting swept into this bundle's component analysis. The
+# explicit jctools exclusion is redundant once nothing is exported, but is
+# kept for documentation of intent.
+Export-Package: !io.netty.util.internal.shaded.org.jctools.*, !*
+Import-Package: \
+    !io.netty.util.internal.shaded.org.jctools.*, \
+    org.openhab.core.*, \
+    com.aayushatharva.brotli4j.*;resolution:=optional, \
+    com.github.luben.zstd.*;resolution:=optional, \
+    net.jpountz.*;resolution:=optional, \
+    lzma.sdk.*;resolution:=optional, \
+    com.jcraft.jzlib.*;resolution:=optional, \
+    com.ning.compress.*;resolution:=optional, \
+    com.oracle.svm.*;resolution:=optional, \
+    org.graalvm.*;resolution:=optional, \
+    io.netty.internal.tcnative.*;resolution:=optional, \
+    org.bouncycastle.jsse.*;resolution:=optional, \
+    org.conscrypt.*;resolution:=optional, \
+    sun.misc;resolution:=optional, \
+    sun.nio.ch;resolution:=optional, \
+    sun.security.ssl;resolution:=optional, \
+    sun.security.x509;resolution:=optional, \
+    jdk.jfr;resolution:=optional, \
+    org.apache.commons.logging.*;resolution:=optional, \
+    org.apache.logging.log4j.*;resolution:=optional, \
+    reactor.blockhound.*;resolution:=optional, \
+    io.netty.pkitesting.*;resolution:=optional, \
+    *

@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="eebus"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Bridge: one local SHIP/SPINE service instance (one certificate/SKI). See CONCEPT.md. -->
+	<bridge-type id="service">
+		<label>EEBus Service</label>
+		<description>One local EEBus SHIP/SPINE service instance (own certificate, mDNS presence).</description>
+
+		<config-description>
+			<parameter name="vendorCode" type="text" required="true">
+				<label>Vendor Code</label>
+				<description>5-character vendor code assigned by the EEBUS Initiative.</description>
+			</parameter>
+			<parameter name="deviceBrand" type="text" required="true">
+				<label>Device Brand</label>
+				<description>Brand / manufacturer name, announced via mDNS.</description>
+			</parameter>
+			<parameter name="deviceModel" type="text" required="true">
+				<label>Device Model</label>
+				<description>Model name, announced via mDNS.</description>
+			</parameter>
+			<parameter name="serialNumber" type="text" required="true">
+				<label>Serial Number</label>
+				<description>Serial number, used together with brand/model to build the SHIP-ID.</description>
+			</parameter>
+			<parameter name="mdnsServiceInstance" type="text" required="true">
+				<label>Display Name</label>
+				<description>Friendly name other EEBUS devices see when they discover this service, e.g. "openHAB EnergyManager".</description>
+			</parameter>
+			<parameter name="port" type="integer" min="1" max="65535">
+				<label>Port</label>
+				<description>WebSocket port the local SHIP server listens on.</description>
+				<default>4711</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="autoAcceptEnabled" type="boolean">
+				<label>Auto Accept</label>
+				<description>Accept the first incoming connection within a short time window after starting, without pre-trust.
+					Discouraged by the EEBUS Initiative - prefer pairing via peer Things.</description>
+				<default>false</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="supportedUseCasesClient" type="text" multiple="true">
+				<label>Use Cases to Detect (Client Role)</label>
+				<description>Which EEBUS use cases openHAB should try to detect/consume on paired peers. See CONCEPT.md §5.4.1.
+					Wiring is not yet implemented - see CONCEPT.md §7 items 3+8.</description>
+				<options>
+					<option value="CDSF">CDSF - Configuration of DHW System Function</option>
+					<option value="CDT">CDT - Configuration of DHW Temperature</option>
+					<option value="CRCSF">CRCSF - Configuration of Room Cooling System Function</option>
+					<option value="CRCT">CRCT - Configuration of Room Cooling Temperature</option>
+					<option value="CRHSF">CRHSF - Configuration of Room Heating System Function</option>
+					<option value="CRHT">CRHT - Configuration of Room Heating Temperature</option>
+					<option value="COB">COB - Control of Battery</option>
+					<option value="CEVC">CEVC - Coordinated EV Charging</option>
+					<option value="DBEVC">DBEVC - Dynamic Bidirectional EV Charging</option>
+					<option value="EVCEM">EVCEM - EV Charging Electricity Measurement</option>
+					<option value="EVCS">EVCS - EV Charging Summary</option>
+					<option value="EVCC">EVCC - EV Commissioning and Configuration</option>
+					<option value="EVPS">EVPS - EV Peak Shaving</option>
+					<option value="EVSoC">EVSoC - EV State of Charge</option>
+					<option value="EVSECC">EVSECC - EVSE Commissioning and Configuration</option>
+					<option value="EPRQ">EPRQ - Extra Power Request</option>
+					<option value="FLOA">FLOA - Flexible Load</option>
+					<option value="FSWG">FSWG - Flexible Start for White Goods</option>
+					<option value="ITPCM">ITPCM - Incentive-Table based power consumption management</option>
+					<option value="LPC">LPC - Limitation of Power Consumption</option>
+					<option value="LPP">LPP - Limitation of Power Production</option>
+					<option value="MCSGRC">MCSGRC - Monitoring and Control of Smart Grid Ready Conditions</option>
+					<option value="MOB">MOB - Monitoring of Battery</option>
+					<option value="MDSF">MDSF - Monitoring of DHW System Function</option>
+					<option value="MDT">MDT - Monitoring of DHW Temperature</option>
+					<option value="MGCP">MGCP - Monitoring of Grid Connection Point</option>
+					<option value="MOI">MOI - Monitoring of Inverter</option>
+					<option value="MOT">MOT - Monitoring of Outdoor Temperature</option>
+					<option value="MPC">MPC - Monitoring of Power Consumption</option>
+					<option value="MPS">MPS - Monitoring of PV String</option>
+					<option value="MRCSF">MRCSF - Monitoring of Room Cooling System Function</option>
+					<option value="MRHSF">MRHSF - Monitoring of Room Heating System Function</option>
+					<option value="MRT">MRT - Monitoring of Room Temperature</option>
+					<option value="NID">NID - Node Identification</option>
+					<option value="OHPCF">OHPCF - Optimization of Self Consumption by Heat Pump Compressor Flexibility</option>
+					<option value="OSCEV">OSCEV - Optimization of Self-Consumption During EV Charging</option>
+					<option value="OPEV">OPEV - Overload Protection by EV Charging Current Curtailment</option>
+					<option value="PODF">PODF - Power Demand Forecast</option>
+					<option value="POEN">POEN - Power Envelope</option>
+					<option value="TOUT">TOUT - Time of Use Tariff</option>
+					<option value="VABD">VABD - Visualization of Aggregated Battery Data</option>
+					<option value="VAPD">VAPD - Visualization of Aggregated Photovoltaic Data</option>
+					<option value="VHAN">VHAN - Visualization of Heating Area Name</option>
+					<option value="VPCHPC">VPCHPC - Visualization of Electrical Power Consumption of the Heat Pump Compressor</option>
+				</options>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="supportedUseCasesServer" type="text" multiple="true">
+				<label>Use Cases to Offer (Server Role)</label>
+				<description>Which EEBUS use cases openHAB should offer to the network itself, e.g. relaying data from another
+					openHAB Thing (see CONCEPT.md §5.5). Fed via 'eebus' Item/Rule metadata - see CONCEPT.md §4.2. Wiring is not yet
+					implemented - see CONCEPT.md §7 items 6-8.</description>
+				<options>
+					<option value="CDSF">CDSF - Configuration of DHW System Function</option>
+					<option value="CDT">CDT - Configuration of DHW Temperature</option>
+					<option value="CRCSF">CRCSF - Configuration of Room Cooling System Function</option>
+					<option value="CRCT">CRCT - Configuration of Room Cooling Temperature</option>
+					<option value="CRHSF">CRHSF - Configuration of Room Heating System Function</option>
+					<option value="CRHT">CRHT - Configuration of Room Heating Temperature</option>
+					<option value="COB">COB - Control of Battery</option>
+					<option value="CEVC">CEVC - Coordinated EV Charging</option>
+					<option value="DBEVC">DBEVC - Dynamic Bidirectional EV Charging</option>
+					<option value="EVCEM">EVCEM - EV Charging Electricity Measurement</option>
+					<option value="EVCS">EVCS - EV Charging Summary</option>
+					<option value="EVCC">EVCC - EV Commissioning and Configuration</option>
+					<option value="EVPS">EVPS - EV Peak Shaving</option>
+					<option value="EVSoC">EVSoC - EV State of Charge</option>
+					<option value="EVSECC">EVSECC - EVSE Commissioning and Configuration</option>
+					<option value="EPRQ">EPRQ - Extra Power Request</option>
+					<option value="FLOA">FLOA - Flexible Load</option>
+					<option value="FSWG">FSWG - Flexible Start for White Goods</option>
+					<option value="ITPCM">ITPCM - Incentive-Table based power consumption management</option>
+					<option value="LPC">LPC - Limitation of Power Consumption</option>
+					<option value="LPP">LPP - Limitation of Power Production</option>
+					<option value="MCSGRC">MCSGRC - Monitoring and Control of Smart Grid Ready Conditions</option>
+					<option value="MOB">MOB - Monitoring of Battery</option>
+					<option value="MDSF">MDSF - Monitoring of DHW System Function</option>
+					<option value="MDT">MDT - Monitoring of DHW Temperature</option>
+					<option value="MGCP">MGCP - Monitoring of Grid Connection Point</option>
+					<option value="MOI">MOI - Monitoring of Inverter</option>
+					<option value="MOT">MOT - Monitoring of Outdoor Temperature</option>
+					<option value="MPC">MPC - Monitoring of Power Consumption</option>
+					<option value="MPS">MPS - Monitoring of PV String</option>
+					<option value="MRCSF">MRCSF - Monitoring of Room Cooling System Function</option>
+					<option value="MRHSF">MRHSF - Monitoring of Room Heating System Function</option>
+					<option value="MRT">MRT - Monitoring of Room Temperature</option>
+					<option value="NID">NID - Node Identification</option>
+					<option value="OHPCF">OHPCF - Optimization of Self Consumption by Heat Pump Compressor Flexibility</option>
+					<option value="OSCEV">OSCEV - Optimization of Self-Consumption During EV Charging</option>
+					<option value="OPEV">OPEV - Overload Protection by EV Charging Current Curtailment</option>
+					<option value="PODF">PODF - Power Demand Forecast</option>
+					<option value="POEN">POEN - Power Envelope</option>
+					<option value="TOUT">TOUT - Time of Use Tariff</option>
+					<option value="VABD">VABD - Visualization of Aggregated Battery Data</option>
+					<option value="VAPD">VAPD - Visualization of Aggregated Photovoltaic Data</option>
+					<option value="VHAN">VHAN - Visualization of Heating Area Name</option>
+					<option value="VPCHPC">VPCHPC - Visualization of Electrical Power Consumption of the Heat Pump Compressor</option>
+				</options>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</bridge-type>
+
+	<!-- Thing: one paired remote EEBUS device. Creating this Thing is the pairing action - see CONCEPT.md §5.2. -->
+	<thing-type id="peer">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="service"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus Peer</label>
+		<description>A paired remote EEBus device, identified by its SKI. Use case based channels are not yet implemented -
+			see CONCEPT.md §5.4/§7.</description>
+
+		<config-description>
+			<parameter name="ski" type="text" required="true">
+				<label>SKI</label>
+				<description>Subject Key Identifier of the remote device (40 hex characters), e.g. read from its display or QR code.</description>
+			</parameter>
+			<parameter name="shipId" type="text">
+				<label>SHIP ID</label>
+				<description>Learned automatically during the first successful handshake - normally left empty.</description>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+</thing:thing-descriptions>
