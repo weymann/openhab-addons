@@ -1,0 +1,140 @@
+# ADR-029: Retry startShipSpine() on transient teardown-race exceptions
+
+## Status
+
+Accepted
+
+## Context
+
+ADR-028 serializes `startShipSpine()`'s actual body (`startShipSpineLocked()`) per Thing via a
+`ReentrantLock startLock`, so that two overlapping _new_ generations for the same Thing never
+touch the SHIP keystore file or bind a port concurrently. A 2026-08-26 22:33 live retest -
+deliberately via a full openHAB restart, to get a signal uncontaminated by a suspected
+hot-redeploy zombie handler seen in an earlier retest (see project memory:
+`eebus-startup-trace-2026-08-26.md`) - confirmed the lock works exactly as designed for that
+purpose: an overlapping generation now genuinely waits for the prior generation to finish before
+starting.
+
+The same retest also showed a second, distinct problem that ADR-028 does not address: even
+correctly serialized, a _new_ generation's own start attempt can still race the _previous_
+generation's asynchronous SHIP-layer teardown tail. `dispose()` deliberately does not block
+waiting for that teardown to finish (ADR-005 - blocking would collide with openHAB's SafeCaller
+timeout), and `startLock` is (by design, per ADR-028) never acquired by `dispose()` either, so
+nothing currently makes a new generation wait for the previous one's SHIP server/keystore to
+actually be released before it tries to bind/open them itself.
+
+This was confirmed unambiguously in the retest: for the `energy-guard-sim` Bridge, generation 4's
+own `startShipSpineLocked()` call failed with `java.net.BindException: Address already in use`
+on port 4712 - and the log line reporting that the _previous_ generation's SHIP server on that
+same port had actually stopped (`stopping SHIP server (port 4712)`) only appeared _after_ this
+failed bind attempt, not before it. The keystore `OverlappingFileLockException` seen in an
+earlier (hot-redeploy-contaminated) retest is the same underlying race on a different resource -
+`jeebus.ship`'s `disconnect()`/`close()` does not release these resources synchronously with the
+method call returning, and exposes no completion signal the binding could wait on instead.
+
+## Decision
+
+`startShipSpine()` retries `startShipSpineLocked()` a bounded number of times, with a short
+backoff, specifically for the two exception types confirmed to result from this race:
+
+- `java.net.BindException` (port not yet released by the previous generation's SHIP server)
+- `java.nio.channels.OverlappingFileLockException` (keystore file lock not yet released)
+
+Up to `START_RETRY_MAX_ATTEMPTS` (3) attempts are made; the Nth retry waits
+`N * START_RETRY_BACKOFF_BASE_MILLIS` (250 ms, 500 ms, 750 ms) before trying again, giving the
+previous generation's teardown progressively more time to actually finish. Before each retry, the
+generation is re-checked under `lifecycle.lock`; if a newer generation has since superseded this
+one, the retry loop gives up immediately (returning `false`, the existing "superseded" path)
+rather than continuing to hammer a now-pointless attempt. Any exception other than the two above
+is not retried, and is rethrown immediately as before - this is deliberately narrow, not a
+general "retry on any failure" mechanism.
+
+This is implemented entirely inside `startShipSpine()`'s existing wrapper - already running on a
+background task (`scheduler.execute(...)` in `initialize()`, not the SafeCaller-guarded
+`initialize()` call itself), so the added `Thread.sleep()` calls (at most 1500 ms total across
+all retries) do not block `dispose()`, `initialize()`, or openHAB's SafeCaller. No `jeebus.ship`/
+`jeebus.spine` code is touched (protected, human approval required) and no alternative was found
+that would let the binding wait on the previous generation's teardown directly, since that
+library exposes no completion signal for it.
+
+## Consequences
+
+### Positive
+
+- Closes the confirmed `BindException`/`OverlappingFileLockException` race in the common case:
+  the previous generation's teardown almost always finishes well within the up-to-1500 ms retry
+  budget.
+- Narrow and low-risk: only the two confirmed exception types are retried; every other failure
+  mode keeps its existing immediate-failure behavior and log line.
+- No `pom.xml`/dependency change, no `jeebus.ship`/`jeebus.spine` code touched.
+- A generation superseded mid-retry gives up immediately rather than continuing to retry a
+  pointless attempt.
+
+### Negative
+
+- Does not _guarantee_ the race is closed - it is a bounded retry against a timing race, not a
+  synchronization fix (impossible here without either blocking `dispose()`, which ADR-005
+  explicitly rejects, or a `jeebus.ship` change exposing a teardown-completion signal, which is
+  out of scope without prior approval). A sufficiently slow teardown could still exhaust all
+  retries and fail.
+- Each failed-then-retried attempt constructs a fresh `ShipCommunication`/`EEBusMdnsBrowser`
+  inside `startShipSpineLocked()`; the previous attempt's now-orphaned local instances are not
+  explicitly cleaned up before retrying (relying on them never having been published to `this`
+  and eventual garbage collection), since their exact safe-to-call-after-a-failed-build() surface
+  is not confirmed and this is a protected library. If a failed attempt itself left a resource
+  genuinely stuck (rather than the race being with the _previous_ generation, as confirmed here),
+  retries would not help and would simply exhaust the budget.
+- Adds up to 1500 ms of extra delay to a Thing's `ONLINE` transition in the worst case where all
+  retries are needed - judged acceptable given this only happens on an already-slow/racy
+  teardown, not on the common path.
+- Does not address the empty-`supportedFormats` symptom from the original 2026-08-26 trace
+  (still separate, unconfirmed, out of scope - see ADR-028).
+
+## Diagram
+
+```mermaid
+sequenceDiagram
+    participant Old as Previous generation<br/>(async SHIP teardown)
+    participant New as New generation<br/>startShipSpine()
+    participant Ship as jeebus.ship<br/>(port/keystore)
+
+    Old-->>Ship: disconnect()/close() returns (not yet released)
+    New->>Ship: startShipSpineLocked() attempt 1
+    Ship-->>New: BindException / OverlappingFileLockException
+    Note over New: attempt < MAX? generation still current?
+    New->>New: sleep(backoff)
+    Old-->>Ship: teardown tail actually finishes releasing port/keystore
+    New->>Ship: startShipSpineLocked() attempt 2
+    Ship-->>New: bound and published successfully
+```
+
+## Update 2026-09-02: the retry never actually fired - fixed
+
+A 2026-09-02 startup trace (see project memory: `eebus-startup-trace-2026-09-02.md`) re-confirmed
+a gap identified on 2026-08-27: the retry catch, `catch (BindException | OverlappingFileLockException
+e)`, matches only the _thrown_ exception's own top-level type. In the keystore-lock case,
+`jeebus.ship`'s `ShipNodeImpl` constructor wraps the actual `OverlappingFileLockException` as
+`RuntimeException -> CertificateStoreException -> OverlappingFileLockException` before it
+propagates out of `startShipSpineLocked()` - a plain `RuntimeException` is not an instance of
+either caught type, so the catch clause never matched, and the retry loop above was never
+entered for what is likely the more common real-world trigger of the two. The failure instead
+fell straight through to `initialize()`'s outer generic catch, producing an unretried
+"Failed to start EEBus service instance" WARN with no preceding "retrying in N ms" line - exactly
+as predicted when this gap was first identified, and with no fix applied at the time.
+
+Fixed: the catch now widens to `catch (Exception e)` and immediately calls a new helper,
+`isTransientTeardownRaceFailure(Throwable e)`, which walks `e`'s full cause chain (bounded to 16
+levels, defending against a pathological/cyclic chain) checking `instanceof BindException ||
+instanceof OverlappingFileLockException` at any depth - not just on `e` itself. Anything that
+doesn't match is rethrown immediately via `throw e;`, before the attempt-counting/backoff logic,
+so this remains exactly as narrow as the original design (only the two confirmed exception types,
+anywhere in the cause chain, are retried; everything else keeps its existing immediate-failure
+behavior). No `jeebus.ship`/`jeebus.spine` code touched, no `pom.xml` change - confined entirely
+to `EEBusHandler.java`.
+
+Not yet compiled or live-tested (no local Maven in this environment - user-owned per usual
+workflow). The 2026-09-02 trace's ~54s stall between generation 3's first "about to bind" and its
+eventual success was _not_ fully explained by this gap alone (the 3-attempt/250-750ms backoff
+only spans ~1.5s, far short of 54s) - the unfiltered log for that window would be needed to
+confirm this fix closes that specific stall's timing, as opposed to just closing the
+now-demonstrated case where the retry silently never engaged at all.

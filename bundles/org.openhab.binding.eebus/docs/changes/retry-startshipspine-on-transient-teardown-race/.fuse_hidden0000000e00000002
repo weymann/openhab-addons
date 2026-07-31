@@ -1,0 +1,42 @@
+# Proposal: Retry startShipSpine() on transient teardown-race exceptions
+
+## Intent
+
+A 2026-08-26 22:33 live retest of ADR-028 (deliberately via a full openHAB restart, to rule out
+the hot-redeploy zombie-handler confound seen in an earlier retest - see project memory:
+`eebus-startup-trace-2026-08-26.md`) confirmed ADR-028's per-Thing `startLock` works exactly as
+designed: overlapping *new* generations for the same Thing no longer race each other. It also
+confirmed a second, distinct race that ADR-028 does not address: a new generation's own start
+attempt can still race the *previous* generation's asynchronous SHIP-layer teardown tail, since
+`dispose()` deliberately never blocks on it (ADR-005) and `startLock` is never acquired by
+`dispose()` either. This produced a `java.net.BindException: Address already in use` for a
+generation whose own bind attempt ran before the previous generation's SHIP server had actually
+released the port (confirmed by log ordering: the "stopping SHIP server" line appeared *after*
+the failed bind attempt). The keystore `OverlappingFileLockException` seen in an earlier retest
+is the same underlying race on a different resource.
+
+## Scope
+
+In scope:
+
+- Retry `startShipSpineLocked()` a bounded number of times with a short backoff, specifically for
+  `java.net.BindException` and `java.nio.channels.OverlappingFileLockException` - the two
+  exception types confirmed to result from this specific race.
+- Re-check the generation under `lifecycle.lock` before each retry, so a superseded generation
+  gives up immediately instead of continuing to retry a pointless attempt.
+
+Out of scope:
+
+- Any mechanism that would let the binding actually wait for the previous generation's SHIP-layer
+  teardown to complete (rather than retrying blind) - `jeebus.ship` exposes no completion signal
+  for this, and adding one would mean a `jeebus.ship` change (protected, human approval required).
+- Retrying any exception type other than the two confirmed above - this is not a general
+  retry-on-any-failure mechanism.
+- The empty-`supportedFormats` symptom from the original 2026-08-26 trace (still separate,
+  unconfirmed - see ADR-028).
+- Any change to `jeebus.ship`/`jeebus.spine` (protected, human approval required).
+
+## Open Questions
+
+- None outstanding - approach confirmed with the user via `AskUserQuestion` 2026-08-26
+  (retry-with-backoff, over "observe only" or a different approach).

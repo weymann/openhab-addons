@@ -1,0 +1,67 @@
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_n:EVCC_HEMS-EVCC-3031636430303362",
+        "entity" : [ 2 ]
+      },
+      "actor" : "ControllableSystem",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_n:EVCC_HEMS-EVCC-3031636430303362",
+        "entity" : [ 1 ]
+      },
+      "actor" : "MonitoringAppliance",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfGridConnectionPoint",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfDhwTemperature",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_n:EVCC_HEMS-EVCC-3031636430303362",
+        "entity" : [ 3 ]
+      },
+      "actor" : "EnergyGuard",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    } ]
+  }
+}

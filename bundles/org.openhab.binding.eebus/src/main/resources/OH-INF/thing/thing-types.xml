@@ -1,0 +1,1205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="eebus"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+	<!-- Bridge: one local SHIP/SPINE service instance (one certificate/SKI). See CONCEPT.md's
+		2026-08-23 addendum and docs/ADR/024-oh-device-oh-entity-rename.md: renamed from
+		eebus:service to match SHIP's own "SHIP Node" vocabulary and to distinguish it from the
+		real, discovered devices represented by the bridgeless eebus:hw-device. Its local Use Case
+		set is no longer configured here - it is derived at initialize() from whichever child
+		Entity Things currently exist (eebus:oh-entity, eebus:oh-cs-entity, eebus:oh-eg-entity, all
+		additive/valid side by side under this one Bridge type) - see
+		docs/ADR/027-derive-local-use-cases-from-entities.md. The former dedicated
+		eebus:oh-cs-device convenience Bridge no longer exists - a plain eebus:oh-device with an
+		eebus:oh-cs-entity child now produces the identical behavior. -->
+	<bridge-type id="oh-device">
+		<label>EEBus OH Device</label>
+		<description>One local EEBus SHIP/SPINE service instance (own certificate, mDNS presence).</description>
+
+		<config-description>
+			<parameter name="deviceType" type="text">
+				<label>Device Type</label>
+				<description>Which SPINE Device type this Bridge's local SHIP/SPINE service instance presents
+					itself as in detailed
+					discovery (docs/ADR/044-configurable-devicetype.md). Independent of the
+					entityType configured on attached
+					oh-...-entity children (docs/ADR/042-configurable-entitytype.md) -
+					deviceType classifies the Device as a whole,
+					entityType classifies the one shared local Entity;
+					jeebus.spine's own Use-Case entity-type check never looks at this
+					value. Safe to leave at the
+					default unless you have a specific reason to present this service as a different SPINE
+					device
+					type.</description>
+				<default>EnergyManagementSystem</default>
+				<options>
+					<option value="EnergyManagementSystem">EnergyManagementSystem</option>
+					<option value="ChargingStation">ChargingStation</option>
+					<option value="Dishwasher">Dishwasher</option>
+					<option value="Dryer">Dryer</option>
+					<option value="ElectricitySupplySystem">ElectricitySupplySystem</option>
+					<option value="EnvironmentSensor">EnvironmentSensor</option>
+					<option value="Generic">Generic</option>
+					<option value="HeatGenerationSystem">HeatGenerationSystem</option>
+					<option value="HeatSinkSystem">HeatSinkSystem</option>
+					<option value="HeatStorageSystem">HeatStorageSystem</option>
+					<option value="HVACController">HVACController</option>
+					<option value="Inverter">Inverter</option>
+					<option value="SubMeter">SubMeter</option>
+					<option value="Washer">Washer</option>
+				</options>
+			</parameter>
+			<parameter name="vendorCode" type="text" required="true">
+				<label>Vendor Code</label>
+				<description>5-character vendor code assigned by the EEBUS Initiative. Part of the SHIP-ID: pinned at first start,
+					later changes are ignored (would break existing pairings).</description>
+			</parameter>
+			<parameter name="deviceBrand" type="text" required="true">
+				<label>Device Brand</label>
+				<description>Brand / manufacturer name, announced via mDNS.</description>
+			</parameter>
+			<parameter name="deviceModel" type="text" required="true">
+				<label>Device Model</label>
+				<description>Model name, announced via mDNS. Part of the SHIP-ID: pinned at first start, later changes are ignored
+					(would break existing pairings).</description>
+			</parameter>
+			<parameter name="serialNumber" type="text" required="true">
+				<label>Serial Number</label>
+				<description>Serial number, used together with vendor code/model to build the SHIP-ID. Pinned at first start, later
+					changes are ignored (would break existing pairings).</description>
+			</parameter>
+			<parameter name="mdnsServiceInstance" type="text" required="true">
+				<label>Display Name</label>
+				<description>Friendly name other EEBUS devices see when they discover this service, e.g. "openHAB EnergyManager".</description>
+			</parameter>
+			<parameter name="port" type="integer" min="1" max="65535">
+				<label>Port</label>
+				<description>WebSocket port the local SHIP server listens on. Leave empty to have openHAB assign a free port
+					automatically (4711-4810).</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="trustedSkis" type="text" multiple="true">
+				<label>Trusted SKIs</label>
+				<description>Subject Key Identifiers (40 hex characters each) this Bridge trusts as SHIP Nodes - the source of
+					truth
+					for which devices it accepts/dials. Offered as a selectable list of known hw-device Things and other
+					local Bridges'
+					own SKIs (docs/ADR/024-oh-device-oh-entity-rename.md) - free text entry remains possible for a
+					SKI not yet seen.
+					Editing this list triggers a full rebuild of this Bridge's local SPINE service,
+					automatically, briefly reconnecting
+					every currently trusted peer - see
+					docs/ADR/027-derive-local-use-cases-from-entities.md.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="connectToPeers" type="boolean">
+				<label>Actively Connect to Trusted Peers</label>
+				<description>If enabled (default), this service actively dials trusted peers as soon as they are discovered via
+					mDNS, in addition to accepting their incoming connections - this is the normal SHIP behavior, where either side
+					may
+					initiate. Disable only as a diagnostic workaround when pairing two self-built openHAB instances against each
+					other:
+					with both sides actively dialing, they can connect to each other at the same moment, and a known bug in the
+					embedded SHIP library's simultaneous-connection handling can then abort the handshake (see TEST_PAIRING.md, Test 2,
+					"Known Bug Encountered"). Disabling this on one of the two sides makes that side purely passive (server-only) and
+					avoids the race. Not recommended against a real third-party device, which may rely on openHAB dialing out.</description>
+				<default>true</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="preferIpv4" type="boolean">
+				<label>Prefer IPv4 for own SHIP server</label>
+				<description>If enabled (default), binds/announces the local SHIP server on IPv4 instead of the
+					IPv6-first
+					preference
+					the single-address fix would otherwise use. Recommended standard setting: works
+					around a confirmed bug
+					in the
+					embedded SHIP library when reconnecting to an IPv6 peer (missing "[...]" brackets around
+					the IPv6 host,
+					observed as
+					"connect to null on port -1" followed by a timed-out SPINE request) - confirmed via
+					a live A/B
+					comparison on
+					2026-08-21, see EEBusConfiguration#preferIpv4. Disable to return to the IPv6-first
+					preference, e.g.
+					to re-test after
+					an upstream fix in the embedded SHIP library.</description>
+				<default>true</default>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</bridge-type>
+
+	<!-- Thing: a "real" EEBus device, ideally populated via mDNS discovery. Bridgeless - see
+		CONCEPT.md §4.5/§7(15) and docs/ADR/020-merge-network-peer-things.md: no local
+		SHIP/SPINE identity exists to pair against, so this Thing carries no channels and its SKI
+		entry does not establish trust. Renamed from eebus:eebus-peer by
+		docs/ADR/024-oh-device-oh-entity-rename.md to distinguish it clearly from
+		openHAB-simulated/managed concepts. -->
+	<thing-type id="hw-device">
+		<label>EEBus Hardware Device</label>
+		<description>A real EEBus device seen on the network, identified by its SKI. Not trusted - see
+			eebus:oh-entity for
+			representing a SPINE Entity on a device trusted by a local EEBus OH
+			Device. CONCEPT.md's 2026-08-23 addendum.</description>
+
+		<config-description>
+			<parameter name="ski" type="text" required="true">
+				<label>SKI</label>
+				<description>Subject Key Identifier of the remote device (40 hex characters), e.g. read from its display or QR code.</description>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Thing: one SPINE Entity on an already-trusted device. Renamed and re-scoped from
+		eebus:oh-peer (which used to represent a whole paired device) by
+		docs/ADR/024-oh-device-oh-entity-rename.md: trust itself lives on the parent Bridge's
+		trustedSkis config, not on this Thing - see docs/ADR/024, which supersedes
+		docs/ADR/012-pairing-trust-property-and-actions.md. Carries its own Use Case configuration
+		(docs/ADR/027-derive-local-use-cases-from-entities.md): the parent Bridge derives its local
+		SPINE Device's Use Case set from every currently configured child Entity Thing, this one
+		included, instead of from a Bridge-level checkbox list. -->
+	<thing-type id="oh-entity">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="oh-device"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH Entity</label>
+		<description>One SPINE Entity on a device trusted by the parent eebus:oh-device Bridge, identified
+			by the device's SKI
+			and this Entity's address. Trust itself is granted/revoked on the parent
+			Bridge's Trusted SKIs config list -
+			configuring this Thing alone does not grant trust. Which
+			Use Cases this pairing involves is configured below and feeds
+			directly into the parent
+			Bridge's local SPINE service - see docs/ADR/027-derive-local-use-cases-from-entities.md.</description>
+
+		<config-description>
+			<parameter name="ski" type="text" required="false">
+				<label>Device SKI</label>
+				<description>Subject Key Identifier of the remote device this Entity lives on (40 hex characters). Optional -
+					left
+					blank, it is auto-selected once the parent Bridge trusts exactly one device (nothing to choose
+					between); with zero
+					or more than one trusted device, pick one manually. Offered as a
+					selectable list of the parent Bridge's currently
+					trusted SKIs
+					(docs/ADR/024-oh-device-oh-entity-rename.md) - free
+					text entry remains possible for a SKI not yet
+					trusted, but this Thing stays offline until the
+					parent Bridge
+					actually
+					trusts it (see the Bridge's Trusted SKIs
+					config).</description>
+			</parameter>
+			<parameter name="entityAddress" type="text">
+				<label>Entity Address</label>
+				<description>SPINE address of this Entity on the device (as shown by device discovery/NodeManagement data).
+					Recorded
+					for reference; not yet used to route data at the transport layer - a device with more than one
+					Entity Thing
+					configured currently has all of them observe the same device-level events. See
+					docs/ADR/024-oh-device-oh-entity-rename.md "Out of scope".</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="shipId" type="text">
+				<label>SHIP ID</label>
+				<description>Learned automatically during the first successful handshake - normally left empty.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="entityType" type="text">
+				<label>Entity Type</label>
+				<description>Which SPINE Entity type this Entity is presented as.</description>
+				<default>CEM</default>
+				<advanced>true</advanced>
+				<options>
+					<option value="CEM">CEM</option>
+					<option value="Battery">Battery</option>
+					<option value="BatterySystem">BatterySystem</option>
+					<option value="ChargingOutlet">ChargingOutlet</option>
+					<option value="Compressor">Compressor</option>
+					<option value="ControllableSystem">ControllableSystem</option>
+					<option value="DeviceInformation">DeviceInformation</option>
+					<option value="DHWCircuit">DHWCircuit</option>
+					<option value="DHWStorage">DHWStorage</option>
+					<option value="Dishwasher">Dishwasher</option>
+					<option value="Dryer">Dryer</option>
+					<option value="ElectricalImmersionHeater">ElectricalImmersionHeater</option>
+					<option value="ElectricalStorage">ElectricalStorage</option>
+					<option value="ElectricityGenerationSystem">ElectricityGenerationSystem</option>
+					<option value="ElectricityStorageSystem">ElectricityStorageSystem</option>
+					<option value="EV">EV</option>
+					<option value="EVSE">EVSE</option>
+					<option value="Fan">Fan</option>
+					<option value="GasHeatingAppliance">GasHeatingAppliance</option>
+					<option value="Generic">Generic</option>
+					<option value="GridConnectionPointOfPremises">GridConnectionPointOfPremises</option>
+					<option value="GridGuard">GridGuard</option>
+					<option value="HeatingBufferStorage">HeatingBufferStorage</option>
+					<option value="HeatingCircuit">HeatingCircuit</option>
+					<option value="HeatingObject">HeatingObject</option>
+					<option value="HeatingZone">HeatingZone</option>
+					<option value="HeatPumpAppliance">HeatPumpAppliance</option>
+					<option value="HeatSinkCircuit">HeatSinkCircuit</option>
+					<option value="HeatSourceCircuit">HeatSourceCircuit</option>
+					<option value="HeatSourceUnit">HeatSourceUnit</option>
+					<option value="Household">Household</option>
+					<option value="HVACController">HVACController</option>
+					<option value="HVACRoom">HVACRoom</option>
+					<option value="InstantDHWHeater">InstantDHWHeater</option>
+					<option value="Inverter">Inverter</option>
+					<option value="OilHeatingAppliance">OilHeatingAppliance</option>
+					<option value="PV">PV</option>
+					<option value="PVESHybrid">PVESHybrid</option>
+					<option value="PVString">PVString</option>
+					<option value="PVSystem">PVSystem</option>
+					<option value="Pump">Pump</option>
+					<option value="RefrigerantCircuit">RefrigerantCircuit</option>
+					<option value="SmartEnergyAppliance">SmartEnergyAppliance</option>
+					<option value="SolarDHWStorage">SolarDHWStorage</option>
+					<option value="SolarThermalCircuit">SolarThermalCircuit</option>
+					<option value="SubMeterElectricity">SubMeterElectricity</option>
+					<option value="TemperatureSensor">TemperatureSensor</option>
+					<option value="Washer">Washer</option>
+				</options>
+			</parameter>
+			<parameter name="supportedUseCasesClient" type="text" multiple="true">
+				<label>Use Cases to Detect (Client Role)</label>
+				<description>Which EEBUS use cases openHAB should try to detect/consume on trusted devices. See CONCEPT.md §5.4.1.
+					Wiring is not yet implemented - see CONCEPT.md §7 items 3+8.</description>
+				<options>
+					<option value="CDSF">CDSF - Configuration of DHW System Function</option>
+					<option value="CDT">CDT - Configuration of DHW Temperature</option>
+					<option value="CRCSF">CRCSF - Configuration of Room Cooling System Function</option>
+					<option value="CRCT">CRCT - Configuration of Room Cooling Temperature</option>
+					<option value="CRHSF">CRHSF - Configuration of Room Heating System Function</option>
+					<option value="CRHT">CRHT - Configuration of Room Heating Temperature</option>
+					<option value="COB">COB - Control of Battery</option>
+					<option value="CEVC">CEVC - Coordinated EV Charging</option>
+					<option value="DBEVC">DBEVC - Dynamic Bidirectional EV Charging</option>
+					<option value="EVCEM">EVCEM - EV Charging Electricity Measurement</option>
+					<option value="EVCS">EVCS - EV Charging Summary</option>
+					<option value="EVCC">EVCC - EV Commissioning and Configuration</option>
+					<option value="EVPS">EVPS - EV Peak Shaving</option>
+					<option value="EVSoC">EVSoC - EV State of Charge</option>
+					<option value="EVSECC">EVSECC - EVSE Commissioning and Configuration</option>
+					<option value="EPRQ">EPRQ - Extra Power Request</option>
+					<option value="FLOA">FLOA - Flexible Load</option>
+					<option value="FSWG">FSWG - Flexible Start for White Goods</option>
+					<option value="ITPCM">ITPCM - Incentive-Table based power consumption management</option>
+					<option value="LPC">LPC - Limitation of Power Consumption</option>
+					<option value="LPP">LPP - Limitation of Power Production</option>
+					<option value="MCSGRC">MCSGRC - Monitoring and Control of Smart Grid Ready Conditions</option>
+					<option value="MOB">MOB - Monitoring of Battery</option>
+					<option value="MDSF">MDSF - Monitoring of DHW System Function</option>
+					<option value="MDT">MDT - Monitoring of DHW Temperature</option>
+					<option value="MGCP">MGCP - Monitoring of Grid Connection Point</option>
+					<option value="MOI">MOI - Monitoring of Inverter</option>
+					<option value="MOT">MOT - Monitoring of Outdoor Temperature</option>
+					<option value="MPC">MPC - Monitoring of Power Consumption</option>
+					<option value="MPS">MPS - Monitoring of PV String</option>
+					<option value="MRCSF">MRCSF - Monitoring of Room Cooling System Function</option>
+					<option value="MRHSF">MRHSF - Monitoring of Room Heating System Function</option>
+					<option value="MRT">MRT - Monitoring of Room Temperature</option>
+					<option value="NID">NID - Node Identification</option>
+					<option value="OHPCF">OHPCF - Optimization of Self Consumption by Heat Pump Compressor Flexibility</option>
+					<option value="OSCEV">OSCEV - Optimization of Self-Consumption During EV Charging</option>
+					<option value="OPEV">OPEV - Overload Protection by EV Charging Current Curtailment</option>
+					<option value="PODF">PODF - Power Demand Forecast</option>
+					<option value="POEN">POEN - Power Envelope</option>
+					<option value="TOUT">TOUT - Time of Use Tariff</option>
+					<option value="VABD">VABD - Visualization of Aggregated Battery Data</option>
+					<option value="VAPD">VAPD - Visualization of Aggregated Photovoltaic Data</option>
+					<option value="VHAN">VHAN - Visualization of Heating Area Name</option>
+					<option value="VPCHPC">VPCHPC - Visualization of Electrical Power Consumption of the Heat Pump Compressor</option>
+				</options>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="supportedUseCasesServer" type="text" multiple="true">
+				<label>Use Cases to Offer (Server Role)</label>
+				<description>Which EEBUS use cases openHAB should offer to the network itself, e.g. relaying data from another
+					openHAB Thing (see CONCEPT.md §5.5). Fed via 'eebus' Item/Rule metadata - see CONCEPT.md §4.2. Wiring is not yet
+					implemented - see CONCEPT.md §7 items 6-8.</description>
+				<options>
+					<option value="CDSF">CDSF - Configuration of DHW System Function</option>
+					<option value="CDT">CDT - Configuration of DHW Temperature</option>
+					<option value="CRCSF">CRCSF - Configuration of Room Cooling System Function</option>
+					<option value="CRCT">CRCT - Configuration of Room Cooling Temperature</option>
+					<option value="CRHSF">CRHSF - Configuration of Room Heating System Function</option>
+					<option value="CRHT">CRHT - Configuration of Room Heating Temperature</option>
+					<option value="COB">COB - Control of Battery</option>
+					<option value="CEVC">CEVC - Coordinated EV Charging</option>
+					<option value="DBEVC">DBEVC - Dynamic Bidirectional EV Charging</option>
+					<option value="EVCEM">EVCEM - EV Charging Electricity Measurement</option>
+					<option value="EVCS">EVCS - EV Charging Summary</option>
+					<option value="EVCC">EVCC - EV Commissioning and Configuration</option>
+					<option value="EVPS">EVPS - EV Peak Shaving</option>
+					<option value="EVSoC">EVSoC - EV State of Charge</option>
+					<option value="EVSECC">EVSECC - EVSE Commissioning and Configuration</option>
+					<option value="EPRQ">EPRQ - Extra Power Request</option>
+					<option value="FLOA">FLOA - Flexible Load</option>
+					<option value="FSWG">FSWG - Flexible Start for White Goods</option>
+					<option value="ITPCM">ITPCM - Incentive-Table based power consumption management</option>
+					<option value="LPC">LPC - Limitation of Power Consumption</option>
+					<option value="LPP">LPP - Limitation of Power Production</option>
+					<option value="MCSGRC">MCSGRC - Monitoring and Control of Smart Grid Ready Conditions</option>
+					<option value="MOB">MOB - Monitoring of Battery</option>
+					<option value="MDSF">MDSF - Monitoring of DHW System Function</option>
+					<option value="MDT">MDT - Monitoring of DHW Temperature</option>
+					<option value="MGCP">MGCP - Monitoring of Grid Connection Point</option>
+					<option value="MOI">MOI - Monitoring of Inverter</option>
+					<option value="MOT">MOT - Monitoring of Outdoor Temperature</option>
+					<option value="MPC">MPC - Monitoring of Power Consumption</option>
+					<option value="MPS">MPS - Monitoring of PV String</option>
+					<option value="MRCSF">MRCSF - Monitoring of Room Cooling System Function</option>
+					<option value="MRHSF">MRHSF - Monitoring of Room Heating System Function</option>
+					<option value="MRT">MRT - Monitoring of Room Temperature</option>
+					<option value="NID">NID - Node Identification</option>
+					<option value="OHPCF">OHPCF - Optimization of Self Consumption by Heat Pump Compressor Flexibility</option>
+					<option value="OSCEV">OSCEV - Optimization of Self-Consumption During EV Charging</option>
+					<option value="OPEV">OPEV - Overload Protection by EV Charging Current Curtailment</option>
+					<option value="PODF">PODF - Power Demand Forecast</option>
+					<option value="POEN">POEN - Power Envelope</option>
+					<option value="TOUT">TOUT - Time of Use Tariff</option>
+					<option value="VABD">VABD - Visualization of Aggregated Battery Data</option>
+					<option value="VAPD">VAPD - Visualization of Aggregated Photovoltaic Data</option>
+					<option value="VHAN">VHAN - Visualization of Heating Area Name</option>
+					<option value="VPCHPC">VPCHPC - Visualization of Electrical Power Consumption of the Heat Pump Compressor</option>
+				</options>
+				<advanced>true</advanced>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Thing: implies fixed LPC+LPP Client Use Cases for its parent eebus:oh-device Bridge
+		(docs/ADR/027-derive-local-use-cases-from-entities.md), intended for the EnergyGuard
+		(LPC/LPP Client role) case: same config (ski/entityAddress/shipId) and same handler class
+		(EEBusOhEntityHandler) as eebus:oh-entity. Not exclusive - eebus:oh-entity remains equally
+		valid under eebus:oh-device for any other/mixed Use Case combination. Since the parent
+		Bridge derives its local Use Case set from its children, this Thing's mere presence
+		already guarantees LPC/LPP Client is active - resolving the gap ADR-026 originally flagged
+		(no checkbox to forget to also enable). Unlike eebus:oh-cs-entity, this Thing declares no
+		Channels: the EnergyGuard/Client role only ever writes a limit, sourced from a tagged Item
+		(see README.md "Channels") - it does not read a peer's status back, so there is nothing to
+		show on a Channel here (docs/ADR/031-remove-energyguard-monitoring-channels.md, revising
+		this ADR's static-channels decision and docs/ADR/015-lpc-lpp-client-role-channels.md). A
+		dedicated "oh-eg-device" convenience Bridge was explicitly not built here - user decision
+		via AskUserQuestion, see docs/ADR/026-oh-eg-entity-static-channels.md. -->
+	<thing-type id="oh-eg-entity">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="oh-device"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH Energy Guard Entity</label>
+		<description>One SPINE Entity on a device trusted by the parent eebus:oh-device Bridge,
+			identified by the device's SKI
+			and this Entity's address - alternative to eebus:oh-entity
+			for the EnergyGuard (LPC/LPP Client role) case. Its mere
+			presence makes the parent Bridge
+			offer LPC+LPP Client - values flow only via a tagged Item's
+			write path (see README.md
+			"Channels"), this Thing has no
+			Channels of its own. Trust itself
+			is granted/revoked on the
+			parent Bridge's Trusted SKIs
+			config list - configuring this
+			Thing alone does not grant trust. See
+			docs/ADR/027-derive-local-use-cases-from-entities.md and
+			docs/ADR/031-remove-energyguard-monitoring-channels.md. As of
+			docs/ADR/047-fanout-energyguard-writes-to-all-partners.md, exactly one
+			oh-eg-entity Thing per parent Bridge is the
+			supported configuration -
+			its write path feeds every trusted partner the Bridge's EnergyGuard
+			use cases find, not just
+			one.</description>
+
+		<channel-groups>
+			<channel-group id="lpc" typeId="lpc-eg"/>
+			<channel-group id="lpp" typeId="lpp-eg"/>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="ski" type="text" required="false">
+				<label>Device SKI</label>
+				<description>Leave blank (recommended, docs/ADR/047-fanout-energyguard-writes-to-all-partners.md):
+					this Thing's
+					write-path Items are then sent to every partner
+					the parent Bridge's EnergyGuard use cases currently find, whatever
+					device SKI each one lives on - this is the setting for the normal
+					case of one EnergyGuard feeding several
+					controllable
+					peers (e.g. an inverter, evcc, and this binding's own
+					Controllable System entity) with the same limit.
+					Set to one specific
+					40-hex-character SKI only to restrict this Thing to that single
+					partner and exclude every other
+					trusted device - a narrower,
+					less common case than the pre-ADR-047 default. Offered as a
+					selectable list of the
+					parent Bridge's currently trusted SKIs
+					(docs/ADR/024-oh-device-oh-entity-rename.md) - free text entry
+					remains
+					possible for a SKI not yet trusted, but the restriction
+					only takes effect once the parent Bridge actually trusts it
+					(see
+					the Bridge's Trusted SKIs config). Configuring more than one
+					oh-eg-entity Thing under the same Bridge is not a
+					supported
+					configuration going forward (ADR-047) - existing multi-Thing
+					setups keep working, but only the first
+					oh-eg-entity Thing
+					found actually drives the write path; consolidate to a single
+					Thing with a blank ski instead.</description>
+			</parameter>
+			<parameter name="entityAddress" type="text">
+				<label>Entity Address</label>
+				<description>SPINE address of this Entity on the device (as shown by device discovery/NodeManagement data).
+					Recorded
+					for reference; not yet used to route data at the transport layer - a device with more than one
+					Entity Thing
+					configured currently has all of them observe the same device-level events. See
+					docs/ADR/024-oh-device-oh-entity-rename.md "Out of scope".</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="shipId" type="text">
+				<label>SHIP ID</label>
+				<description>Learned automatically during the first successful handshake - normally left empty.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="entityType" type="text">
+				<label>Entity Type</label>
+				<description>Which SPINE Entity type this Energy Guard is presented as.</description>
+				<default>CEM</default>
+				<options>
+					<option value="CEM">CEM</option>
+					<option value="GridGuard">GridGuard</option>
+				</options>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Thing: implies fixed LPC+LPP Server Use Cases for its parent eebus:oh-device Bridge
+		(docs/ADR/027-derive-local-use-cases-from-entities.md, refining docs/ADR/025-oh-cs-entity-
+		static-channels.md) - no longer exclusive to a dedicated Bridge type, additive alongside
+		eebus:oh-entity/eebus:oh-eg-entity, same as those two. Same config base
+		(ski/entityAddress/shipId) and same handler class (EEBusOhEntityHandler) as eebus:oh-entity,
+		plus its own failsafe seed values below (formerly on the now-removed eebus:oh-cs-device
+		Bridge). Its lpc/lpp Channel Groups are declared statically via <channel-groups> instead of
+		being created dynamically on first EEBus event, so they are visible in the Main UI
+		immediately - this Thing's mere presence already guarantees LPC+LPP is active on the parent
+		Bridge, unlike the generic eebus:oh-entity. -->
+	<thing-type id="oh-cs-entity">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="oh-device"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH Controllable System Entity</label>
+		<description>One SPINE Entity on a device trusted by the parent eebus:oh-device Bridge,
+			identified by the device's SKI
+			and this Entity's address. Trust itself is granted/revoked on
+			the parent Bridge's Trusted SKIs config list -
+			configuring this Thing alone does not grant
+			trust. Its mere presence makes the parent Bridge offer LPC+LPP Server,
+			seeded from the
+			failsafe values below - its lpc/lpp Channels (limit-active, limit-value,
+			failsafe-limit-value,
+			failsafe-duration-minimum) are present from the start. See
+			docs/ADR/027-derive-local-use-cases-from-entities.md.</description>
+
+		<channel-groups>
+			<channel-group id="lpc" typeId="lpc"/>
+			<channel-group id="lpp" typeId="lpp"/>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="ski" type="text" required="false">
+				<label>Device SKI</label>
+				<description>Subject Key Identifier of the remote device this Entity lives on (40 hex characters). Optional -
+					left
+					blank, it is auto-selected once the parent Bridge trusts exactly one device (nothing to choose
+					between); with zero
+					or more than one trusted device, pick one manually. Offered as a
+					selectable list of the parent Bridge's currently
+					trusted SKIs
+					(docs/ADR/024-oh-device-oh-entity-rename.md) - free
+					text entry remains possible for a SKI not yet
+					trusted, but this Thing stays offline until the
+					parent Bridge
+					actually
+					trusts it (see the Bridge's Trusted SKIs
+					config).</description>
+			</parameter>
+			<parameter name="entityAddress" type="text">
+				<label>Entity Address</label>
+				<description>SPINE address of this Entity on the device (as shown by device discovery/NodeManagement data).
+					Recorded
+					for reference; not yet used to route data at the transport layer - a device with more than one
+					Entity Thing
+					configured currently has all of them observe the same device-level events. See
+					docs/ADR/024-oh-device-oh-entity-rename.md "Out of scope".</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="shipId" type="text">
+				<label>SHIP ID</label>
+				<description>Learned automatically during the first successful handshake - normally left empty.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="entityType" type="text">
+				<label>Entity Type</label>
+				<description>Which SPINE Entity type this Controllable System is presented as.</description>
+				<default>CEM</default>
+				<options>
+					<option value="CEM">CEM</option>
+					<option value="EVSE">EVSE</option>
+					<option value="Inverter">Inverter</option>
+					<option value="SmartEnergyAppliance">SmartEnergyAppliance</option>
+					<option value="SubMeterElectricity">SubMeterElectricity</option>
+				</options>
+			</parameter>
+			<parameter name="failsafeConsumptionLimitSeedWatts" type="decimal" unit="W">
+				<label>Failsafe Consumption Limit (Seed)</label>
+				<description>The power limit value (Watts) this Controllable System presents for LPC (Limitation of Power
+					Consumption) at every startup, until a paired Energy Guard writes a different value over EEBus. Not
+					editable from
+					openHAB after startup except by adding/re-adding this Thing - only the Energy Guard, over
+					EEBus, changes the running
+					value. See docs/ADR/023-cs-service-convenience-bridge.md.</description>
+				<default>0</default>
+			</parameter>
+			<parameter name="failsafeProductionLimitSeedWatts" type="decimal" unit="W">
+				<label>Failsafe Production Limit (Seed)</label>
+				<description>Same as Failsafe Consumption Limit (Seed), for LPP (Limitation of Power Production).</description>
+				<default>0</default>
+			</parameter>
+			<parameter name="failsafeDurationMinimumSeedSeconds" type="integer" min="1" unit="s">
+				<label>Failsafe Duration Minimum (Seed)</label>
+				<description>The minimum duration (seconds) the failsafe limit is presented as remaining in effect, shared by
+					LPC and
+					LPP, at every startup - until a paired Energy Guard writes a different value over EEBus. Same
+					not-editable-at-runtime-from-openHAB rule as the limit seeds above.</description>
+				<default>120</default>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Thing: implies MPC Client Use Case for its parent eebus:oh-device Bridge
+		(docs/ADR/027-derive-local-use-cases-from-entities.md, docs/ADR/036-oh-mpc-entity-static-
+		channels.md), intended for the Monitoring Appliance (MPC Client) case: same config
+		(ski/entityAddress/shipId) and same handler class (EEBusOhEntityHandler) as eebus:oh-entity.
+		Not exclusive - eebus:oh-entity/eebus:oh-cs-entity/eebus:oh-eg-entity remain equally valid
+		under eebus:oh-device. Since the parent Bridge derives its local Use Case set from its
+		children, this Thing's mere presence already guarantees MPC Client is active - the mpc
+		Channel Group is declared statically here instead of created dynamically on first
+		measurement resolution the way eebus:oh-entity's is (docs/ADR/014-dynamic-client-role-
+		channels.md). -->
+	<thing-type id="oh-mpc-entity">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="oh-device"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH Monitoring Entity</label>
+		<description>One SPINE Entity on a device trusted by the parent eebus:oh-device Bridge, dedicated
+			to reading its
+			power/energy/current/voltage/frequency measurements (MPC). Trust is granted
+			on the parent Bridge's Trusted SKIs list -
+			configuring this Thing alone does not grant
+			trust. Its mere presence makes the parent Bridge offer MPC Client; its mpc
+			Channels are
+			present from the start.</description>
+
+		<channel-groups>
+			<channel-group id="mpc" typeId="mpc"/>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="ski" type="text" required="false">
+				<label>Device SKI</label>
+				<description>Subject Key Identifier of the remote device this Entity lives on (40 hex characters).
+					Optional if the
+					parent Bridge trusts exactly one device; otherwise pick one from the
+					trusted list.</description>
+			</parameter>
+			<parameter name="entityAddress" type="text">
+				<label>Entity Address</label>
+				<description>SPINE address of this Entity on the device. For reference only; not yet used to
+					route data.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="shipId" type="text">
+				<label>SHIP ID</label>
+				<description>Learned automatically during the first successful handshake - normally left empty.</description>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="entityType" type="text">
+				<label>Entity Type</label>
+				<description>Which SPINE Entity type this Entity is presented as.</description>
+				<default>CEM</default>
+				<advanced>true</advanced>
+				<options>
+					<option value="CEM">CEM</option>
+					<option value="Battery">Battery</option>
+					<option value="BatterySystem">BatterySystem</option>
+					<option value="ChargingOutlet">ChargingOutlet</option>
+					<option value="Compressor">Compressor</option>
+					<option value="ControllableSystem">ControllableSystem</option>
+					<option value="DeviceInformation">DeviceInformation</option>
+					<option value="DHWCircuit">DHWCircuit</option>
+					<option value="DHWStorage">DHWStorage</option>
+					<option value="Dishwasher">Dishwasher</option>
+					<option value="Dryer">Dryer</option>
+					<option value="ElectricalImmersionHeater">ElectricalImmersionHeater</option>
+					<option value="ElectricalStorage">ElectricalStorage</option>
+					<option value="ElectricityGenerationSystem">ElectricityGenerationSystem</option>
+					<option value="ElectricityStorageSystem">ElectricityStorageSystem</option>
+					<option value="EV">EV</option>
+					<option value="EVSE">EVSE</option>
+					<option value="Fan">Fan</option>
+					<option value="GasHeatingAppliance">GasHeatingAppliance</option>
+					<option value="Generic">Generic</option>
+					<option value="GridConnectionPointOfPremises">GridConnectionPointOfPremises</option>
+					<option value="GridGuard">GridGuard</option>
+					<option value="HeatingBufferStorage">HeatingBufferStorage</option>
+					<option value="HeatingCircuit">HeatingCircuit</option>
+					<option value="HeatingObject">HeatingObject</option>
+					<option value="HeatingZone">HeatingZone</option>
+					<option value="HeatPumpAppliance">HeatPumpAppliance</option>
+					<option value="HeatSinkCircuit">HeatSinkCircuit</option>
+					<option value="HeatSourceCircuit">HeatSourceCircuit</option>
+					<option value="HeatSourceUnit">HeatSourceUnit</option>
+					<option value="Household">Household</option>
+					<option value="HVACController">HVACController</option>
+					<option value="HVACRoom">HVACRoom</option>
+					<option value="InstantDHWHeater">InstantDHWHeater</option>
+					<option value="Inverter">Inverter</option>
+					<option value="OilHeatingAppliance">OilHeatingAppliance</option>
+					<option value="PV">PV</option>
+					<option value="PVESHybrid">PVESHybrid</option>
+					<option value="PVString">PVString</option>
+					<option value="PVSystem">PVSystem</option>
+					<option value="Pump">Pump</option>
+					<option value="RefrigerantCircuit">RefrigerantCircuit</option>
+					<option value="SmartEnergyAppliance">SmartEnergyAppliance</option>
+					<option value="SolarDHWStorage">SolarDHWStorage</option>
+					<option value="SolarThermalCircuit">SolarThermalCircuit</option>
+					<option value="SubMeterElectricity">SubMeterElectricity</option>
+					<option value="TemperatureSensor">TemperatureSensor</option>
+					<option value="Washer">Washer</option>
+				</options>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Client-role use-case Channels for eebus:oh-entity, created dynamically at runtime by
+		EEBusOhEntityHandler - deliberately NOT referenced from oh-entity's own <channel-groups>,
+		since that would create this group unconditionally on every eebus:oh-entity Thing instead
+		of only once MPC is both configured and detected for that Entity. See CONCEPT.md §4.2.2 and
+		docs/ADR/014-dynamic-client-role-channels.md. -->
+	<channel-group-type id="mpc">
+		<label>MPC (Monitoring of Power Consumption)</label>
+		<description>Client-role data read from a trusted device's Entity offering MPC as a Server actor.
+			Appears once MPC
+			is
+			detected for this Entity - see docs/ADR/014-dynamic-client-role-channels.md.</description>
+		<channels>
+			<channel id="power" typeId="mpc-power"/>
+			<channel id="power-phase-a" typeId="mpc-power-phase-a"/>
+			<channel id="power-phase-b" typeId="mpc-power-phase-b"/>
+			<channel id="power-phase-c" typeId="mpc-power-phase-c"/>
+			<channel id="energy-consumed" typeId="mpc-energy-consumed"/>
+			<channel id="energy-produced" typeId="mpc-energy-produced"/>
+			<channel id="current-phase-a" typeId="mpc-current-phase-a"/>
+			<channel id="current-phase-b" typeId="mpc-current-phase-b"/>
+			<channel id="current-phase-c" typeId="mpc-current-phase-c"/>
+			<channel id="voltage-phase-a" typeId="mpc-voltage-phase-a"/>
+			<channel id="voltage-phase-b" typeId="mpc-voltage-phase-b"/>
+			<channel id="voltage-phase-c" typeId="mpc-voltage-phase-c"/>
+			<channel id="voltage-a-b" typeId="mpc-voltage-a-b"/>
+			<channel id="voltage-b-c" typeId="mpc-voltage-b-c"/>
+			<channel id="voltage-c-a" typeId="mpc-voltage-c-a"/>
+			<channel id="frequency" typeId="mpc-frequency"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-type id="mpc-power">
+		<item-type>Number:Power</item-type>
+		<label>Power</label>
+		<description>Total active power currently consumed/produced by the Entity, per MPC Scenario 1
+			(Total Active Power,
+			[MPC-011]) - see CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-power-phase-a">
+		<item-type>Number:Power</item-type>
+		<label>Power (Phase A)</label>
+		<description>Active power on phase A currently consumed/produced by the Entity, per MPC
+			Scenario 1 (Phase-Specific
+			Active Power, [MPC-012/1]) - see CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-power-phase-b">
+		<item-type>Number:Power</item-type>
+		<label>Power (Phase B)</label>
+		<description>Active power on phase B currently consumed/produced by the Entity, per MPC
+			Scenario 1 (Phase-Specific
+			Active Power, [MPC-012/2]) - see CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-power-phase-c">
+		<item-type>Number:Power</item-type>
+		<label>Power (Phase C)</label>
+		<description>Active power on phase C currently consumed/produced by the Entity, per MPC
+			Scenario 1 (Phase-Specific
+			Active Power, [MPC-012/3]) - see CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-energy-consumed">
+		<item-type>Number:Energy</item-type>
+		<label>Energy Consumed</label>
+		<description>Total energy consumed by the Entity, per MPC Scenario 2 (Total Consumed Energy,
+			[MPC-021]) - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-energy-produced">
+		<item-type>Number:Energy</item-type>
+		<label>Energy Produced</label>
+		<description>Total energy produced by the Entity, per MPC Scenario 2 (Total Produced Energy,
+			[MPC-022]) - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-current-phase-a">
+		<item-type>Number:ElectricCurrent</item-type>
+		<label>Current (Phase A)</label>
+		<description>AC current on phase A, per MPC Scenario 3 (Phase-Specific AC Current,
+			[MPC-031/1]) - see CONCEPT.md
+			§5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Current</tag>
+		</tags>
+		<state readOnly="true" pattern="%.2f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-current-phase-b">
+		<item-type>Number:ElectricCurrent</item-type>
+		<label>Current (Phase B)</label>
+		<description>AC current on phase B, per MPC Scenario 3 (Phase-Specific AC Current,
+			[MPC-031/2]) - see CONCEPT.md
+			§5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Current</tag>
+		</tags>
+		<state readOnly="true" pattern="%.2f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-current-phase-c">
+		<item-type>Number:ElectricCurrent</item-type>
+		<label>Current (Phase C)</label>
+		<description>AC current on phase C, per MPC Scenario 3 (Phase-Specific AC Current,
+			[MPC-031/3]) - see CONCEPT.md
+			§5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Current</tag>
+		</tags>
+		<state readOnly="true" pattern="%.2f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-phase-a">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase A-Neutral)</label>
+		<description>AC voltage between phase A and neutral, per MPC Scenario 4 (AC Voltage
+			Phase-Neutral, [MPC-041/1]) - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-phase-b">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase B-Neutral)</label>
+		<description>AC voltage between phase B and neutral, per MPC Scenario 4 (AC Voltage
+			Phase-Neutral, [MPC-041/2]) - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-phase-c">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase C-Neutral)</label>
+		<description>AC voltage between phase C and neutral, per MPC Scenario 4 (AC Voltage
+			Phase-Neutral, [MPC-041/3]) - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-a-b">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase A-B)</label>
+		<description>AC voltage between phases A-B, per MPC Scenario 4 (AC Voltage Phase-Phase,
+			[MPC-041/4]) - see CONCEPT.md
+			§5.4.3. Not populated by this binding: no distinct
+			measurement identifier is available to resolve it
+			(docs/ADR/037-mpc-additional-
+			datapoints.md).</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-b-c">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase B-C)</label>
+		<description>AC voltage between phases B-C, per MPC Scenario 4 (AC Voltage Phase-Phase,
+			[MPC-041/5]) - see CONCEPT.md
+			§5.4.3. Not populated by this binding: no distinct
+			measurement identifier is available to resolve it
+			(docs/ADR/037-mpc-additional-
+			datapoints.md).</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-voltage-c-a">
+		<item-type>Number:ElectricPotential</item-type>
+		<label>Voltage (Phase C-A)</label>
+		<description>AC voltage between phases C-A, per MPC Scenario 4 (AC Voltage Phase-Phase,
+			[MPC-041/6]) - see CONCEPT.md
+			§5.4.3. Not populated by this binding: no distinct
+			measurement identifier is available to resolve it
+			(docs/ADR/037-mpc-additional-
+			datapoints.md).</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Voltage</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="mpc-frequency">
+		<item-type>Number:Frequency</item-type>
+		<label>Frequency</label>
+		<description>Grid AC frequency, per MPC Scenario 5 (AC Frequency, [MPC-051]) - see CONCEPT.md
+			§5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Frequency</tag>
+		</tags>
+		<state readOnly="true" pattern="%.2f %unit%"/>
+	</channel-type>
+
+	<!-- MGCP Channels (docs/ADR/040-mgcp-client-usecase.md) - same not-referenced-from-oh-entity-
+		channel-groups, created-dynamically-by-EEBusOhEntityHandler pattern as mpc above. MVP scope
+		is Scenario 2 (Total Active Power) only - see docs/changes/mgcp-client-usecase/proposal.md
+		for the deliberately deferred Scenarios 1/3/4/5/6/7. -->
+	<channel-group-type id="mgcp">
+		<label>MGCP (Monitoring of Grid Connection Point)</label>
+		<description>Client-role data read from a trusted device's Entity offering MGCP as a Server
+			actor (Grid Connection
+			Point). Appears once MGCP is detected for this Entity - see
+			docs/ADR/040-mgcp-client-usecase.md.</description>
+		<channels>
+			<channel id="total-active-power" typeId="mgcp-total-active-power"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-type id="mgcp-total-active-power">
+		<item-type>Number:Power</item-type>
+		<label>Total Active Power</label>
+		<description>Total active power at the Grid Connection Point, per MGCP Scenario 2 (Total
+			Active Power, [MGCP-021]).
+			Follows the same load convention MPC's own power Channel
+			already uses ([MPC-001]/[MGCP-001]): positive values are
+			consumption from the grid,
+			negative values are feed-in - see CONCEPT.md §5.4.x.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<!-- LPC/LPP Channels (docs/ADR/015-lpc-lpp-client-role-channels.md, revised by docs/ADR/
+		031-remove-energyguard-monitoring-channels.md and docs/ADR/033-lpc-lpp-limit-duration-
+		channel.md) - same not-referenced-from-oh-entity-channel-groups pattern as mpc above.
+		limit-active/limit-value/limit-duration are shared channel-types between the lpc and lpp
+		Channel Groups, since LPC/LPP are structurally identical (CONCEPT.md §5.4.2) and only differ
+		by which Channel Group they are instantiated under. Since ADR-031, this channel-group-type is
+		only ever instantiated by eebus:oh-cs-entity's static <channel-groups> declaration
+		(Server/Controllable-System role) - eebus:oh-eg-entity no longer declares any Channels.
+		limit-duration added by ADR-033 (spec-mandated relative duration, see
+		LimitationOfPowerConsumption TS V1.0.0 §3.1.8.2/[LPC-004]). Scope note: nominal-max/
+		contractual-nominal-max remain deferred - see docs/changes/lpc-lpp-client-role-channels/
+		tasks.md. -->
+	<channel-group-type id="lpc">
+		<label>LPC (Limitation of Power Consumption)</label>
+		<description>The Controllable System's own currently reported LPC status (Scenario 1) - see
+			CONCEPT.md §5.4.3 and
+			docs/ADR/033-lpc-lpp-limit-duration-channel.md.</description>
+		<channels>
+			<channel id="state" typeId="state"/>
+			<channel id="limit-active" typeId="limit-active"/>
+			<channel id="limit-value" typeId="limit-value"/>
+			<channel id="limit-duration" typeId="limit-duration"/>
+			<channel id="failsafe-limit-value" typeId="failsafe-limit-value"/>
+			<channel id="failsafe-duration-minimum" typeId="failsafe-duration-minimum"/>
+			<channel id="heartbeat" typeId="heartbeat"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="lpp">
+		<label>LPP (Limitation of Power Production)</label>
+		<description>The Controllable System's own currently reported LPP status (Scenario 1) - see
+			CONCEPT.md §5.4.3 and
+			docs/ADR/033-lpc-lpp-limit-duration-channel.md.</description>
+		<channels>
+			<channel id="state" typeId="state"/>
+			<channel id="limit-active" typeId="limit-active"/>
+			<channel id="limit-value" typeId="limit-value"/>
+			<channel id="limit-duration" typeId="limit-duration"/>
+			<channel id="failsafe-limit-value" typeId="failsafe-limit-value"/>
+			<channel id="failsafe-duration-minimum" typeId="failsafe-duration-minimum"/>
+			<channel id="heartbeat" typeId="heartbeat"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-type id="limit-active">
+		<item-type>Switch</item-type>
+		<label>Limit Active</label>
+		<description>Whether the Entity currently has an active power limit in effect, per Scenario 1
+			(isLimitActive) - see
+			CONCEPT.md §5.4.3.</description>
+		<tags>
+			<tag>Status</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="limit-value">
+		<item-type>Number:Power</item-type>
+		<label>Limit</label>
+		<description>The Entity's currently reported power limit value, per Scenario 1 - see
+			CONCEPT.md §5.4.3.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="limit-duration">
+		<item-type>Number:Time</item-type>
+		<label>Limit Duration</label>
+		<description>The remaining duration of validity of the currently active power limit
+			(timePeriod.endTime), per Scenario
+			1 ([LPC-004]) - see CONCEPT.md §5.4.3 and
+			docs/ADR/033-lpc-lpp-limit-duration-channel.md. Per
+			LimitationOfPowerConsumption TS
+			V1.0.0 §3.1.8.2, this SPINE field is a relative duration, not an absolute timestamp -
+			the
+			Channel therefore shows the remaining duration directly, with no further derivation. No
+			state (UNDEF) while
+			absent/removed, meaning the limit is currently unbounded
+			([LPC-004]).</description>
+		<tags>
+			<tag>Status</tag>
+		</tags>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="failsafe-limit-value">
+		<item-type>Number:Power</item-type>
+		<label>Failsafe Limit</label>
+		<description>The power limit value the paired Energy Guard has configured to apply if the
+			connection is lost, per
+			Scenario 2 (FailsafeConsumptionActivePowerLimit/
+			FailsafeProductionActivePowerLimit) - see CONCEPT.md §5.4.3.
+			Read-only: set exclusively by
+			the Energy Guard over EEBus, never from openHAB.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.1f %unit%"/>
+	</channel-type>
+
+	<channel-type id="failsafe-duration-minimum">
+		<item-type>Number:Time</item-type>
+		<label>Failsafe Duration</label>
+		<description>The minimum duration the paired Energy Guard has configured for the failsafe
+			limit to remain in effect
+			after a connection loss, per Scenario 2 (FailsafeDurationMinimum)
+			- see CONCEPT.md §5.4.3. Read-only: set exclusively
+			by the Energy Guard over EEBus, never
+			from openHAB.</description>
+		<tags>
+			<tag>Status</tag>
+		</tags>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="heartbeat">
+		<kind>trigger</kind>
+		<label>Heartbeat</label>
+		<description>Fires each time a heartbeat is received from the paired Energy Guard.</description>
+	</channel-type>
+
+	<channel-type id="state">
+		<item-type>Number</item-type>
+		<label>State</label>
+		<description>The current state of the Controllable System state machine.</description>
+		<state readOnly="true">
+			<options>
+				<option value="0">Init</option>
+				<option value="1">Unlimited (Controlled)</option>
+				<option value="2">Limited</option>
+				<option value="3">Failsafe</option>
+				<option value="4">Unlimited (Autonomous)</option>
+			</options>
+		</state>
+	</channel-type>
+
+	<!-- Energy Guard (value provider, Client role) counterpart of the lpc/lpp group types above:
+		the same three Scenario 1 data points (limit-active, limit-value, limit-duration), but
+		WRITABLE. A command on one of these Channels sends a combined SPINE LoadControl write
+		(isLimitActive/value/timePeriod, using the last commanded value of the other two) to every
+		bound partner - see EEBusOhEntityHandler#handleCommand. The Controllable System (value
+		consumer, Server role) keeps the read-only variants above. -->
+	<channel-group-type id="lpc-eg">
+		<label>LPC (Limitation of Power Consumption)</label>
+		<description>Limit commanded by this Energy Guard to its Controllable System partners
+			(Scenario 1). Writable.</description>
+		<channels>
+			<channel id="limit-active" typeId="eg-limit-active"/>
+			<channel id="limit-value" typeId="eg-limit-value"/>
+			<channel id="limit-duration" typeId="eg-limit-duration"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-group-type id="lpp-eg">
+		<label>LPP (Limitation of Power Production)</label>
+		<description>Limit commanded by this Energy Guard to its Controllable System partners
+			(Scenario 1). Writable.</description>
+		<channels>
+			<channel id="limit-active" typeId="eg-limit-active"/>
+			<channel id="limit-value" typeId="eg-limit-value"/>
+			<channel id="limit-duration" typeId="eg-limit-duration"/>
+		</channels>
+	</channel-group-type>
+
+	<channel-type id="eg-limit-active">
+		<item-type>Switch</item-type>
+		<label>Limit Active</label>
+		<description>Whether the limit commanded to the Controllable System partners is active
+			(isLimitActive). Each command
+			sends the combined limit write.</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Power</tag>
+		</tags>
+	</channel-type>
+
+	<channel-type id="eg-limit-value">
+		<item-type>Number:Power</item-type>
+		<label>Limit</label>
+		<description>The power limit value commanded to the Controllable System partners. Each
+			command sends the combined limit
+			write.</description>
+		<category>Energy</category>
+		<tags>
+			<tag>Setpoint</tag>
+			<tag>Power</tag>
+		</tags>
+		<state pattern="%.1f %unit%">
+			<options>
+				<option value="1234">1234 W</option>
+				<option value="2345">2345 W</option>
+				<option value="4200">4200 W</option>
+				<option value="9876">9876 W</option>
+			</options>
+		</state>
+	</channel-type>
+
+	<channel-type id="eg-limit-duration">
+		<item-type>Number:Time</item-type>
+		<label>Limit Duration</label>
+		<description>Duration of validity of the commanded limit (timePeriod.endTime, relative).
+			Not set (never commanded)
+			means the limit is sent unbounded.</description>
+		<tags>
+			<tag>Setpoint</tag>
+		</tags>
+		<state pattern="%.0f %unit%"/>
+	</channel-type>
+
+</thing:thing-descriptions>
