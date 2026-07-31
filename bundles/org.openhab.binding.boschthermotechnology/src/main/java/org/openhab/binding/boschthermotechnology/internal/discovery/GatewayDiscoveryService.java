@@ -56,7 +56,7 @@ public class GatewayDiscoveryService extends AbstractDiscoveryService {
         try {
             String accessToken = bridgeHandler.getValidAccessToken();
             for (GatewayDto gateway : bridgeHandler.getApiClient().listGateways(accessToken)) {
-                String gatewayId = gateway.id;
+                String gatewayId = gateway.deviceId;
                 if (gatewayId == null || gatewayId.isBlank()) {
                     logger.debug("Skipping a gateway list entry without an id");
                     continue;

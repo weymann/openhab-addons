@@ -15,21 +15,22 @@ package org.openhab.binding.boschthermotechnology.internal.dto;
 import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link GatewayDto} maps a single entry of the {@code GET /gateways/} response and the
- * detail response of {@code GET /gateways/{gatewayId}}.
+ * The {@link GatewayDto} maps a single entry of the {@code GET /gateways/} response, confirmed
+ * against a live gateway to be {@code {"deviceId": "...", "deviceType": "k40"}} - note the field
+ * is {@code deviceId}, not {@code id} as originally assumed. {@code firmwareVersion}/
+ * {@code hardwareVersion} are not part of this list response (they are read separately via
+ * {@code resource/gateway/versionFirmware}/{@code versionHardware}) but are kept here for a
+ * possible future {@code GET /gateways/{gatewayId}} detail response.
  *
  * <p>
- * TODO ($Dev): the exact JSON field names were not enumerated in the reverse-engineering
- * analysis (only the endpoints and their purpose are documented, not the response schema) -
- * verify field names against a real PointT response and adjust before release. This is a plain
- * Gson deserialization target, not a public API type, so it intentionally does not carry
- * {@code @NonNullByDefault} (DTOs are exempt per the openHAB coding guidelines).
+ * This is a plain Gson deserialization target, not a public API type, so it intentionally does
+ * not carry {@code @NonNullByDefault} (DTOs are exempt per the openHAB coding guidelines).
  *
  * @author Bernd Weymann - Initial contribution
  */
 public class GatewayDto {
 
-    public @Nullable String id;
+    public @Nullable String deviceId;
     public @Nullable String deviceType;
     public @Nullable String firmwareVersion;
     public @Nullable String hardwareVersion;

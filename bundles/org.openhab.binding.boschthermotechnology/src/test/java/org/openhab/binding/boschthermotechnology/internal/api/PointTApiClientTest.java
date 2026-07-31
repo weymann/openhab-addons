@@ -98,8 +98,12 @@ class PointTApiClientTest {
 
     @Test
     void whenListResourceIdsResponseIsValid_thenIdsAreExtractedInOrder() throws Exception {
-        // Arrange
-        stubResponse(200, "[{\"id\":\"hc1\"},{\"id\":\"hc2\"}]");
+        // Arrange - real gateways return a refEnum object, not a bare array; the reference id is
+        // a full resource path and only its last segment is the circuit id.
+        stubResponse(200,
+                "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\",\"references\":["
+                        + "{\"id\":\"/heatingCircuits/hc1\",\"uri\":\"http://k40/heatingCircuits/hc1\"},"
+                        + "{\"id\":\"/heatingCircuits/hc2\",\"uri\":\"http://k40/heatingCircuits/hc2\"}]}");
 
         // Act
         List<String> ids = client.listResourceIds(ACCESS_TOKEN, GATEWAY_ID, "heatingCircuits");
@@ -111,9 +115,21 @@ class PointTApiClientTest {
     // --- empty response ---
 
     @Test
-    void whenListResourceIdsResponseIsEmptyArray_thenReturnsEmptyList() throws Exception {
+    void whenListResourceIdsResponseHasEmptyReferences_thenReturnsEmptyList() throws Exception {
         // Arrange
-        stubResponse(200, "[]");
+        stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\",\"references\":[]}");
+
+        // Act
+        List<String> ids = client.listResourceIds(ACCESS_TOKEN, GATEWAY_ID, "heatingCircuits");
+
+        // Assert
+        assertTrue(ids.isEmpty());
+    }
+
+    @Test
+    void whenListResourceIdsResponseHasNoReferencesField_thenReturnsEmptyList() throws Exception {
+        // Arrange
+        stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\"}");
 
         // Act
         List<String> ids = client.listResourceIds(ACCESS_TOKEN, GATEWAY_ID, "heatingCircuits");
@@ -125,7 +141,8 @@ class PointTApiClientTest {
     @Test
     void whenListResourceIdsEntriesHaveBlankOrNullId_thenBlankEntriesAreFilteredOut() throws Exception {
         // Arrange
-        stubResponse(200, "[{\"id\":\"hc1\"},{\"id\":\"\"},{}]");
+        stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\",\"references\":["
+                + "{\"id\":\"/heatingCircuits/hc1\"},{\"id\":\"\"},{}]}");
 
         // Act
         List<String> ids = client.listResourceIds(ACCESS_TOKEN, GATEWAY_ID, "heatingCircuits");

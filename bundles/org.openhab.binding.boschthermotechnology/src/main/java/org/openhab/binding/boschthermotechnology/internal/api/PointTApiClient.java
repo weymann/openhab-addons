@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
@@ -29,6 +30,7 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.openhab.binding.boschthermotechnology.internal.dto.GatewayDto;
 import org.openhab.binding.boschthermotechnology.internal.dto.ResourceDto;
 import org.openhab.binding.boschthermotechnology.internal.dto.ResourceListEntryDto;
+import org.openhab.binding.boschthermotechnology.internal.dto.ResourceReferenceListDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,7 +128,11 @@ public class PointTApiClient {
 
     /**
      * Lists the ids of a list-style resource ({@code heatingCircuits}, {@code dhwCircuits},
-     * {@code solarCircuits}, {@code zones/list}) - see {@link ResourceListEntryDto}.
+     * {@code solarCircuits}, {@code zones/list}). These are {@code type: "refEnum"} resources -
+     * the response body is a single object with a {@code references} array, not a bare JSON array
+     * - see {@link ResourceReferenceListDto}/{@link ResourceListEntryDto}. Each reference's
+     * {@code id} is a full resource path (e.g. {@code /heatingCircuits/hc1}); only the last path
+     * segment (e.g. {@code hc1}) is returned.
      *
      * @return the discovered ids, or an empty list if the gateway responded with HTTP 404 for this
      *         path (list-style resources that genuinely do not apply to this gateway)
@@ -148,22 +154,35 @@ public class PointTApiClient {
         }
 
         try {
-            List<ResourceListEntryDto> entries = gson.fromJson(body, new TypeToken<List<ResourceListEntryDto>>() {
-            }.getType());
-            if (entries == null) {
+            ResourceReferenceListDto resource = gson.fromJson(body, ResourceReferenceListDto.class);
+            List<ResourceListEntryDto> references = resource == null ? null : resource.references;
+            if (references == null) {
                 return List.of();
             }
             List<String> ids = new java.util.ArrayList<>();
-            for (ResourceListEntryDto entry : entries) {
-                String id = entry.id;
-                if (id != null && !id.isBlank()) {
-                    ids.add(id);
+            for (ResourceListEntryDto entry : references) {
+                String leafId = lastPathSegment(entry.id);
+                if (leafId != null && !leafId.isBlank()) {
+                    ids.add(leafId);
                 }
             }
             return List.copyOf(ids);
         } catch (JsonSyntaxException e) {
             throw new PointTApiException("Could not parse list response for path " + listPath, e);
         }
+    }
+
+    /**
+     * @return the last {@code /}-separated segment of {@code path} (e.g. {@code hc1} for
+     *         {@code /heatingCircuits/hc1}), or {@code path} unchanged if it contains no
+     *         {@code /}, or {@code null} if {@code path} is {@code null}
+     */
+    private static @Nullable String lastPathSegment(@Nullable String path) {
+        if (path == null) {
+            return null;
+        }
+        int lastSlash = path.lastIndexOf('/');
+        return lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
     }
 
     /**

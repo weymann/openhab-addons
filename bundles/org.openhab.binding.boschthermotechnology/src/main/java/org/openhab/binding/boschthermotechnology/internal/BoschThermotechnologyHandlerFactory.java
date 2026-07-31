@@ -64,10 +64,12 @@ import com.google.gson.Gson;
  * {@link EnergyMonitoringHandler}, {@link AcUnitHandler}, {@link WaterSoftenerHandler}).
  *
  * <p>
- * TODO ($Dev): this uses constructor-based {@code @Reference}/{@code @Activate} injection, which
- * requires a recent enough bnd/SCR annotation processor version - verify this compiles against
- * this bundle's actual {@code pom.xml}-inherited parent version; fall back to a field-based
- * {@code @Reference} + setter if it does not.
+ * Uses constructor-based {@code @Reference}/{@code @Activate} injection. Confirmed to work against
+ * this bundle's actual inherited parent {@code pom.xml}: the generated
+ * {@code OSGI-INF/....BoschThermotechnologyHandlerFactory.xml} component descriptor correctly
+ * declares {@code init="2"} with both constructor parameters wired as SCR v1.4.0
+ * {@code <reference parameter="...">} elements, so no field-based {@code @Reference} + setter
+ * fallback is needed.
  *
  * @author Bernd Weymann - Initial contribution
  */
