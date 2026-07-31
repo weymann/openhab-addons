@@ -96,7 +96,7 @@ class HeatpumpHandlerTest {
     }
 
     @Test
-    void whenCircuitsAreDiscovered_thenThingGoesOnlineWithDynamicChannels() throws Exception {
+    void whenCircuitsAreDiscoveredThenThingGoesOnlineWithDynamicChannels() throws Exception {
         // Arrange
         when(apiClient.listResourceIds(any(), any(), eq(HEATING_CIRCUITS_LIST))).thenReturn(List.of("hc1"));
         when(apiClient.listResourceIds(any(), any(), eq(DHW_CIRCUITS_LIST))).thenReturn(List.of("dhw1"));
@@ -114,7 +114,7 @@ class HeatpumpHandlerTest {
     }
 
     @Test
-    void whenNoCircuitsAreReported_thenThingGoesOfflineWithoutWipingChannels() throws Exception {
+    void whenNoCircuitsAreReportedThenThingGoesOfflineWithoutWipingChannels() throws Exception {
         // Arrange
         when(apiClient.listResourceIds(any(), any(), eq(HEATING_CIRCUITS_LIST))).thenReturn(List.of());
         when(apiClient.listResourceIds(any(), any(), eq(DHW_CIRCUITS_LIST))).thenReturn(List.of());

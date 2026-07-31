@@ -89,7 +89,7 @@ class GatewayHandlerTest {
     }
 
     @Test
-    void whenAllSystemResourcesResolve_thenThingGoesOnline() throws Exception {
+    void whenAllSystemResourcesResolveThenThingGoesOnline() throws Exception {
         // Arrange
         when(apiClient.getResource(any(), any(), any()))
                 .thenReturn(new ResourceDto("x", "Float", 0, new JsonPrimitive(12.3)));
@@ -102,7 +102,7 @@ class GatewayHandlerTest {
     }
 
     @Test
-    void whenApiCallFails_thenThingGoesOfflineWithCommunicationError() throws Exception {
+    void whenApiCallFailsThenThingGoesOfflineWithCommunicationError() throws Exception {
         // Arrange
         when(apiClient.getResource(any(), any(), any()))
                 .thenThrow(new PointTApiException("boom", HttpStatus.INTERNAL_SERVER_ERROR_500));
@@ -115,7 +115,7 @@ class GatewayHandlerTest {
     }
 
     @Test
-    void whenGatewayFirstReachesOnline_thenChildDiscoveryScanIsTriggeredExactlyOnce() throws Exception {
+    void whenGatewayFirstReachesOnlineThenChildDiscoveryScanIsTriggeredExactlyOnce() throws Exception {
         // Arrange - call the protected updateStatus(...) override directly (this test class is in
         // the same package, so this is a normal protected-access call, not reflection) to drive the
         // OFFLINE-to-ONLINE transition deterministically, without depending on the async poll timing

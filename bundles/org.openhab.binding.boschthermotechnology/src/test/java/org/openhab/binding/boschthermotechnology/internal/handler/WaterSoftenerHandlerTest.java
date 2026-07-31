@@ -53,7 +53,7 @@ class WaterSoftenerHandlerTest {
     }
 
     @Test
-    void whenGatewayIdIsSet_thenThingGoesOfflineWithConfigurationPending() {
+    void whenGatewayIdIsSetThenThingGoesOfflineWithConfigurationPending() {
         // Arrange
         handler = createHandler(Map.of(CONFIG_GATEWAY_ID, "gw1"));
 
@@ -66,7 +66,7 @@ class WaterSoftenerHandlerTest {
     }
 
     @Test
-    void whenGatewayIdIsMissing_thenThingGoesOfflineWithConfigurationError() {
+    void whenGatewayIdIsMissingThenThingGoesOfflineWithConfigurationError() {
         // Arrange
         handler = createHandler(Map.of());
 

@@ -84,7 +84,7 @@ class PointTApiClientTest {
     // --- happy path ---
 
     @Test
-    void whenResourceResponseIsValid_thenGetResourceReturnsParsedDto() throws Exception {
+    void whenResourceResponseIsValidThenGetResourceReturnsParsedDto() throws Exception {
         // Arrange
         stubResponse(200, "{\"id\":\"someResource\",\"type\":\"Float\",\"writeable\":0,\"value\":21.5}");
 
@@ -97,7 +97,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsResponseIsValid_thenIdsAreExtractedInOrder() throws Exception {
+    void whenListResourceIdsResponseIsValidThenIdsAreExtractedInOrder() throws Exception {
         // Arrange - real gateways return a refEnum object, not a bare array; the reference id is
         // a full resource path and only its last segment is the circuit id.
         stubResponse(200,
@@ -115,7 +115,7 @@ class PointTApiClientTest {
     // --- empty response ---
 
     @Test
-    void whenListResourceIdsResponseHasEmptyReferences_thenReturnsEmptyList() throws Exception {
+    void whenListResourceIdsResponseHasEmptyReferencesThenReturnsEmptyList() throws Exception {
         // Arrange
         stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\",\"references\":[]}");
 
@@ -127,7 +127,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsResponseHasNoReferencesField_thenReturnsEmptyList() throws Exception {
+    void whenListResourceIdsResponseHasNoReferencesFieldThenReturnsEmptyList() throws Exception {
         // Arrange
         stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\"}");
 
@@ -139,7 +139,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsEntriesHaveBlankOrNullId_thenBlankEntriesAreFilteredOut() throws Exception {
+    void whenListResourceIdsEntriesHaveBlankOrNullIdThenBlankEntriesAreFilteredOut() throws Exception {
         // Arrange
         stubResponse(200, "{\"id\":\"/heatingCircuits\",\"type\":\"refEnum\",\"references\":["
                 + "{\"id\":\"/heatingCircuits/hc1\"},{\"id\":\"\"},{}]}");
@@ -152,7 +152,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenGetResourceResponseIsEmptyBody_thenThrowsApiException() throws Exception {
+    void whenGetResourceResponseIsEmptyBodyThenThrowsApiException() throws Exception {
         // Arrange
         stubResponse(200, "");
 
@@ -163,7 +163,7 @@ class PointTApiClientTest {
     // --- HTTP error responses ---
 
     @Test
-    void whenGetResourceReceives401_thenThrowsAuthException() throws Exception {
+    void whenGetResourceReceives401ThenThrowsAuthException() throws Exception {
         // Arrange
         stubResponse(HttpStatus.UNAUTHORIZED_401, "");
 
@@ -172,7 +172,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenGetResourceReceives500_thenThrowsApiExceptionCarryingHttpStatus() throws Exception {
+    void whenGetResourceReceives500ThenThrowsApiExceptionCarryingHttpStatus() throws Exception {
         // Arrange
         stubResponse(HttpStatus.INTERNAL_SERVER_ERROR_500, "");
 
@@ -185,7 +185,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenTryGetResourceReceives404_thenReturnsEmptyOptionalInsteadOfThrowing() throws Exception {
+    void whenTryGetResourceReceives404ThenReturnsEmptyOptionalInsteadOfThrowing() throws Exception {
         // Arrange
         stubResponse(HttpStatus.NOT_FOUND_404, "");
 
@@ -197,7 +197,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenTryGetResourceReceives500_thenStillThrowsApiException() throws Exception {
+    void whenTryGetResourceReceives500ThenStillThrowsApiException() throws Exception {
         // Arrange
         stubResponse(HttpStatus.INTERNAL_SERVER_ERROR_500, "");
 
@@ -206,7 +206,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsReceives404_thenReturnsEmptyListInsteadOfThrowing() throws Exception {
+    void whenListResourceIdsReceives404ThenReturnsEmptyListInsteadOfThrowing() throws Exception {
         // Arrange
         stubResponse(HttpStatus.NOT_FOUND_404, "");
 
@@ -218,7 +218,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsReceives500_thenStillThrowsApiException() throws Exception {
+    void whenListResourceIdsReceives500ThenStillThrowsApiException() throws Exception {
         // Arrange
         stubResponse(HttpStatus.INTERNAL_SERVER_ERROR_500, "");
 
@@ -229,7 +229,7 @@ class PointTApiClientTest {
     // --- malformed JSON ---
 
     @Test
-    void whenGetResourceReceivesMalformedJson_thenThrowsApiExceptionNotUncaughtParseError() throws Exception {
+    void whenGetResourceReceivesMalformedJsonThenThrowsApiExceptionNotUncaughtParseError() throws Exception {
         // Arrange
         stubResponse(200, "{not valid json");
 
@@ -238,7 +238,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenListResourceIdsReceivesMalformedJson_thenThrowsApiExceptionNotUncaughtParseError() throws Exception {
+    void whenListResourceIdsReceivesMalformedJsonThenThrowsApiExceptionNotUncaughtParseError() throws Exception {
         // Arrange
         stubResponse(200, "not an array");
 
@@ -250,7 +250,7 @@ class PointTApiClientTest {
     // --- timeout / connection failure ---
 
     @Test
-    void whenRequestTimesOut_thenThrowsApiExceptionNotUncaughtTimeoutException() throws Exception {
+    void whenRequestTimesOutThenThrowsApiExceptionNotUncaughtTimeoutException() throws Exception {
         // Arrange
         when(request.send()).thenThrow(new TimeoutException("no response"));
 
@@ -259,7 +259,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenConnectionFails_thenThrowsApiExceptionNotUncaughtExecutionException() throws Exception {
+    void whenConnectionFailsThenThrowsApiExceptionNotUncaughtExecutionException() throws Exception {
         // Arrange
         when(request.send()).thenThrow(new ExecutionException("connection refused", new java.io.IOException()));
 
@@ -268,7 +268,7 @@ class PointTApiClientTest {
     }
 
     @Test
-    void whenRequestIsInterrupted_thenThreadInterruptFlagIsRestored() throws Exception {
+    void whenRequestIsInterruptedThenThreadInterruptFlagIsRestored() throws Exception {
         // Arrange
         when(request.send()).thenThrow(new InterruptedException("interrupted"));
 

@@ -105,7 +105,7 @@ abstract class AbstractSimpleChildHandlerTest {
     }
 
     @Test
-    void whenAllBoundResourcesResolve_thenThingGoesOnline() throws Exception {
+    void whenAllBoundResourcesResolveThenThingGoesOnline() throws Exception {
         // Arrange
         handler = createFreshHandler(true);
         when(gatewayHandler.getApiClient()).thenReturn(apiClient);
@@ -121,7 +121,7 @@ abstract class AbstractSimpleChildHandlerTest {
     }
 
     @Test
-    void whenApiCallFails_thenThingGoesOfflineWithCommunicationError() throws Exception {
+    void whenApiCallFailsThenThingGoesOfflineWithCommunicationError() throws Exception {
         // Arrange
         handler = createFreshHandler(true);
         when(gatewayHandler.getApiClient()).thenReturn(apiClient);
@@ -137,7 +137,7 @@ abstract class AbstractSimpleChildHandlerTest {
     }
 
     @Test
-    void whenBridgeIsNotYetAvailable_thenThingGoesOfflineWithBridgeUninitialized() {
+    void whenBridgeIsNotYetAvailableThenThingGoesOfflineWithBridgeUninitialized() {
         // Arrange
         handler = createFreshHandler(false);
 

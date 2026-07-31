@@ -81,7 +81,7 @@ class ZoneThermostatHandlerTest {
     }
 
     @Test
-    void whenZoneIdAndGatewayIdAreSet_thenThingGoesOnline() throws Exception {
+    void whenZoneIdAndGatewayIdAreSetThenThingGoesOnline() throws Exception {
         // Arrange
         handler = createHandler(Map.of(CONFIG_GATEWAY_ID, "gw1", CONFIG_ZONE_ID, "zone1"));
         when(gatewayHandler.getApiClient()).thenReturn(apiClient);
@@ -97,7 +97,7 @@ class ZoneThermostatHandlerTest {
     }
 
     @Test
-    void whenZoneIdIsMissing_thenThingGoesOfflineWithConfigurationError() {
+    void whenZoneIdIsMissingThenThingGoesOfflineWithConfigurationError() {
         // Arrange
         handler = createHandler(Map.of(CONFIG_GATEWAY_ID, "gw1"));
 
