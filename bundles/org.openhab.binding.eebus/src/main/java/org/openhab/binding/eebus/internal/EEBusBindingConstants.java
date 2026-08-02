@@ -29,6 +29,19 @@ public class EEBusBindingConstants {
     // List of all Thing Type UIDs
     /** Bridge Thing: one local SHIP/SPINE service instance. */
     public static final ThingTypeUID THING_TYPE_SERVICE = new ThingTypeUID(BINDING_ID, "service");
+    /**
+     * Bridge Thing: lightweight anchor with no mandatory configuration, parent of discovered
+     * {@code eebus:peer} Inbox entries (ADR-003). Holds no SHIP/SPINE identity itself.
+     */
+    public static final ThingTypeUID THING_TYPE_NETWORK = new ThingTypeUID(BINDING_ID, "network");
     /** One paired remote EEBUS device, identified by its SKI. */
     public static final ThingTypeUID THING_TYPE_PEER = new ThingTypeUID(BINDING_ID, "peer");
+
+    /**
+     * mDNS service type for SHIP 7.3.2 device announcements. Shared between
+     * {@code EEBusMdnsBrowser} (runtime session bookkeeping, scoped to an active
+     * {@code eebus:service}) and {@code EEBusMdnsDiscoveryParticipant} (Inbox population,
+     * binding-scoped) - see ADR-003.
+     */
+    public static final String SERVICE_TYPE_SHIP_MDNS = "_ship._tcp.local.";
 }

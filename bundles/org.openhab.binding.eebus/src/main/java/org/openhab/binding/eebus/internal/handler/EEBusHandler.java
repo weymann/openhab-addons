@@ -16,17 +16,17 @@ import static org.openmuc.jeebus.shipspine.ShipCommunication.ConnectClientsTo.TR
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.eebus.internal.config.EEBusConfiguration;
 import org.openhab.binding.eebus.internal.config.EEBusPeerConfiguration;
-import org.openhab.binding.eebus.internal.discovery.EEBusDiscoveryService;
 import org.openhab.binding.eebus.internal.transport.EEBusLpcServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusLppServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusMdnsBrowser;
@@ -40,9 +40,9 @@ import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
+import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
-import org.openhab.core.thing.binding.ThingHandlerService;
 import org.openhab.core.types.Command;
 import org.openmuc.jeebus.ship.api.ShipNodeConfiguration;
 import org.openmuc.jeebus.shipspine.ShipCommunication;
@@ -91,10 +91,46 @@ import org.slf4j.LoggerFactory;
  * docs/ADR/002-package-split-transport-handler.md.
  * </p>
  *
+ * <p>
+ * <strong>Start/dispose concurrency</strong> (see docs/ADR/005-supersede-stale-start-on-dispose.md):
+ * {@link #startShipSpine} runs asynchronously on a background task scheduled by
+ * {@link #initialize()} and performs the SHIP server's actual port bind
+ * ({@code communication.connect()}) without holding any lock, since that call can block for a
+ * moment and must never stall {@link #dispose()}. Instead, {@link #initialize()} and
+ * {@link #dispose()} each bump a generation counter kept in {@link #LIFECYCLES}, a static map
+ * keyed by {@link ThingUID}; right after connecting, {@link #startShipSpine} re-checks that
+ * counter before publishing {@link #shipCommunication} etc. If it has been superseded in the
+ * meantime, it shuts the SHIP server it just bound back down instead of publishing it - so a
+ * stale attempt can still finish binding a moment after {@link #dispose()} ran, but it always
+ * cleans up after itself rather than leaking the port. {@link #dispose()} itself never blocks
+ * waiting for an in-flight start attempt. The counter is keyed by {@link ThingUID} rather than
+ * kept as a plain instance field because a live reproduction showed {@code startShipSpine()}
+ * running twice for the same Thing with neither attempt detecting the other - i.e. openHAB can
+ * end up with more than one {@link EEBusHandler} object for the same Thing, each with its own
+ * instance state; only state shared by Thing identity catches that case. See ADR-005 for the full
+ * history, including why an earlier, join-based design and a plain instance-field generation
+ * counter were both rejected.
+ * </p>
+ *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
 public class EEBusHandler extends BaseBridgeHandler {
+
+    /**
+     * Per-Thing lifecycle state for the generation-counter scheme described in the class
+     * javadoc and ADR-005. Kept in a static map keyed by {@link ThingUID} - not as a plain
+     * instance field - specifically because two separate {@link EEBusHandler} objects for the
+     * same Thing were observed to race each other in a live reproduction; instance fields would
+     * not be shared between them, but this map is.
+     */
+    @NonNullByDefault
+    private static final class Lifecycle {
+        final Object lock = new Object();
+        long generation;
+    }
+
+    private static final Map<ThingUID, Lifecycle> LIFECYCLES = new ConcurrentHashMap<>();
 
     private final Logger logger = LoggerFactory.getLogger(EEBusHandler.class);
 
@@ -112,8 +148,26 @@ public class EEBusHandler extends BaseBridgeHandler {
         this.mdnsClient = mdnsClient;
     }
 
+    /**
+     * @return the {@link Lifecycle} shared by every {@link EEBusHandler} object that has ever
+     *         existed for this Thing's UID, creating it on first use.
+     */
+    private Lifecycle lifecycle() {
+        return LIFECYCLES.computeIfAbsent(thing.getUID(), uid -> new Lifecycle());
+    }
+
     @Override
     public void initialize() {
+        // Bump the generation before doing anything else, so that any background start task
+        // from a previous initialize() (that has not yet reached the check in startShipSpine())
+        // - whether scheduled by this object or, per the class javadoc, a different EEBusHandler
+        // object for the same Thing - is guaranteed to see itself as superseded. See ADR-005.
+        Lifecycle lifecycle = lifecycle();
+        long generation;
+        synchronized (lifecycle.lock) {
+            generation = ++lifecycle.generation;
+        }
+
         EEBusConfiguration cfg = getConfigAs(EEBusConfiguration.class);
         this.config = cfg;
 
@@ -128,16 +182,41 @@ public class EEBusHandler extends BaseBridgeHandler {
 
         scheduler.execute(() -> {
             try {
-                startShipSpine(cfg);
-                updateStatus(ThingStatus.ONLINE);
+                if (startShipSpine(cfg, lifecycle, generation)) {
+                    updateStatus(ThingStatus.ONLINE);
+                }
+                // else: superseded while starting - startShipSpine() already shut back down
+                // whatever it just bound; whichever newer attempt is current now owns the
+                // ThingStatus.
             } catch (Exception e) {
-                logger.warn("Failed to start EEBus service instance '{}'", thing.getUID(), e);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                boolean stillCurrent;
+                synchronized (lifecycle.lock) {
+                    stillCurrent = generation == lifecycle.generation;
+                }
+                if (stillCurrent) {
+                    logger.warn("Failed to start EEBus service instance '{}'", thing.getUID(), e);
+                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                } else {
+                    logger.debug("EEBus service instance '{}' failed to start after being superseded by a newer "
+                            + "attempt; ignoring: {}", thing.getUID(), e.getMessage());
+                }
             }
         });
     }
 
-    private void startShipSpine(EEBusConfiguration cfg) throws Exception {
+    /**
+     * @param cfg
+     *            the configuration to start the SHIP/SPINE service instance with
+     * @param lifecycle
+     *            this Thing's shared {@link Lifecycle}, see ADR-005
+     * @param myGeneration
+     *            the {@code lifecycle.generation} value captured by the caller when this attempt
+     *            was scheduled - used to detect being superseded, see ADR-005
+     * @return {@code true} if this attempt published itself as the active instance
+     *         ({@link #shipCommunication} etc. were set); {@code false} if it was superseded while
+     *         connecting and shut itself back down instead
+     */
+    private boolean startShipSpine(EEBusConfiguration cfg, Lifecycle lifecycle, long myGeneration) throws Exception {
         // CONCEPT §7.1 - verified against the actual org.openmuc.jeebus:ship:2.2.0 source
         // (github.com/openmuc/jeebus.ship, tag v2.2.0): the ShipNodeConfiguration constructor
         // that takes a certPath auto-creates the certificate/keystore at that path if none is
@@ -161,7 +240,6 @@ public class EEBusHandler extends BaseBridgeHandler {
 
         ShipCommunication communication = new ShipCommunication(nodeConfig).withTrustedSkis(currentPeerSkis())
                 .withConnectClientsTo(TRUSTED).withAutoAcceptMode(cfg.autoAcceptEnabled);
-        this.shipCommunication = communication;
 
         // CONCEPT §5.5/§7.8: server-role UseCase implementations are attached here, one per
         // entry in cfg.supportedUseCasesServer. Only MPC is implemented so far
@@ -207,41 +285,93 @@ public class EEBusHandler extends BaseBridgeHandler {
                 .withCommunication(communication).withId("d:_n:" + shipId).withDiscoverDevices(true).addEntity()
                 .setType(EntityTypeEnumType.CEM).withUseCases(allUseCases.toArray(new UseCase[0])).applyToDevice()
                 .build();
-        this.device = localDevice;
 
+        // The actual network I/O - generates/loads the certificate and binds the SHIP server's
+        // port. Deliberately not holding lifecycle.lock here: this can take a moment, and holding
+        // the lock across it would block dispose() (see ADR-005 for why that is unacceptable -
+        // it collides with openHAB's own SafeCaller timeout). This means a concurrent dispose()
+        // or newer initialize() - on this object or, per the class javadoc, a different
+        // EEBusHandler object for the same Thing - can bump the generation while this call is in
+        // flight; that is detected and handled immediately below.
         communication.connect();
 
-        updateProperty("localSki", communication.getOwnSki());
+        synchronized (lifecycle.lock) {
+            if (myGeneration != lifecycle.generation) {
+                // Superseded by a newer initialize()/dispose() while we were connecting. Do not
+                // publish this instance anywhere reachable - shut the SHIP server we just bound
+                // back down instead, so its port is not leaked. See ADR-005.
+                logger.debug("EEBus service instance '{}' was disposed/reconfigured while starting; shutting the "
+                        + "now-superseded SHIP server back down", thing.getUID());
+                communication.disconnect();
+                localDevice.close();
+                return false;
+            }
 
-        // CONCEPT §4.1/§7.9: own mDNS browser for _ship._tcp.local., since jeebus.ship's own
-        // mDNS classes (org.openmuc.jeebus.ship.node.service.*) are not OSGi-exported and
-        // ShipCommunication does not expose raw mDNS events. Built on openHAB core's shared
-        // MDNSClient service (not a private JmDNS instance) - see EEBusMdnsBrowser's class
-        // javadoc. Used for (a) a future discovery inbox with friendly names (requirement 3)
-        // and (b) resolving UseCasePartner#getCommunicationAddress() back to a peer's SKI
-        // (§7.2).
-        this.mdnsBrowser = new EEBusMdnsBrowser(mdnsClient);
+            this.shipCommunication = communication;
+            this.device = localDevice;
+            // CONCEPT §4.1/§7.9: own mDNS browser for _ship._tcp.local., since jeebus.ship's own
+            // mDNS classes (org.openmuc.jeebus.ship.node.service.*) are not OSGi-exported and
+            // ShipCommunication does not expose raw mDNS events. Built on openHAB core's shared
+            // MDNSClient service (not a private JmDNS instance) - see EEBusMdnsBrowser's class
+            // javadoc. Used for (a) a future discovery inbox with friendly names (requirement 3)
+            // and (b) resolving UseCasePartner#getCommunicationAddress() back to a peer's SKI
+            // (§7.2).
+            this.mdnsBrowser = new EEBusMdnsBrowser(mdnsClient);
+        }
+
+        updateProperty("localSki", communication.getOwnSki());
+        return true;
     }
 
     @Override
     public void dispose() {
-        ShipCommunication communication = this.shipCommunication;
+        // Deliberately non-blocking (see ADR-005: an earlier design that waited here for an
+        // in-flight startShipSpine() to finish collided with openHAB's own SafeCaller timeout on
+        // dispose(), which made things worse, not better). Bumping the generation is enough: any
+        // background task - from this object or, per the class javadoc, a different EEBusHandler
+        // object for the same Thing - that is still connecting will see the mismatch when it
+        // re-checks right after connect() returns, and will shut itself back down instead of
+        // publishing - see startShipSpine(). Here, we only ever need to close whatever this
+        // object instance already published before this call started.
+        @Nullable
+        ShipCommunication communication;
+        @Nullable
+        Device localDevice;
+        @Nullable
+        EEBusMdnsBrowser browser;
+        Lifecycle lifecycle = lifecycle();
+        synchronized (lifecycle.lock) {
+            lifecycle.generation++;
+            communication = this.shipCommunication;
+            localDevice = this.device;
+            browser = this.mdnsBrowser;
+            this.shipCommunication = null;
+            this.device = null;
+            this.mdnsBrowser = null;
+        }
+
         if (communication != null) {
             communication.disconnect();
         }
-        Device localDevice = this.device;
         if (localDevice != null) {
             // Device extends Shutdownable (AutoCloseable with a no-throws close()) - see
             // org.openmuc.jeebus.spine.api.Shutdownable.
             localDevice.close();
         }
-        EEBusMdnsBrowser browser = this.mdnsBrowser;
         if (browser != null) {
             browser.close();
         }
-        this.shipCommunication = null;
-        this.device = null;
-        this.mdnsBrowser = null;
+    }
+
+    @Override
+    public void handleRemoval() {
+        // Only discard the shared Lifecycle when the Thing is actually deleted, not on every
+        // dispose()/update cycle - see java-coding-rules.md's StorageService lifecycle pattern
+        // for the same dispose()-vs-handleRemoval() distinction. LIFECYCLES otherwise grows by
+        // one small entry per Thing UID ever created, which is harmless short-term but unbounded
+        // over a long-running instance's lifetime.
+        LIFECYCLES.remove(thing.getUID());
+        updateStatus(ThingStatus.REMOVED);
     }
 
     @Override
@@ -249,13 +379,9 @@ public class EEBusHandler extends BaseBridgeHandler {
         // No channels are defined on the Bridge itself.
     }
 
-    @Override
-    public Collection<Class<? extends ThingHandlerService>> getServices() {
-        // Registers EEBusDiscoveryService as a Bridge-scoped ThingHandlerService (CONCEPT.md
-        // §7 item 10), verified against the openHAB binding developer docs pattern for
-        // "Discovery that is bound to a Bridge".
-        return List.of(EEBusDiscoveryService.class);
-    }
+    // Note (ADR-003): this Bridge no longer registers a ThingHandlerService-based discovery
+    // service. Real-device discovery is now binding-scoped (EEBusMdnsDiscoveryParticipant,
+    // independent of this handler's lifecycle) instead of Bridge-scoped - see CONCEPT.md §4.1.
 
     @Override
     public void childHandlerInitialized(ThingHandler childHandler, Thing childThing) {
@@ -280,14 +406,10 @@ public class EEBusHandler extends BaseBridgeHandler {
         communication.withTrustedSkis(currentPeerSkis());
     }
 
-    /**
-     * @return the SKIs of all currently configured {@code eebus:peer} child Things. Used by
-     *         {@link EEBusDiscoveryService} to exclude already-paired peers from mDNS-based
-     *         discovery results (CONCEPT.md §7 item 10).
-     */
-    public Set<String> pairedSkis() {
-        return currentPeerSkis();
-    }
+    // Note (ADR-003): the public pairedSkis() accessor that used to exist here was removed -
+    // its only caller, the old Bridge-scoped EEBusDiscoveryService, is superseded by
+    // EEBusMdnsDiscoveryParticipant, which checks all eebus:peer Things across the whole
+    // ThingRegistry directly instead of asking one specific eebus:service Bridge.
 
     /**
      * Resolves a SKI to the {@code eebus:peer} child Thing's UID string, if a Thing with that

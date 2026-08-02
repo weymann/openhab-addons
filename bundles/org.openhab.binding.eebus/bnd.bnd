@@ -48,19 +48,43 @@
 #   - org.apache.commons.logging     -> optional Netty logging backend
 #   - org.apache.logging.log4j.*     -> optional Netty logging backend
 #   - reactor.blockhound             -> optional BlockHound test integration
-# org.openhab.core.*: without this line, bnd falls back to its own default
-# versioning heuristic and stamps every org.openhab.core.* import with a
-# strict version range derived from the exact core build we compile
-# against (e.g. "[5.3,6)"), which then refuses to resolve against any
-# other openHAB 5.x minor release (confirmed by diffing this bundle's
-# generated MANIFEST.MF against org.openhab.binding.mercedesme's, a binding
-# with no local bnd.bnd: its org.openhab.core.* imports carry NO version
-# attribute at all, while every other provided package - Gson, javax.measure,
-# Jetty, SLF4J - does get a normal range). That versionless behavior for
-# org.openhab.core.* is evidently a default the reactor provides when a
-# module has no bnd.bnd of its own; by writing our own Import-Package
-# instruction below (needed for the optional-package overrides), we
-# replaced that default instead of extending it. This line restores it.
+# org.openhab.core / org.openhab.core.*: without these two lines, bnd falls
+# back to its own default versioning heuristic and stamps every
+# org.openhab.core.* import with a strict version range derived from the
+# exact core build we compile against (e.g. "[5.3,6)"), which then refuses
+# to resolve against any other openHAB 5.x minor release (confirmed by
+# diffing this bundle's generated MANIFEST.MF against
+# org.openhab.binding.mercedesme's, a binding with no local bnd.bnd: its
+# org.openhab.core.* imports carry NO version attribute at all, while every
+# other provided package - Gson, javax.measure, Jetty, SLF4J - does get a
+# normal range). Both a literal "org.openhab.core" entry AND a wildcard
+# "org.openhab.core.*" entry are required - the wildcard alone does not
+# match the bare root package. Both need the explicit ";version=!"
+# attribute (bnd's syntax for "strip/suppress this attribute, never
+# auto-fill it") - just omitting a ";version=" clause is NOT enough to stop
+# bnd from computing one anyway; this was verified the hard way across
+# three separate failed attempts before landing on ";version=!".
+#
+# NOTE: this pair of lines has already gone missing from this file once
+# outside of a reviewed edit (replaced with a plain, version-less
+# "org.openhab.core.*" entry that silently did not fix the resolution
+# failure). If this file is hand-edited again, keep both lines with
+# ";version=!" intact, or the exact "org.openhab.core; version=[5.3.0,6.0.0)"
+# runtime failure will return.
+# javax.jmdns / javax.jmdns.*: as of the 2026-08-01 correction, jmdns is no
+# longer embedded (see pom.xml's dep.noembedding). This binding's own
+# EEBusMdnsDiscoveryParticipant implements openHAB core's
+# org.openhab.core.config.discovery.mdns.MDNSDiscoveryParticipant SPI, whose
+# method signatures carry javax.jmdns.ServiceInfo from whatever jmDNS copy
+# openHAB core itself provides at runtime. Embedding a second, private copy
+# here made the JVM load two distinct classes both named
+# javax.jmdns.ServiceInfo - a loader constraint violation (LinkageError:
+# "activate cannot be found") at component activation, not a build-time
+# failure, so it was not caught by karaf-feature-verification. Same
+# ";version=!" treatment as org.openhab.core.* above and for the same
+# reason: import whatever version core actually provides, not a strict
+# range pinned to this bundle's own (now nonexistent, since unembedded)
+# compile-time jmdns jar.
 # Netty-common shades/relocates org.jctools to
 # io.netty.util.internal.shaded.org.jctools.* at its own build time and
 # stamps OSGi @Version package-info annotations onto the relocated
@@ -88,7 +112,10 @@
 Export-Package: !io.netty.util.internal.shaded.org.jctools.*, !*
 Import-Package: \
     !io.netty.util.internal.shaded.org.jctools.*, \
-    org.openhab.core.*, \
+    org.openhab.core;version=!, \
+    org.openhab.core.*;version=!, \
+    javax.jmdns;version=!, \
+    javax.jmdns.*;version=!, \
     com.aayushatharva.brotli4j.*;resolution:=optional, \
     com.github.luben.zstd.*;resolution:=optional, \
     net.jpountz.*;resolution:=optional, \

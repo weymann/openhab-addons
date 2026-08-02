@@ -358,6 +358,77 @@ fix in this ADR - the previous ones were hypotheses about generated
 manifests; this one is a direct, evidence-based diff against a known-good
 manifest from a real, working add-on.
 
+### Correction (2026-08-01): `org.openhab.core.*` did not cover the bare `org.openhab.core` package itself
+
+After deploying the `org.openhab.core.*` fix above, the exact same
+`Import-Package: org.openhab.core; version="[5.3.0,6.0.0)"` failure
+reappeared unchanged. Cause: in bnd's `Import-Package` clause matching, a
+pattern ending in `.*` matches subpackages (`org.openhab.core.thing`,
+`org.openhab.core.types`, ...) but does **not** match the bare package
+itself - `org.openhab.core.*` requires a literal `.` followed by more
+characters after `core`, which the plain `org.openhab.core` package name
+does not have. So the fix silently repaired every `org.openhab.core.*`
+sub-package import while leaving the one for the bare `org.openhab.core`
+package exactly as broken as before.
+
+**Fix:** added a separate, literal `org.openhab.core` entry alongside
+`org.openhab.core.*` in `bnd.bnd`.
+
+### Correction (2026-08-01): plain version-less entries were not enough - needed `;version=!`
+
+After deploying the previous fix (`org.openhab.core` and
+`org.openhab.core.*`, both listed with no `;version=` clause), the exact
+same `Import-Package: org.openhab.core; version="[5.3.0,6.0.0)"` failure
+reappeared a _third_ time, completely unchanged. This showed the earlier
+assumption was wrong: simply listing a package pattern in an
+`Import-Package` clause without a `;version=` attribute does not stop bnd
+from auto-computing and attaching one anyway - bnd still fills in a
+version wherever it can determine one from the compile classpath, whether
+or not the matching clause mentioned a version.
+
+The actual bnd syntax for "never add a version here, not even
+automatically" is `;version=!` - a literal `!` as the attribute value is
+bnd's documented way to explicitly strip/suppress an attribute rather than
+just leaving it unspecified (which bnd otherwise treats as "compute one
+for me if you can").
+
+**Fix:** changed both entries to `org.openhab.core;version=!` and
+`org.openhab.core.*;version=!`. This is now believed to be the correct,
+final form of the fix - the first two attempts at this same problem
+(bare pattern only, then bare pattern + literal package name, both without
+`;version=!`) demonstrably did not change the generated manifest at all.
+
+### Correction (2026-08-01): the `;version=!` fix went missing outside a reviewed edit, and `Export-Package` was independently hardened
+
+A follow-up manifest check showed the exact same
+`org.openhab.core; version="[5.3,6)"` failure a _fourth_ time. Reading
+`bnd.bnd` back showed it no longer matched what had just been written: the
+`org.openhab.core`/`org.openhab.core.*` entries were back to a plain,
+version-less form (no `;version=!`), and `Export-Package` had changed from
+`!io.netty.util.internal.shaded.org.jctools.*, *` to
+`!io.netty.util.internal.shaded.org.jctools.*, !*` (export nothing at all),
+with new comments describing two build failures never seen in this ADR's
+own investigation: `Invalid package name: 'repository.org.apache.felix...'`
+and `Same component name org.openhab.addons used in multiple component
+implementations`. The user could not confirm whether they had hand-edited
+the file to fix those; it matched their last local git state either way.
+
+Two conclusions from this: first, `Export-Package: !*` (export nothing) is
+actually _more_ correct than this ADR's own earlier `Export-Package: !...,
+*` (which apparently let bnd sweep in unrelated content from elsewhere on
+its scan path when embedding this many dependencies, causing the
+component-name collision and invalid-package-name failures noted above) -
+that change is being kept as-is, not reverted. Second, the
+`org.openhab.core`/`org.openhab.core.*` `;version=!` fix from the previous
+correction was genuinely missing again and had to be reapplied - this is
+now called out with an explicit in-file warning comment so a future manual
+edit does not silently drop it a second time.
+
+**Fix:** reapplied `org.openhab.core;version=!` and
+`org.openhab.core.*;version=!` to `bnd.bnd`, left the already-fixed
+`Export-Package: !io.netty.util.internal.shaded.org.jctools.*, !*` alone,
+and added an explicit warning comment above the two `version=!` lines.
+
 ### Correction (2026-08-01): embedded, shaded jctools packages were being exported
 
 The same manifest diff against `org.openhab.binding.mercedesme` turned up
@@ -415,6 +486,52 @@ exported, full stop. **Fix:** changed the trailing `*` to `!*` -
 excludes everything instead of exporting everything. The explicit jctools
 exclusion is now redundant (nothing is exported regardless) but is kept in
 `bnd.bnd` as documentation of the specific known-bad case.
+
+### Correction (2026-08-01): embedded jmDNS conflicted with openHAB core's own copy at runtime
+
+`karaf-feature-verification` and `mvn clean install` both passed, but the
+bundle failed at runtime, with a `LinkageError` logged the first time
+`EEBusMdnsDiscoveryParticipant` was activated:
+
+```text
+java.lang.LinkageError: loader constraint violation: loader ... wants to
+load abstract class javax.jmdns.ServiceInfo. A different abstract class
+with the same name was previously loaded by loader ...
+```
+
+Cause: `EEBusMdnsDiscoveryParticipant` implements openHAB core's
+`org.openhab.core.config.discovery.mdns.MDNSDiscoveryParticipant` SPI,
+whose method signatures (`getThingUID(ServiceInfo)`,
+`createResult(ServiceInfo)`) carry `javax.jmdns.ServiceInfo` from whichever
+jmDNS copy openHAB core itself provides at runtime. This ADR's Option B
+("embed everything") had also embedded jmDNS 3.6.3 privately here, as a
+transitive runtime dependency of `ship` (see the dependency diagram below).
+That put two distinct classes, both named `javax.jmdns.ServiceInfo`, in
+play in the same JVM - one from this bundle's own embedded/private copy,
+one from openHAB core's - and OSGi's per-bundle classloading means a class
+implementing an SPI interface must resolve that interface's parameter
+types from the exact same class the SPI's caller (openHAB core's
+`MDNSDiscoveryService`) uses, or the JVM raises a loader constraint
+violation the moment it introspects the method via reflection (SCR's
+`@Activate`/component-lookup machinery, per the stack trace). This is a
+runtime failure, not a build-time one, so neither `karaf-feature-verification`
+nor `mvn clean install` caught it - it only surfaced once the bundle was
+actually installed and its mDNS discovery component activated.
+
+**Fix:** excluded `jmdns` from `pom.xml`'s embed-dependencies step
+(`<dep.noembedding>slf4j-api,jmdns</dep.noembedding>`, same mechanism
+already used for `slf4j-api` and the same reasoning: resolve against the
+single, shared copy the runtime already provides instead of a private,
+bundle-local one). Added `javax.jmdns;version=!` and
+`javax.jmdns.*;version=!` to `bnd.bnd`'s `Import-Package`, using the same
+`;version=!` treatment as `org.openhab.core.*` above and for the same
+reason - import whatever jmDNS version openHAB core's own mDNS transport
+bundle actually provides at runtime, not a strict range pinned to this
+bundle's own (now unembedded) compile-time jmdns jar. This also fixes the
+same latent risk for this binding's other jmDNS consumers
+(`EEBusMdnsBrowser`, `EEBusHandler`, `EEBusShipTxtRecord`), which all now
+resolve `javax.jmdns.*` against that same externally provided copy instead
+of a private one.
 
 ### Options considered
 
@@ -490,7 +607,7 @@ graph TD
     B -->|embedded, private| D[Netty 4.2.10.Final]
     B -->|embedded, private| E[BouncyCastle jdk18on 1.83]
     B -->|embedded, private| F[Gson 2.13.2]
-    B -->|embedded, private| G[jmDNS 3.6.3]
+    B -->|Import-Package, not embedded| G[jmDNS - provided by openHAB core's mDNS transport bundle]
     C -->|embedded, private| H[Jackson 2.21.0]
     C -->|embedded, private| I[jakarta.xml.bind-api 4.0.5]
     C -->|embedded, private| J[jaxb-plugins-runtime 4.0.12]

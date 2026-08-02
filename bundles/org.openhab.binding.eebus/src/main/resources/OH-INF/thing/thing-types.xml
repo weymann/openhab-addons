@@ -151,10 +151,21 @@
 		</config-description>
 	</bridge-type>
 
+	<!-- Bridge: lightweight anchor with no mandatory configuration, parent of real EEBUS
+		devices discovered via mDNS (ADR-003). Holds no SHIP/SPINE identity itself. -->
+	<bridge-type id="network">
+		<label>EEBus Network</label>
+		<description>Anchor for real EEBus devices discovered on the local network via mDNS. Requires no
+			configuration - add
+			this first to see nearby EEBus devices in the Inbox, independent of any
+			EEBus Service identity.</description>
+	</bridge-type>
+
 	<!-- Thing: one paired remote EEBUS device. Creating this Thing is the pairing action - see CONCEPT.md §5.2. -->
 	<thing-type id="peer">
 		<supported-bridge-type-refs>
 			<bridge-type-ref id="service"/>
+			<bridge-type-ref id="network"/>
 		</supported-bridge-type-refs>
 
 		<label>EEBus Peer</label>

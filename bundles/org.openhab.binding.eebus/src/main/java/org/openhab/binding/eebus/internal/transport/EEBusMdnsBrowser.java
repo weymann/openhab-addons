@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.eebus.internal.transport;
 
+import static org.openhab.binding.eebus.internal.EEBusBindingConstants.SERVICE_TYPE_SHIP_MDNS;
+
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.util.Collection;
@@ -19,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.jmdns.ServiceEvent;
 import javax.jmdns.ServiceInfo;
@@ -54,15 +55,22 @@ import org.slf4j.LoggerFactory;
  * every binding on the system instead of spinning up a second, independent mDNS responder, and
  * sidesteps any {@code javax.jmdns} version conflict between this binding's own dependency and
  * whatever {@code org.openhab.core.io.transport.mdns} already provides at runtime (see the
- * {@code pom.xml} comment on the {@code org.jmdns:jmdns} dependency). Two purposes:
+ * {@code pom.xml} comment on the {@code org.jmdns:jmdns} dependency).
  * </p>
- * <ol>
- * <li>power a Thing discovery inbox with friendly names (requirement 3, "Discovery mit
- * Namen" - inbox itself is a separate follow-up, see CONCEPT.md §7 item 10);</li>
- * <li>maintain a {@code communicationAddress -> SKI} map, so that
+ *
+ * <p>
+ * <strong>Revised (ADR-003):</strong> this class's Thing-discovery-inbox responsibility
+ * (requirement 3, "Discovery mit Namen") has moved to the binding-scoped
+ * {@code EEBusMdnsDiscoveryParticipant}, which needs no active {@code eebus:service} session
+ * and starts scanning as soon as the binding is installed. This class keeps its other,
+ * genuinely session-bound purpose: maintaining a {@code communicationAddress -> SKI} map for an
+ * <em>active</em> {@code eebus:service} identity, so that
  * {@code UseCasePartner#getCommunicationAddress()} can be resolved back to a paired
- * {@code eebus:peer} Thing.</li>
- * </ol>
+ * {@code eebus:peer} Thing. Both classes register their own listener against the same shared
+ * {@link MDNSClient}/JmDNS instance(s) - this is <strong>not</strong> redundant: no second
+ * JmDNS responder or duplicate network traffic is created, only two independent listener
+ * registrations for the same events, each serving a different, non-overlapping purpose.
+ * </p>
  *
  * <p>
  * <strong>Verified string format</strong>: {@code communicationAddress} is
@@ -80,15 +88,9 @@ import org.slf4j.LoggerFactory;
 @NonNullByDefault
 public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
 
-    private static final String SERVICE_TYPE = "_ship._tcp.local.";
-
     /** One discovered remote EEBUS/SHIP service, read straight from its TXT record. */
     public record DiscoveredService(String ski, String communicationAddress, String name, String brand, String model,
             String type) {
-    }
-
-    public interface Listener {
-        void onDiscoveredServicesChanged(Collection<DiscoveredService> services);
     }
 
     private final Logger logger = LoggerFactory.getLogger(EEBusMdnsBrowser.class);
@@ -98,7 +100,6 @@ public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
     private final Map<String, DiscoveredService> bySki = new ConcurrentHashMap<>();
     /** mDNS event name -> SKI, needed to resolve serviceRemoved() events (no TXT record there). */
     private final Map<String, String> nameToSki = new ConcurrentHashMap<>();
-    private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
 
     /**
      * @param mdnsClient openHAB core's shared mDNS service (injected, see
@@ -108,15 +109,7 @@ public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
      */
     public EEBusMdnsBrowser(MDNSClient mdnsClient) {
         this.mdnsClient = mdnsClient;
-        mdnsClient.addServiceListener(SERVICE_TYPE, this);
-    }
-
-    public void addListener(Listener listener) {
-        listeners.add(listener);
-    }
-
-    public void removeListener(Listener listener) {
-        listeners.remove(listener);
+        mdnsClient.addServiceListener(SERVICE_TYPE_SHIP_MDNS, this);
     }
 
     /** @return all currently visible EEBUS/SHIP services, keyed implicitly by SKI. */
@@ -156,15 +149,14 @@ public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
             byCommunicationAddress.remove(removed.communicationAddress());
         }
         logger.debug("EEBus mDNS service removed: {} (ski={})", event.getName(), ski);
-        notifyListeners();
     }
 
     @Override
     @NonNullByDefault({})
     public void serviceResolved(ServiceEvent event) {
         ServiceInfo info = event.getInfo();
-        String ski = info.getPropertyString("ski");
-        if (ski == null || ski.isBlank()) {
+        EEBusShipTxtRecord txt = EEBusShipTxtRecord.from(info);
+        if (txt == null) {
             return;
         }
         String communicationAddress = ipAndPort(info);
@@ -173,17 +165,15 @@ public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
             return;
         }
 
-        DiscoveredService service = new DiscoveredService(ski, communicationAddress, event.getName(),
-                nullToEmpty(info.getPropertyString("brand")), nullToEmpty(info.getPropertyString("model")),
-                nullToEmpty(info.getPropertyString("type")));
+        DiscoveredService service = new DiscoveredService(txt.ski(), communicationAddress, event.getName(), txt.brand(),
+                txt.model(), txt.type());
 
-        bySki.put(ski, service);
+        bySki.put(txt.ski(), service);
         byCommunicationAddress.put(communicationAddress, service);
-        nameToSki.put(event.getName(), ski);
+        nameToSki.put(event.getName(), txt.ski());
 
-        logger.debug("EEBus mDNS service resolved: {} -> ski={}, address={}", event.getName(), ski,
+        logger.debug("EEBus mDNS service resolved: {} -> ski={}, address={}", event.getName(), txt.ski(),
                 communicationAddress);
-        notifyListeners();
     }
 
     /**
@@ -193,22 +183,7 @@ public class EEBusMdnsBrowser implements ServiceListener, AutoCloseable {
      */
     @Override
     public void close() {
-        mdnsClient.removeServiceListener(SERVICE_TYPE, this);
-    }
-
-    private void notifyListeners() {
-        Collection<DiscoveredService> snapshot = getDiscoveredServices();
-        for (Listener listener : listeners) {
-            try {
-                listener.onDiscoveredServicesChanged(snapshot);
-            } catch (Exception e) {
-                logger.warn("EEBusMdnsBrowser listener threw an exception", e);
-            }
-        }
-    }
-
-    private static String nullToEmpty(@Nullable String value) {
-        return value == null ? "" : value;
+        mdnsClient.removeServiceListener(SERVICE_TYPE_SHIP_MDNS, this);
     }
 
     /**

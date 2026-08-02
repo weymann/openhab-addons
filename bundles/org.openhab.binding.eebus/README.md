@@ -13,13 +13,24 @@ _Please describe the different supported things / devices including their ThingT
 _Which different types are supported, which models were tested etc.?_
 _Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
 
-- `bridge`: Short description of the Bridge, if any
-- `sample`: Short description of the Thing with the ThingTypeUID `sample`
+- `service` (Bridge): one local EEBus SHIP/SPINE service instance - own certificate, own mDNS
+  presence. Required if openHAB itself should offer or consume EEBus use cases.
+- `network` (Bridge): lightweight anchor with no mandatory configuration. Add this first - it
+  has no local identity of its own, but is the parent Thing that discovered real EEBus devices
+  attach to.
+- `peer`: one paired remote EEBus device, identified by its SKI. Creating this Thing is the
+  pairing action.
 
 ## Discovery
 
-_Describe the available auto-discovery features here._
-_Mention for what it works and what needs to be kept in mind when using it._
+Real EEBus devices on the local network are discovered automatically via mDNS
+(`_ship._tcp.local.`, SHIP 7.3.2), as soon as the binding is installed - no local identity needs
+to be configured first.
+
+Discovered devices only appear in the Inbox once an `eebus:network` Thing has been added
+manually (it has no real-world counterpart to discover itself, so it is not auto-suggested).
+Devices whose SKI already belongs to an existing `peer` Thing are excluded, since they are
+already paired.
 
 ## Binding Configuration
 

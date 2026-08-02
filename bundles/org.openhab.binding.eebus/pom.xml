@@ -19,8 +19,15 @@
          reactor's default maven-dependency-plugin "embed-dependencies" execution
          (includeScope=runtime). slf4j-api is excluded here so it stays on Import-Package,
          resolved against the single shared SLF4J binding provided by the openHAB/Karaf
-         runtime instead of a private, bundle-local copy. -->
-    <dep.noembedding>slf4j-api</dep.noembedding>
+         runtime instead of a private, bundle-local copy.
+         jmdns is excluded for the same reason as of the 2026-08-01 correction: this binding's
+         own EEBusMdnsDiscoveryParticipant implements openHAB core's
+         org.openhab.core.config.discovery.mdns.MDNSDiscoveryParticipant SPI, whose method
+         signatures carry javax.jmdns.ServiceInfo from the jmDNS copy openHAB core itself
+         provides. Embedding a second, private copy of jmdns here made the JVM load two
+         different classes both named javax.jmdns.ServiceInfo, which is a loader constraint
+         violation (LinkageError) at component activation. See docs/ADR/001. -->
+    <dep.noembedding>slf4j-api,jmdns</dep.noembedding>
   </properties>
 
   <dependencies>
@@ -32,7 +39,22 @@
     <dependency>
       <groupId>org.openmuc.jeebus</groupId>
       <artifactId>ship</artifactId>
-      <version>2.2.0</version>
+      <version>2.3.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmuc.jeebus.usecase.powerlimitation</groupId>
+      <artifactId>lpp-controllablesystem</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmuc.jeebus.usecase.powerlimitation</groupId>
+      <artifactId>lpc-controllablesystem</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.openmuc.jeebus.usecase.powerlimitation</groupId>
+      <artifactId>abstract-controllablesystem</artifactId>
+      <version>1.0.0</version>
     </dependency>
 
     <!-- ADR-001 (2026-07-31 correction): the reactor's embed-dependencies execution sets

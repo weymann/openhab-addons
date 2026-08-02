@@ -72,6 +72,64 @@ sowie eigene Entities/Use-Cases bündelt, selbst `Device`
 (`org.openmuc.jeebus.spine.api.Device`). Um das nicht mit dem openHAB-Thing für ein
 entferntes Gerät zu verwechseln, heißt Letzteres hier `eebus:peer` (nicht `eebus:device`).
 
+Das SPINE-Gerätemodell selbst kennt drei Ebenen — Device, Entity, Feature (siehe
+`EEBus_SPINE_TR_Introduction.pdf`, Figure 9, S. 14). Die eigentliche Geräte-zu-Geräte-Kopplung
+(z. B. "Strommesser an EMS") passiert nicht auf Device-, sondern auf Feature-Ebene, vermittelt
+über eine SPINE-UseCase-Client/Server-Rolle, die SPINE bereits automatisch discovered (§5.4).
+openHABs Bridge/Thing-Baum bildet nur die Device-Ebene (SHIP-Pairing/Vertrauen) ab. Auf
+Entity/Feature-Ebene gibt es **kein** eigenes "Thing2Thing"-Konstrukt — openHAB kennt dafür
+nur zwei Mechanismen, und beide werden genutzt, je nachdem wer welche Rolle spielt
+(**revidiert 2026-08-02**, siehe §4.2):
+
+- Konsumiert openHAB von einem gepairten Peer (Client-Rolle): automatisch erzeugte **Channels**
+  auf dem `eebus:peer`-Thing, sobald SPINE die UseCases dieses Peers discovered hat — Standard-
+  Channel/Item-Link, keine manuelle Eingabe nötig.
+- Bietet openHAB selbst etwas an (Server-Rolle): **Item-Metadata**, weil hier ein beliebiges,
+  bereits existierendes Item als Datenquelle gebraucht wird — das kann Discovery nicht
+  automatisch herausfinden, das muss ein Mensch festlegen.
+
+```mermaid
+flowchart LR
+    subgraph SPINE["EEBus / SPINE-Geraetemodell"]
+        direction TB
+        DeviceA["Device (lokal)<br/>1 Zertifikat, 1 SKI"]
+        DeviceB["Device (Peer)<br/>z. B. echter Leistungsmesser"]
+        EntityA["Entity<br/>z. B. CEM"]
+        EntityB["Entity<br/>z. B. SubMeterElectricity"]
+        FeatureA["Feature<br/>Measurement, Client"]
+        FeatureB["Feature<br/>Measurement, Server"]
+        DeviceA -- SHIP Pairing, SKI-Trust --- DeviceB
+        DeviceA --> EntityA --> FeatureA
+        DeviceB --> EntityB --> FeatureB
+        FeatureB -. SPINE UseCase, automatisch entdeckt .-> FeatureA
+    end
+
+    subgraph OH["openHAB-Abbildung"]
+        direction TB
+        Bridge["eebus:service<br/>Bridge, 1 lokales Device"]
+        Peer["eebus:peer<br/>Thing, 1 gepairtes Device"]
+        Channel["Channel, dynamisch<br/>automatisch bei UseCase-Fund"]
+        ItemC["Item<br/>Standard-Link"]
+        Bridge -- 1:n, Pairing = Thing anlegen --> Peer
+        Peer -- automatisch erzeugt --> Channel
+        Channel -- Link --> ItemC
+    end
+
+    DeviceA -. entspricht .-> Bridge
+    DeviceB -. entspricht .-> Peer
+    FeatureB -. wird zu .-> Channel
+```
+
+Umgekehrter Fall (openHAB bietet an, z. B. weil "EMS" hier lokal ist und einen Wert aus einem
+Modbus-Item als Server-Feature bereitstellt) ist im Diagramm nicht mitgezeichnet, um es lesbar
+zu halten — dafür bleibt es bei Item-Metadata, siehe §4.2.
+
+**Kernaussage zur Thing2Thing-Frage:** die einzige "Verknüpfung" zwischen zwei Devices, die
+openHAB explizit anlegen lässt, ist Schritt 2 oben — ein `eebus:peer`-Thing unter der
+passenden Bridge (SHIP-Pairing). Alles danach (Kanäle, Item-Links) entsteht automatisch aus
+der SPINE-Discovery oder ist ganz normales openHAB-Alltagsgeschäft (Channel mit Item verlinken)
+— es gibt keinen dritten, eebus-spezifischen Verknüpfungsschritt.
+
 | Thing | ThingTypeUID (Vorschlag) | Repräsentiert | Kardinalität |
 |---|---|---|---|
 | Bridge | `eebus:service` | eine lokale SHIP/SPINE-Serviceinstanz (genau ein `Device` in jeebus.spine) | 1:1, exklusiv — **entschieden, kein Teilen einer Identität über mehrere Bridges** |
@@ -154,28 +212,73 @@ ins eigene OSGi-Bundle eingebettet/exportiert wird — das noch offene, alte "Ve
 im `pom.xml`-Kommentar ist damit hinfällig. **Noch nicht gegen eine echte Karaf-Laufzeit
 verifiziert.**
 
-### 4.2 Datenanbindung: Item-Metadaten statt dynamischer Channels — **umgesetzt (§7 Punkt 6)**
+**Revidiert (2026-08-01, ADR-003):** Punkt 10 (Discovery-Inbox) wurde zunächst als
+`EEBusDiscoveryService extends AbstractThingHandlerDiscoveryService<EEBusHandler>` umgesetzt —
+also Bridge-scoped, aktiv erst nachdem eine vollständig konfigurierte `eebus:service`-Bridge
+erfolgreich `ONLINE` gegangen ist. In der Praxis bedeutete das: nach reiner Installation des
+Bindings passiert sichtbar nichts, weil Discovery an eine schwergewichtige lokale Identität
+(Zertifikat, Port, vendorCode/deviceModel/serialNumber) gekoppelt war, obwohl reines
+mDNS-Lauschen protokollseitig gar keine lokale Identität braucht.
 
-Die ursprüngliche Idee eines `DynamicChannelTypeProvider`, der pro erkanntem Use-Case
-automatisch Channels anlegt, wird **verworfen** zugunsten eines Metadaten-Ansatzes
-(Entscheidung im Gespräch): analog zu bekannten openHAB-Metadaten-Namespaces (`homekit`,
-`alexa`, `channel`) bekommt dieses Binding einen eigenen Namespace `eebus`, mit dem
-**beliebige** existierende Items (auch aus ganz anderen Bindings, z. B. ein
-Wechselrichter-Leistungs-Item aus einem Modbus/SunSpec-Binding) an einen konkreten
-Use-Case-Datenpunkt gekoppelt werden:
+**Neu entschieden und umgesetzt:** `EEBusDiscoveryService` ist ersetzt durch
+`EEBusMdnsDiscoveryParticipant` (`org.openhab.core.config.discovery.mdns.MDNSDiscoveryParticipant`)
+— ein bindingweites, von keinem Thing-Handler abhängiges OSGi-Service, das von openHAB Cores
+eigenem `MDNSDiscoveryService` automatisch aufgegriffen wird. Scan startet damit unmittelbar
+nach Installation. Eine neue, schlanke Bridge `eebus:network` (keine Pflicht-Konfiguration)
+dient als Elternobjekt für gefundene reale Geräte; ohne existierende `eebus:network`-Bridge
+liefert der Participant bewusst keine Ergebnisse. `EEBusMdnsBrowser` bleibt bestehen, aber nur
+noch für seine zweite, echte an eine aktive `eebus:service`-Session gebundene Aufgabe
+(`communicationAddress -> SKI`-Auflösung, §5.4 TODO 2) — seine bisherige
+Discovery-Inbox-Zuständigkeit (Punkt 1 der Klassen-Javadoc-Liste) entfällt ersatzlos zugunsten
+des neuen Participants. Details, Konsequenzen und offene Punkte: siehe
+`docs/ADR/003-decouple-mdns-discovery-from-bridge.md` und
+`docs/changes/eebus-network-discovery/`.
+
+### 4.2 Datenanbindung: dynamische Channels für Konsum, Item-Metadaten für Angebot — **revidiert (2026-08-02)**
+
+**Vorherige Fassung verworfen.** Die ursprüngliche v1-Entscheidung sah für **beide** Richtungen
+Item-Metadata vor (analog `homekit`/`alexa`/`channel`). Das widerspricht dem Kernversprechen
+von EEBus: zwei Devices pairen, machen automatisch SPINE-UseCase-Discovery (§5.4) und kennen
+danach gegenseitig ihre Fähigkeiten — ohne dass ein Mensch das pro Datenpunkt und pro Peer
+nochmal von Hand nachträgt. Ein Peer-Thing zwingend mit Metadata für jeden einzelnen erkannten
+Datenpunkt zu versehen, reproduziert genau den manuellen Aufwand, den die Protokoll-Discovery
+eigentlich erspart.
+
+**Neu, nach Rolle getrennt** — der Grund für die frühere Metadata-Entscheidung
+("Kopplung an beliebige beliebige Items aus anderen Bindings") gilt nur für **eine** der beiden
+Richtungen, nicht für beide:
+
+- **Client-Rolle (openHAB konsumiert von einem gepairten Peer):** SPINE hat die Discovery
+  bereits gemacht (`NodeManagement.addUseCaseListener`/`UseCasePartner`, §5.4) — welche
+  UseCases/Features ein bestimmter Peer anbietet, ist zur Laufzeit exakt bekannt, sobald das
+  Pairing steht. Das gehört als **dynamisch erzeugte Channels** auf das jeweilige
+  `eebus:peer`-Thing (löst die in §5.4.1 zurückgestellte Kanallosigkeit von
+  `EEBusPeerHandler` ab, siehe Korrektur dort). Der Nutzer verknüpft anschließend ganz normal
+  per UI einen Channel mit einem Item — Standard-openHAB-Flow, keine `eebus`-Syntax, keine
+  Freitext-UIDs.
+- **Server-Rolle (openHAB bietet selbst etwas an, §5.5):** hier bleibt der
+  Item-Metadata-Ansatz richtig, weil openHAB einen Wert aus einem **bereits existierenden,
+  beliebigen** Item braucht (z. B. dem echten Leistungswert aus einem Modbus/SunSpec-Binding).
+  Das ist kein Discovery-Problem, sondern die Frage "woher kommt der reale Wert" — die kann
+  nur ein Mensch beantworten, unabhängig vom Binding-Design. Namespace, Syntax und
+  Datenpunkt-Vokabular unten gelten **ausschließlich noch für diesen Fall.**
+
+#### 4.2a Server-Rolle: Item-Metadata (unverändert gegenüber v1)
+
+Analog zu bekannten openHAB-Metadaten-Namespaces (`homekit`, `alexa`, `channel`) bekommt dieses
+Binding einen eigenen Namespace `eebus`, mit dem **beliebige** existierende Items (auch aus
+ganz anderen Bindings, z. B. ein Wechselrichter-Leistungs-Item aus einem Modbus/SunSpec-Binding)
+an einen konkreten, von openHAB **angebotenen** Use-Case-Datenpunkt gekoppelt werden:
 
 ```java
-Number:Power WR_Leistung "Wechselrichter Leistung" { eebus="MPC.power" [peer="eebus:peer:wechselrichter"] }
+Number:Power WR_Leistung "Wechselrichter Leistung" { eebus="MPC.power" }
 ```
 
-**Wert-Syntax:** `eebus="<UseCase>.<Datenpunkt>"`, Konfiguration (eckige Klammern) optional
-`[peer="<eebus:peer-Thing-UID>"]`.
-
-- Für **angebotene** (Server-)Use-Cases (§5.5) ist die Kopplung Bridge-weit (ein Server-Feature
-  ist netzwerkweit sichtbar, nicht pro Peer) — kein `peer`-Attribut nötig.
-- Für **konsumierte** (Client-)Use-Case-Datenpunkte (z. B. eine LPC-Grenze an einen
-  bestimmten Peer schreiben, oder MPC-Werte eines bestimmten Peers lesen) ist die Kopplung
-  pro Peer nötig — daher das `peer`-Attribut mit der Thing-UID.
+**Wert-Syntax:** `eebus="<UseCase>.<Datenpunkt>"`, ohne weitere Konfiguration — die Kopplung
+ist **immer Bridge-weit**, da nur noch die Server-Rolle Metadata nutzt (ein Server-Feature ist
+netzwerkweit sichtbar, nicht pro Peer). Das frühere optionale `[peer="..."]`-Attribut für die
+Client-Rolle ist mit dieser Revision entfallen — Konsum läuft jetzt ausschließlich über
+Channels (siehe oben).
 
 **Datenpunkt-Vokabular (Startmenge, aus §5.4.2 abgeleitet — wird erweitert, sobald weitere
 Use-Cases/Szenarien im Detail beschafft sind):**
@@ -193,15 +296,20 @@ Use-Cases/Szenarien im Detail beschafft sind):**
 | `LPP.failsafeDurationMinimum` | LPP (Server-Rolle, CS) | schreibend (Konfiguration) | analog `LPC.failsafeDurationMinimum` |
 | `LPP.state` | LPP (Server-Rolle, CS) | lesend | analog `LPC.state` |
 
-**Java-seitige Architektur** (neue Klasse `EEBusMetadataService`, OSGi-Component in
-`internal`, `@Reference`s auf `MetadataRegistry`, `ItemRegistry`, `EventPublisher` — alle drei
-sind Standard-`org.openhab.core`-APIs, keine neue `pom.xml`-Dependency nötig, verifiziert
+**Java-seitige Architektur, Server-Rolle** (neue Klasse `EEBusMetadataService`, OSGi-Component
+in `internal`, `@Reference`s auf `MetadataRegistry`, `ItemRegistry`, `EventPublisher` — alle
+drei sind Standard-`org.openhab.core`-APIs, keine neue `pom.xml`-Dependency nötig, verifiziert
 anhand der openHAB-Core-Javadocs, siehe Quellen):
 
-- `Optional<Metadata> find(String useCase, String dataPoint, @Nullable String peerThingUid)`:
-  iteriert `metadataRegistry.getAll()`, filtert auf `key.getNamespace().equals("eebus")` und
-  `metadata.getValue().equals(useCase + "." + dataPoint)`, sowie – falls `peerThingUid`
-  angegeben – auf `metadata.getConfiguration().get("peer")`.
+- `Optional<Metadata> find(String useCase, String dataPoint)`: iteriert
+  `metadataRegistry.getAll()`, filtert auf `key.getNamespace().equals("eebus")` und
+  `metadata.getValue().equals(useCase + "." + dataPoint)`. Das frühere `peerThingUid`-Argument
+  ist entfallen, da nur noch die Bridge-weite Server-Rolle Metadata nutzt.
+  **Offener Punkt:** bei **mehreren** lokalen `eebus:service`-Bridges, die denselben
+  UseCase+Datenpunkt als Server anbieten, ist `find(...)` aktuell mehrdeutig — es fehlt ein
+  Unterscheidungsmerkmal (z. B. ein optionales `[service="eebus:service:..."]`-Konfigurations-
+  Attribut). Für den heutigen Regelfall (eine Bridge bietet einen bestimmten UseCase an)
+  unkritisch, aber offen für den Mehrfach-Bridge-Fall.
 - Lese-Pfad (**korrigiert nach Implementierung** — kein Abfrage-Callback, siehe §7 Punkt 6):
   SPINE hält Server-Feature-Daten in einem lokalen Cache (`ReadListFeatureFunction`/
   `DataListHolder`) und beantwortet Leseanfragen sowie Subscriptions automatisch daraus. Das
@@ -221,7 +329,7 @@ anhand der openHAB-Core-Javadocs, siehe Quellen):
 ### 4.2.1 Rule-Tag-Mechanismus — **entschieden: kein eigener Mechanismus nötig (§7 Punkt 7)**
 
 Beim Entwerfen zeigte sich: ein separater "Rule-Tag"-Mechanismus wäre **redundant** zum
-Item-Metadaten-Ansatz. Ein Datenpunkt, der nicht 1:1 auf ein reales Item abbildbar ist (z. B.
+Item-Metadaten-Ansatz der Server-Rolle. Ein Datenpunkt, der nicht 1:1 auf ein reales Item abbildbar ist (z. B.
 ein berechneter/abgeleiteter Wert), lässt sich genauso gut über ein gewöhnliches **Proxy-Item**
 lösen, dessen Zustand eine normale openHAB-Rule pflegt (`postUpdate` bei Bedarf) bzw. das eine
 Rule per "Item empfing Befehl"-Trigger auswertet:
@@ -241,11 +349,16 @@ für dieselbe Wert-Syntax. **Konsequenz:** §7 Punkt 7 ist damit durch Vereinfac
 nicht durch Implementierung — analog zur Pairing-Entscheidung in §5.2 (kein separates
 Approve/Reject-API nötig).
 
-Vorteil des Item-Metadaten-Ansatzes gegenüber dynamischen Channels insgesamt: funktioniert
-sofort mit Items aus beliebigen anderen Bindings, keine Notwendigkeit für einen eigenen
-`ChannelTypeProvider`, und die Bridge-Config (§4, Checkboxen in 4.3) legt bereits fest, welche
-Use-Cases überhaupt aktiv sind — die Metadaten binden nur noch die konkreten Datenpunkte an
-Items.
+**Korrigiert (2026-08-02):** die vorherige Fassung dieses Absatzes pries den
+Item-Metadaten-Ansatz als generell überlegen gegenüber dynamischen Channels — das galt nur für
+die Server-Rolle, siehe die neue Rollenaufteilung am Anfang von §4.2. Für die Client-Rolle gilt
+das Gegenteil: dort erzeugt der `ChannelTypeProvider`-Mehraufwand genau den Automatismus, den
+EEBus verspricht (Discovery statt manueller Konfiguration), während reine Metadata dort den
+Nutzer zwingen würde, jeden erkannten Datenpunkt jedes Peers von Hand einzutragen. Für die
+Server-Rolle bleibt der ursprüngliche Vorteil bestehen: funktioniert sofort mit Items aus
+beliebigen anderen Bindings, kein `ChannelTypeProvider` nötig, und die Bridge-Config (§4,
+Checkboxen in §4.3) legt bereits fest, welche Use-Cases überhaupt angeboten werden — die
+Metadaten binden dann nur noch die konkreten Datenpunkte an Items.
 
 ### 4.3 Bridge-Konfiguration: Use-Case-Auswahl per Checkbox
 
@@ -260,6 +373,48 @@ Die Bridge (`eebus:service`) bekommt zwei Multi-Select-Konfigurationsparameter (
 
 Beide Listen steuern, welche `UseCase`-Implementierungen beim Bauen der lokalen Entity in
 `EEBusHandler` registriert bzw. welche `addUseCaseListener(...)`-Aufrufe abgesetzt werden.
+
+### 4.4 Thing2Thing-Pairing: Thing Action statt manuellem SKI-Copy-Paste — **vorläufig entschieden (2026-08-02), Testvorbehalt**
+
+**Auslöser:** §4.1/§5.2 verlangten bisher, dass ein Nutzer die `localSki`-Property einer
+Bridge manuell abliest und in die `ski`-Konfiguration eines neuen `eebus:peer`-Things unter
+der jeweils anderen Bridge einträgt — insbesondere relevant, wenn zwei lokale
+`eebus:service`-Bridges miteinander gekoppelt werden sollen (Beispiel-Szenario: ein "unechtes"
+`eebus:service` "EMS" soll mit einem "echten" `eebus:service`/`eebus:peer` "Leistungsmesser"
+verbunden werden). Das ist kein first-class, sichtbarer Verknüpfungsschritt, sondern
+Zweckentfremdung generischer Mechanismen.
+
+**Entscheidung:** eine Thing Action auf `eebus:service` (Arbeitstitel `pairWith`), die die
+`eebus:peer`-Things auf beiden Seiten automatisch mit korrekter SKI anlegt, statt manuellem
+Copy-Paste. Der Zielparameter wird als `@ActionInput`/`ConfigDescriptionParameter` mit
+Options-Liste (befüllt aus `ThingRegistry`, gefiltert auf `eebus:service`/`eebus:peer`)
+deklariert.
+
+**Warum keine Rule nötig ist** (verifiziert anhand Community-Diskussion, openHAB 5.1.4,
+Juni 2026 — siehe Quellen): eine mit `@RuleAction`/`@ActionInput` annotierte Thing Action
+erscheint automatisch auf der Properties-Seite des Things in Main UI, als generiertes
+Eingabeformular, direkt aufrufbar **ohne** Rule-Umweg. Das gilt nur für die Thing-eigene Seite
+— ein Aufruf aus einem beliebigen Custom-Widget/Dashboard heraus bräuchte weiterhin einen
+Rule-Umweg (`action: rule` im Widget → `actions.thingActions(binding, thingId)`), das ist für
+unseren Fall aber nicht nötig, da die Aktion auf der Bridge-eigenen Seite ausgelöst wird.
+
+**Testvorbehalt (Nutzer-Vorgabe):** diese Entscheidung ist **vorläufig** — sie beruht auf einer
+Community-Verifikation eines fremden, einfachen Beispiels (`reboot()`/`permitJoin()`-artige
+Aktionen), nicht auf einem Test im eigenen Setup. Vor endgültiger Umsetzung muss der Nutzer
+selbst verifizieren, dass:
+
+- eine Thing Action mit Options-Liste-Parameter (nicht nur Freitext) tatsächlich als Dropdown
+  in Main UI gerendert wird, befüllt aus `ThingRegistry`-Inhalten zur Laufzeit,
+- das auf der openHAB-Version des Zielsystems genauso funktioniert wie im verlinkten
+  Community-Beitrag (dort: 5.1.4),
+- eine Thing Action, die auf **zwei** Bridge-Handlern gleichzeitig schreibend eingreift (Peer
+  auf Seite A **und** Seite B anlegen), technisch unproblematisch ist (kein Deadlock/Race
+  zwischen zwei `EEBusHandler`-Instanzen).
+
+Bis zur Verifikation bleibt der bisherige manuelle SKI-Copy-Paste-Weg (§4, §5.2) die einzige
+verifizierte Vorgehensweise. Diese Sektion ersetzt **keine** der Vorschläge B–D aus der
+Diskussion (eigenes `eebus:link`-Thing, Discovery-Erkennung von Geschwister-Bridges,
+Status-Channel pro Peer) — die bleiben zurückgestellt, nicht verworfen.
 
 ## 5. Die vier Anforderungen im Detail
 
@@ -404,6 +559,10 @@ falschen OSCEV-Beschreibung. Umgesetzt, siehe §7 Punkt 11.
      Listener-Registrierung selbst ermöglicht.
   Bis beide Punkte geklärt sind, bleibt `EEBusPeerHandler` ohne Kanäle (Platzhalter mit
   Bridge-Status-Weiterleitung), siehe Code-Kommentar in `EEBusPeerHandler`.
+  **Revidiert (2026-08-02):** die Kanallosigkeit ist keine Zielarchitektur mehr, sondern nur
+  der aktuelle Umsetzungsstand — sobald Punkt (2)/(3) gelöst sind, bekommt `EEBusPeerHandler`
+  dynamisch erzeugte Channels pro erkanntem UseCase-Datenpunkt, siehe §4.2 (neue
+  Rollenaufteilung Client-Channels/Server-Metadata).
 
 #### 5.4.2 Scenario-/Feature-Tabellen — LPC/LPP jetzt primärquellen-verifiziert (§7 Punkt 3)
 
@@ -697,14 +856,20 @@ Neu hinzugekommen durch die Anbieter-Rolle-Rückfrage (§5.5, §4.2, §4.3):
       anhand `ServiceRegistry.java` (Quelle unten).
       → `EEBusMdnsBrowser.java` (neu); `EEBusHandler.java` (Start/Close-Lifecycle,
       `getMdnsBrowser()`); `EEBusPeerHandler.java` (Klassenkommentar aktualisiert).
-- [x] **(10) Umgesetzt:** `EEBusDiscoveryService extends AbstractThingHandlerDiscoveryService
-      <EEBusHandler>` (`PROTOTYPE`-Scope, verifiziert anhand des offiziellen openHAB-
-      Binding-Entwickler-Leitfadens, Abschnitt "Discovery that is bound to a Bridge") —
-      abonniert `EEBusMdnsBrowser` als `Listener`, meldet unpaired Services (SKI nicht in
-      `EEBusHandler#pairedSkis()`) über `thingDiscovered(...)` als `eebus:peer`-Vorschlag mit
-      SKI und Marke/Modell als Label. `EEBusHandler#getServices()` registriert sie.
-      → `EEBusDiscoveryService.java` (neu), `EEBusHandler.java` (`getServices()`,
-      `pairedSkis()`).
+- [x] **(10) Umgesetzt, dann durch ADR-003 ersetzt (2026-08-01):** ursprünglich
+      `EEBusDiscoveryService extends AbstractThingHandlerDiscoveryService<EEBusHandler>`
+      (`PROTOTYPE`-Scope, Bridge-scoped über `EEBusHandler#getServices()`). Problem in der
+      Praxis: Discovery lief erst nach vollständig konfigurierter, `ONLINE`-gegangener
+      `eebus:service`-Bridge — nach reiner Binding-Installation passierte sichtbar nichts. Durch
+      `EEBusMdnsDiscoveryParticipant` ersetzt (`org.openhab.core.config.discovery.mdns
+      .MDNSDiscoveryParticipant`, bindingweit statt Bridge-scoped, kein `eebus:service` nötig)
+      plus neuer, konfigurationsloser Bridge `eebus:network` als Elternobjekt für Funde. Siehe
+      §4.1 Revision und `docs/ADR/003-decouple-mdns-discovery-from-bridge.md`.
+      → `EEBusMdnsDiscoveryParticipant.java` (neu, ersetzt `EEBusDiscoveryService.java`),
+      `EEBusNetworkHandler.java` (neu), `EEBusShipTxtRecord.java` (neu, geteilte
+      TXT-Record-Parsing zwischen `EEBusMdnsBrowser` und dem neuen Participant),
+      `EEBusHandler.java` (`getServices()`-Override und `pairedSkis()` entfernt — beide waren
+      ausschließlich für die alte, jetzt ersetzte Discovery-Variante da).
 - [x] **(11) Entschieden ("Alles rein") und umgesetzt:** Checkbox-Optionsliste in
       `thing-types.xml` (`supportedUseCasesClient`/`supportedUseCasesServer`, §4.3) auf den
       vollen, primärquellen-verifizierten Katalog von 43 Use-Cases (§5.4.1) erweitert —

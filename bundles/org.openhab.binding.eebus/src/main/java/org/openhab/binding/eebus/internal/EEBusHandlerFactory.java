@@ -19,6 +19,7 @@ import java.util.Set;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.eebus.internal.handler.EEBusHandler;
+import org.openhab.binding.eebus.internal.handler.EEBusNetworkHandler;
 import org.openhab.binding.eebus.internal.handler.EEBusPeerHandler;
 import org.openhab.binding.eebus.internal.transport.EEBusMetadataService;
 import org.openhab.core.io.transport.mdns.MDNSClient;
@@ -42,7 +43,8 @@ import org.osgi.service.component.annotations.Reference;
 @Component(configurationPid = "binding.eebus", service = ThingHandlerFactory.class)
 public class EEBusHandlerFactory extends BaseThingHandlerFactory {
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_SERVICE, THING_TYPE_PEER);
+    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_SERVICE, THING_TYPE_NETWORK,
+            THING_TYPE_PEER);
 
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
@@ -64,6 +66,9 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
 
         if (THING_TYPE_SERVICE.equals(thingTypeUID) && thing instanceof Bridge bridge) {
             return new EEBusHandler(bridge, metadataService, mdnsClient);
+        }
+        if (THING_TYPE_NETWORK.equals(thingTypeUID) && thing instanceof Bridge bridge) {
+            return new EEBusNetworkHandler(bridge);
         }
         if (THING_TYPE_PEER.equals(thingTypeUID)) {
             return new EEBusPeerHandler(thing);
