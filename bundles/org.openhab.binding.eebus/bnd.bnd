@@ -98,6 +98,15 @@
 # Import-Package so bnd does not try to wire it externally either - we
 # always use our own embedded copy.
 #
+# Bundle-SymbolicName: the presence of this bnd.bnd file makes bnd-maven-plugin ignore the
+# <configuration><bnd>...</bnd></configuration> instructions inherited from the reactor POM
+# entirely (confirmed live: `mvn help:effective-pom` correctly shows
+# "Bundle-SymbolicName: org.openhab.binding.eebus" in the inherited plugin config, but the
+# actual built jar's MANIFEST.MF had "Bundle-SymbolicName: org.openhab.addons.reactor.bundles"
+# instead - bnd's own fallback default once this file's mere existence overrides the POM
+# config). Set it explicitly here so it actually takes effect.
+Bundle-SymbolicName: org.openhab.binding.eebus
+
 # Export-Package is intentionally "export nothing" (bare "!*"), matching the
 # ADR's Consequences/Positive statement that nothing embedded is exported. A
 # trailing bare "*" here (i.e. "export everything bnd can see") previously

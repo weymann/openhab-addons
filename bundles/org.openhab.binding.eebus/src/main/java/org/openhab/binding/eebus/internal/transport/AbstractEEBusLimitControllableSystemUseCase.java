@@ -35,10 +35,10 @@ import org.openmuc.jeebus.spine.api.DataValidationException;
 import org.openmuc.jeebus.spine.api.Device;
 import org.openmuc.jeebus.spine.api.Entity;
 import org.openmuc.jeebus.spine.api.Feature;
+import org.openmuc.jeebus.spine.api.FeatureWrapper;
 import org.openmuc.jeebus.spine.api.NodeManagement;
 import org.openmuc.jeebus.spine.api.PresenceIndication;
 import org.openmuc.jeebus.spine.api.UseCasePartner;
-import org.openmuc.jeebus.spine.impl.FeatureInformationService;
 import org.openmuc.jeebus.spine.spi.AllowedEntityTypes;
 import org.openmuc.jeebus.spine.spi.FeatureRequirement;
 import org.openmuc.jeebus.spine.spi.Inject;
@@ -268,10 +268,43 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
                                 + "getFeatureRequirements()"));
     }
 
+    /**
+     * Looks up the given feature and returns its already-attached {@link FeatureWrapper}, i.e.
+     * {@code rawFeature.getFeatureWrapper(wrapperClass)} - deliberately <strong>not</strong>
+     * {@code FeatureInformationService.getInstance().createFeatureWrapper(rawFeature)}, which
+     * would create a second, disconnected wrapper instance. jeebus.spine's {@code FeatureImpl}
+     * only calls {@code updateFunction(...)} on the one canonical wrapper it created itself in
+     * {@code setType()} (see {@code Feature#getFeatureWrapper()}) - a throwaway wrapper created
+     * via {@code createFeatureWrapper()} never has its function fields populated, which is what
+     * caused {@code KeyValueInitialData.addToFeature()} to fail with "descriptionFunction is not
+     * set in feature" the one place this was actually exercised
+     * ({@link #setupDeviceConfiguration}). Found while diagnosing that failure; jeebus.spine
+     * itself is out of scope to change here (project rule: no changes to jeebus.ship/jeebus.spine
+     * without prior human approval), so this fixes it from the caller side instead.
+     *
+     * @param localEntity the entity to look the feature up on
+     * @param type the feature type to look up
+     * @param wrapperClass the expected wrapper type
+     * @return the feature's canonical wrapper
+     * @throws IllegalStateException if the feature is missing, or has no wrapper of the expected
+     *             type attached (should not happen for any {@code FeatureTypeEnumType} that
+     *             {@code FeatureInformationService} knows about, see its {@code cache} of known
+     *             feature types)
+     */
+    private <T extends FeatureWrapper> T findFeatureWrapper(Entity localEntity, FeatureTypeEnumType type,
+            Class<T> wrapperClass) {
+        Feature rawFeature = findFeature(localEntity, type);
+        T wrapper = rawFeature.getFeatureWrapper(wrapperClass);
+        if (wrapper == null) {
+            throw new IllegalStateException(
+                    type + " feature has no " + wrapperClass.getSimpleName() + " wrapper attached");
+        }
+        return wrapper;
+    }
+
     private void setupLoadControl(Entity localEntity) {
-        Feature rawFeature = findFeature(localEntity, FeatureTypeEnumType.LOAD_CONTROL);
-        LoadControlFeature loadControlFeature = (LoadControlFeature) FeatureInformationService.getInstance()
-                .createFeatureWrapper(rawFeature);
+        LoadControlFeature loadControlFeature = findFeatureWrapper(localEntity, FeatureTypeEnumType.LOAD_CONTROL,
+                LoadControlFeature.class);
         LimitDescriptionFunction descriptionFunction = loadControlFeature.addLimitDescriptionFunction();
         LimitListDataFunction limitFunction = loadControlFeature.addLimitListDataFunction();
         this.limitListDataFunction = limitFunction;
@@ -306,9 +339,8 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
     }
 
     private void setupDeviceConfiguration(Entity localEntity) {
-        Feature rawFeature = findFeature(localEntity, FeatureTypeEnumType.DEVICE_CONFIGURATION);
-        DeviceConfigurationFeature deviceConfigurationFeature = (DeviceConfigurationFeature) FeatureInformationService
-                .getInstance().createFeatureWrapper(rawFeature);
+        DeviceConfigurationFeature deviceConfigurationFeature = findFeatureWrapper(localEntity,
+                FeatureTypeEnumType.DEVICE_CONFIGURATION, DeviceConfigurationFeature.class);
         deviceConfigurationFeature.addKeyValueDescriptionListDataFunction();
         deviceConfigurationFeature.addKeyValueListDataFunction();
 
@@ -361,9 +393,8 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
     }
 
     private void setupDeviceDiagnosis(Entity localEntity) {
-        Feature rawFeature = findFeature(localEntity, FeatureTypeEnumType.DEVICE_DIAGNOSIS);
-        DeviceDiagnosisFeature deviceDiagnosisFeature = (DeviceDiagnosisFeature) FeatureInformationService.getInstance()
-                .createFeatureWrapper(rawFeature);
+        DeviceDiagnosisFeature deviceDiagnosisFeature = findFeatureWrapper(localEntity,
+                FeatureTypeEnumType.DEVICE_DIAGNOSIS, DeviceDiagnosisFeature.class);
         // "at least every 60 seconds" per LPC-005/006 (identical for LPP) - HeartbeatDataFunction
         // self-perpetuates from here on, no polling loop needed (verified in its source).
         deviceDiagnosisFeature.addHeartBeatDataFunction(60);

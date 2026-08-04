@@ -15,6 +15,7 @@ package org.openhab.binding.eebus.internal.config;
 import java.util.List;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 
 /**
  * The {@link EEBusConfiguration} class contains the configuration parameters of the
@@ -45,8 +46,13 @@ public class EEBusConfiguration {
      */
     public String mdnsServiceInstance = "";
 
-    /** WebSocket port the local SHIP server listens on. */
-    public int port = 4711;
+    /**
+     * WebSocket port the local SHIP server listens on, or {@code null} if none was explicitly
+     * configured. When {@code null}, {@code EEBusHandler#initialize()} assigns a free port from
+     * {@code EEBusPortPool} ({@value org.openhab.binding.eebus.internal.transport.EEBusPortPool#PORT_RANGE_START}-
+     * {@value org.openhab.binding.eebus.internal.transport.EEBusPortPool#PORT_RANGE_END}) instead.
+     */
+    public @Nullable Integer port;
 
     /**
      * If {@code true}, the SHIP server accepts the first incoming connection of any
@@ -55,6 +61,20 @@ public class EEBusConfiguration {
      * (accept/reject/pre-trust only, no PIN pairing).
      */
     public boolean autoAcceptEnabled = false;
+
+    /**
+     * If {@code true} (default), this service actively dials trusted peers as soon as they
+     * are discovered via mDNS, in addition to accepting their incoming connections - normal
+     * SHIP behavior. If {@code false}, this service never dials out and only accepts
+     * incoming connections. Intended as a diagnostic workaround for pairing two self-built
+     * {@code eebus:service} instances against each other: with both sides dialing out, they
+     * can connect to each other at the same moment, and a bug in the embedded SHIP library's
+     * simultaneous-connection ("double connection") handling can then abort the handshake
+     * (see {@code TEST_PAIRING.md}, Test 2, "Known Bug Encountered"). Disabling this on one
+     * of the two sides avoids that race by making that side purely passive. Not recommended
+     * against a real third-party device, which may rely on openHAB dialing out.
+     */
+    public boolean connectToPeers = true;
 
     /**
      * Use case abbreviations (see CONCEPT.md §5.4.1, e.g. {@code "LPC"}, {@code "MPC"})

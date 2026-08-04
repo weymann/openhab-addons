@@ -32,8 +32,8 @@
 			</parameter>
 			<parameter name="port" type="integer" min="1" max="65535">
 				<label>Port</label>
-				<description>WebSocket port the local SHIP server listens on.</description>
-				<default>4711</default>
+				<description>WebSocket port the local SHIP server listens on. Leave empty to have openHAB assign a free port
+					automatically (4711-4810).</description>
 				<advanced>true</advanced>
 			</parameter>
 			<parameter name="autoAcceptEnabled" type="boolean">
@@ -41,6 +41,20 @@
 				<description>Accept the first incoming connection within a short time window after starting, without pre-trust.
 					Discouraged by the EEBUS Initiative - prefer pairing via peer Things.</description>
 				<default>false</default>
+				<advanced>true</advanced>
+			</parameter>
+			<parameter name="connectToPeers" type="boolean">
+				<label>Actively Connect to Trusted Peers</label>
+				<description>If enabled (default), this service actively dials trusted peers as soon as they are discovered via
+					mDNS, in addition to accepting their incoming connections - this is the normal SHIP behavior, where either side
+					may
+					initiate. Disable only as a diagnostic workaround when pairing two self-built openHAB instances against each
+					other:
+					with both sides actively dialing, they can connect to each other at the same moment, and a known bug in the
+					embedded SHIP library's simultaneous-connection handling can then abort the handshake (see TEST_PAIRING.md, Test 2,
+					"Known Bug Encountered"). Disabling this on one of the two sides makes that side purely passive (server-only) and
+					avoids the race. Not recommended against a real third-party device, which may rely on openHAB dialing out.</description>
+				<default>true</default>
 				<advanced>true</advanced>
 			</parameter>
 			<parameter name="supportedUseCasesClient" type="text" multiple="true">

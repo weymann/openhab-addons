@@ -1,0 +1,325 @@
+Compiled from "ShipServer.java"
+public class org.openmuc.jeebus.ship.node.websocket.server.ShipServer {
+  protected static final org.slf4j.Logger log;
+
+  private final io.netty.handler.ssl.SslContext sslContext;
+
+  private final int port;
+
+  private final java.lang.String wssPath;
+
+  private final boolean keepAlive;
+
+  private final java.lang.String logPrefix;
+
+  private final java.util.List<org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler> handlers;
+
+  private io.netty.channel.EventLoopGroup bossGroup;
+
+  private io.netty.channel.EventLoopGroup workerGroup;
+
+  private io.netty.channel.ChannelFuture bootstrapFuture;
+
+  private final org.openmuc.jeebus.ship.node.ShipNodeContext nodeContext;
+
+  private final org.openmuc.jeebus.ship.node.ShipNodeImpl shipNode;
+
+  public org.openmuc.jeebus.ship.node.websocket.server.ShipServer(io.netty.handler.ssl.SslContext, int, java.lang.String, org.openmuc.jeebus.ship.node.ShipNodeContext, org.openmuc.jeebus.ship.node.ShipNodeImpl, boolean) throws java.lang.InterruptedException;
+    Code:
+       0: aload_0
+       1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: new           #2                  // class java/util/ArrayList
+       8: dup
+       9: invokespecial #3                  // Method java/util/ArrayList."<init>":()V
+      12: invokestatic  #4                  // Method java/util/Collections.synchronizedList:(Ljava/util/List;)Ljava/util/List;
+      15: putfield      #5                  // Field handlers:Ljava/util/List;
+      18: aload_0
+      19: aload_1
+      20: putfield      #6                  // Field sslContext:Lio/netty/handler/ssl/SslContext;
+      23: aload_0
+      24: aload_3
+      25: putfield      #7                  // Field wssPath:Ljava/lang/String;
+      28: aload_0
+      29: iload         6
+      31: putfield      #8                  // Field keepAlive:Z
+      34: aload_0
+      35: aload         4
+      37: putfield      #9                  // Field nodeContext:Lorg/openmuc/jeebus/ship/node/ShipNodeContext;
+      40: aload_0
+      41: aload         5
+      43: putfield      #10                 // Field shipNode:Lorg/openmuc/jeebus/ship/node/ShipNodeImpl;
+      46: aload_0
+      47: iload_2
+      48: putfield      #11                 // Field port:I
+      51: aload_0
+      52: getfield      #9                  // Field nodeContext:Lorg/openmuc/jeebus/ship/node/ShipNodeContext;
+      55: aload_0
+      56: getfield      #11                 // Field port:I
+      59: invokedynamic #12,  0             // InvokeDynamic #0:makeConcatWithConstants:(I)Ljava/lang/String;
+      64: invokevirtual #13                 // Method org/openmuc/jeebus/ship/node/ShipNodeContext.setLogPrefix:(Ljava/lang/String;)V
+      67: aload_0
+      68: aload_0
+      69: getfield      #9                  // Field nodeContext:Lorg/openmuc/jeebus/ship/node/ShipNodeContext;
+      72: invokevirtual #14                 // Method org/openmuc/jeebus/ship/node/ShipNodeContext.getLogPrefix:()Ljava/lang/String;
+      75: putfield      #15                 // Field logPrefix:Ljava/lang/String;
+      78: aload_0
+      79: invokevirtual #16                 // Method start:()V
+      82: return
+
+  private synchronized void start() throws java.lang.InterruptedException;
+    Code:
+       0: getstatic     #17                 // Field log:Lorg/slf4j/Logger;
+       3: ldc           #18                 // String {} started
+       5: aload_0
+       6: getfield      #15                 // Field logPrefix:Ljava/lang/String;
+       9: invokeinterface #19,  3           // InterfaceMethod org/slf4j/Logger.info:(Ljava/lang/String;Ljava/lang/Object;)V
+      14: invokestatic  #20                 // Method io/netty/channel/nio/NioIoHandler.newFactory:()Lio/netty/channel/IoHandlerFactory;
+      17: astore_1
+      18: aload_0
+      19: new           #21                 // class io/netty/channel/MultiThreadIoEventLoopGroup
+      22: dup
+      23: iconst_1
+      24: aload_1
+      25: invokespecial #22                 // Method io/netty/channel/MultiThreadIoEventLoopGroup."<init>":(ILio/netty/channel/IoHandlerFactory;)V
+      28: putfield      #23                 // Field bossGroup:Lio/netty/channel/EventLoopGroup;
+      31: aload_0
+      32: new           #21                 // class io/netty/channel/MultiThreadIoEventLoopGroup
+      35: dup
+      36: aload_1
+      37: invokespecial #24                 // Method io/netty/channel/MultiThreadIoEventLoopGroup."<init>":(Lio/netty/channel/IoHandlerFactory;)V
+      40: putfield      #25                 // Field workerGroup:Lio/netty/channel/EventLoopGroup;
+      43: new           #26                 // class io/netty/bootstrap/ServerBootstrap
+      46: dup
+      47: invokespecial #27                 // Method io/netty/bootstrap/ServerBootstrap."<init>":()V
+      50: astore_2
+      51: aload_2
+      52: aload_0
+      53: getfield      #23                 // Field bossGroup:Lio/netty/channel/EventLoopGroup;
+      56: aload_0
+      57: getfield      #25                 // Field workerGroup:Lio/netty/channel/EventLoopGroup;
+      60: invokevirtual #28                 // Method io/netty/bootstrap/ServerBootstrap.group:(Lio/netty/channel/EventLoopGroup;Lio/netty/channel/EventLoopGroup;)Lio/netty/bootstrap/ServerBootstrap;
+      63: ldc           #29                 // class io/netty/channel/socket/nio/NioServerSocketChannel
+      65: invokevirtual #30                 // Method io/netty/bootstrap/ServerBootstrap.channel:(Ljava/lang/Class;)Lio/netty/bootstrap/AbstractBootstrap;
+      68: checkcast     #26                 // class io/netty/bootstrap/ServerBootstrap
+      71: new           #31                 // class org/openmuc/jeebus/ship/node/websocket/server/ShipServerInitializer
+      74: dup
+      75: aload_0
+      76: getfield      #6                  // Field sslContext:Lio/netty/handler/ssl/SslContext;
+      79: aload_0
+      80: getfield      #9                  // Field nodeContext:Lorg/openmuc/jeebus/ship/node/ShipNodeContext;
+      83: aload_0
+      84: invokespecial #32                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerInitializer."<init>":(Lio/netty/handler/ssl/SslContext;Lorg/openmuc/jeebus/ship/node/ShipNodeContext;Lorg/openmuc/jeebus/ship/node/websocket/server/ShipServer;)V
+      87: invokevirtual #33                 // Method io/netty/bootstrap/ServerBootstrap.childHandler:(Lio/netty/channel/ChannelHandler;)Lio/netty/bootstrap/ServerBootstrap;
+      90: getstatic     #34                 // Field io/netty/channel/ChannelOption.SO_KEEPALIVE:Lio/netty/channel/ChannelOption;
+      93: aload_0
+      94: getfield      #8                  // Field keepAlive:Z
+      97: invokestatic  #35                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+     100: invokevirtual #36                 // Method io/netty/bootstrap/ServerBootstrap.childOption:(Lio/netty/channel/ChannelOption;Ljava/lang/Object;)Lio/netty/bootstrap/ServerBootstrap;
+     103: pop
+     104: aload_0
+     105: aload_2
+     106: aload_0
+     107: getfield      #11                 // Field port:I
+     110: invokevirtual #37                 // Method io/netty/bootstrap/ServerBootstrap.bind:(I)Lio/netty/channel/ChannelFuture;
+     113: invokeinterface #38,  1           // InterfaceMethod io/netty/channel/ChannelFuture.sync:()Lio/netty/channel/ChannelFuture;
+     118: putfield      #39                 // Field bootstrapFuture:Lio/netty/channel/ChannelFuture;
+     121: return
+
+  public synchronized void stop();
+    Code:
+       0: getstatic     #17                 // Field log:Lorg/slf4j/Logger;
+       3: ldc           #40                 // String stopping {}
+       5: aload_0
+       6: getfield      #15                 // Field logPrefix:Ljava/lang/String;
+       9: invokeinterface #19,  3           // InterfaceMethod org/slf4j/Logger.info:(Ljava/lang/String;Ljava/lang/Object;)V
+      14: aload_0
+      15: getfield      #5                  // Field handlers:Ljava/util/List;
+      18: invokedynamic #41,  0             // InvokeDynamic #1:accept:()Ljava/util/function/Consumer;
+      23: invokeinterface #42,  2           // InterfaceMethod java/util/List.forEach:(Ljava/util/function/Consumer;)V
+      28: aload_0
+      29: getfield      #39                 // Field bootstrapFuture:Lio/netty/channel/ChannelFuture;
+      32: invokeinterface #43,  1           // InterfaceMethod io/netty/channel/ChannelFuture.channel:()Lio/netty/channel/Channel;
+      37: invokeinterface #44,  1           // InterfaceMethod io/netty/channel/Channel.close:()Lio/netty/channel/ChannelFuture;
+      42: invokeinterface #38,  1           // InterfaceMethod io/netty/channel/ChannelFuture.sync:()Lio/netty/channel/ChannelFuture;
+      47: pop
+      48: aload_0
+      49: getfield      #23                 // Field bossGroup:Lio/netty/channel/EventLoopGroup;
+      52: invokeinterface #45,  1           // InterfaceMethod io/netty/channel/EventLoopGroup.shutdownGracefully:()Lio/netty/util/concurrent/Future;
+      57: pop
+      58: aload_0
+      59: getfield      #25                 // Field workerGroup:Lio/netty/channel/EventLoopGroup;
+      62: invokeinterface #45,  1           // InterfaceMethod io/netty/channel/EventLoopGroup.shutdownGracefully:()Lio/netty/util/concurrent/Future;
+      67: pop
+      68: aload_0
+      69: getfield      #39                 // Field bootstrapFuture:Lio/netty/channel/ChannelFuture;
+      72: invokeinterface #43,  1           // InterfaceMethod io/netty/channel/ChannelFuture.channel:()Lio/netty/channel/Channel;
+      77: invokeinterface #46,  1           // InterfaceMethod io/netty/channel/Channel.closeFuture:()Lio/netty/channel/ChannelFuture;
+      82: invokeinterface #38,  1           // InterfaceMethod io/netty/channel/ChannelFuture.sync:()Lio/netty/channel/ChannelFuture;
+      87: pop
+      88: aload_0
+      89: getfield      #10                 // Field shipNode:Lorg/openmuc/jeebus/ship/node/ShipNodeImpl;
+      92: aload_0
+      93: invokevirtual #47                 // Method org/openmuc/jeebus/ship/node/ShipNodeImpl.removeServer:(Lorg/openmuc/jeebus/ship/node/websocket/server/ShipServer;)V
+      96: goto          117
+      99: astore_1
+     100: getstatic     #17                 // Field log:Lorg/slf4j/Logger;
+     103: ldc           #49                 // String exception while stopping server:
+     105: aload_1
+     106: invokeinterface #50,  3           // InterfaceMethod org/slf4j/Logger.error:(Ljava/lang/String;Ljava/lang/Throwable;)V
+     111: invokestatic  #51                 // Method java/lang/Thread.currentThread:()Ljava/lang/Thread;
+     114: invokevirtual #52                 // Method java/lang/Thread.interrupt:()V
+     117: return
+    Exception table:
+       from    to  target type
+          28    96    99   Class java/lang/InterruptedException
+
+  public java.util.List<org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler> getHandlers();
+    Code:
+       0: aload_0
+       1: getfield      #5                  // Field handlers:Ljava/util/List;
+       4: areturn
+
+  public void setHandlers(java.util.List<org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler>);
+    Code:
+       0: aload_0
+       1: getfield      #5                  // Field handlers:Ljava/util/List;
+       4: dup
+       5: astore_2
+       6: monitorenter
+       7: aload_0
+       8: getfield      #5                  // Field handlers:Ljava/util/List;
+      11: invokeinterface #53,  1           // InterfaceMethod java/util/List.clear:()V
+      16: aload_0
+      17: getfield      #5                  // Field handlers:Ljava/util/List;
+      20: aload_1
+      21: invokeinterface #54,  2           // InterfaceMethod java/util/List.addAll:(Ljava/util/Collection;)Z
+      26: pop
+      27: aload_2
+      28: monitorexit
+      29: goto          37
+      32: astore_3
+      33: aload_2
+      34: monitorexit
+      35: aload_3
+      36: athrow
+      37: return
+    Exception table:
+       from    to  target type
+           7    29    32   any
+          32    35    32   any
+
+  public int getPort();
+    Code:
+       0: aload_0
+       1: getfield      #11                 // Field port:I
+       4: ireturn
+
+  public void setConnHandler(org.openmuc.jeebus.ship.api.ConnectionHandler);
+    Code:
+       0: aload_0
+       1: getfield      #9                  // Field nodeContext:Lorg/openmuc/jeebus/ship/node/ShipNodeContext;
+       4: aload_1
+       5: invokevirtual #55                 // Method org/openmuc/jeebus/ship/node/ShipNodeContext.setConnHandler:(Lorg/openmuc/jeebus/ship/api/ConnectionHandler;)V
+       8: return
+
+  public synchronized void addHandler(org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler);
+    Code:
+       0: aload_0
+       1: getfield      #5                  // Field handlers:Ljava/util/List;
+       4: aload_1
+       5: invokeinterface #56,  2           // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      10: pop
+      11: invokestatic  #57                 // Method java/util/concurrent/Executors.newSingleThreadExecutor:()Ljava/util/concurrent/ExecutorService;
+      14: astore_2
+      15: aload_2
+      16: aload_0
+      17: aload_1
+      18: invokedynamic #58,  0             // InvokeDynamic #2:run:(Lorg/openmuc/jeebus/ship/node/websocket/server/ShipServer;Lorg/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler;)Ljava/lang/Runnable;
+      23: invokeinterface #59,  2           // InterfaceMethod java/util/concurrent/ExecutorService.execute:(Ljava/lang/Runnable;)V
+      28: aload_2
+      29: invokeinterface #60,  1           // InterfaceMethod java/util/concurrent/ExecutorService.shutdown:()V
+      34: return
+
+  public synchronized void removeHandler(org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler);
+    Code:
+       0: aload_0
+       1: getfield      #5                  // Field handlers:Ljava/util/List;
+       4: aload_1
+       5: invokeinterface #61,  2           // InterfaceMethod java/util/List.remove:(Ljava/lang/Object;)Z
+      10: pop
+      11: return
+
+  public java.lang.String getWssPath();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field wssPath:Ljava/lang/String;
+       4: areturn
+
+  public org.openmuc.jeebus.ship.node.ShipNodeImpl getSocketCB();
+    Code:
+       0: aload_0
+       1: getfield      #10                 // Field shipNode:Lorg/openmuc/jeebus/ship/node/ShipNodeImpl;
+       4: areturn
+
+  private void lambda$addHandler$1(org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler);
+    Code:
+       0: aload_0
+       1: getfield      #10                 // Field shipNode:Lorg/openmuc/jeebus/ship/node/ShipNodeImpl;
+       4: invokevirtual #62                 // Method org/openmuc/jeebus/ship/node/ShipNodeImpl.getClientConnectedListener:()Lorg/openmuc/jeebus/ship/api/ClientConnectedCallBack;
+       7: ifnull        69
+      10: aload_1
+      11: iconst_5
+      12: invokevirtual #63                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler.isShipConnRdy:(I)Z
+      15: ifne          28
+      18: new           #64                 // class java/lang/IllegalStateException
+      21: dup
+      22: ldc           #65                 // String ShipConnection not ready in time
+      24: invokespecial #66                 // Method java/lang/IllegalStateException."<init>":(Ljava/lang/String;)V
+      27: athrow
+      28: goto          50
+      31: astore_2
+      32: getstatic     #17                 // Field log:Lorg/slf4j/Logger;
+      35: aload_2
+      36: invokevirtual #67                 // Method java/lang/InterruptedException.getMessage:()Ljava/lang/String;
+      39: invokeinterface #68,  2           // InterfaceMethod org/slf4j/Logger.error:(Ljava/lang/String;)V
+      44: invokestatic  #51                 // Method java/lang/Thread.currentThread:()Ljava/lang/Thread;
+      47: invokevirtual #52                 // Method java/lang/Thread.interrupt:()V
+      50: aload_0
+      51: getfield      #10                 // Field shipNode:Lorg/openmuc/jeebus/ship/node/ShipNodeImpl;
+      54: invokevirtual #62                 // Method org/openmuc/jeebus/ship/node/ShipNodeImpl.getClientConnectedListener:()Lorg/openmuc/jeebus/ship/api/ClientConnectedCallBack;
+      57: aload_1
+      58: invokevirtual #69                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler.getShipConnection:()Lorg/openmuc/jeebus/ship/shipconnection/ShipConnectionImpl;
+      61: invokeinterface #70,  2           // InterfaceMethod org/openmuc/jeebus/ship/api/ClientConnectedCallBack.onClientConnected:(Lorg/openmuc/jeebus/ship/shipconnection/ShipConnection;)V
+      66: goto          83
+      69: getstatic     #17                 // Field log:Lorg/slf4j/Logger;
+      72: ldc           #71                 // String {}: ClientConnectedCallBack not set
+      74: aload_0
+      75: getfield      #15                 // Field logPrefix:Ljava/lang/String;
+      78: invokeinterface #72,  3           // InterfaceMethod org/slf4j/Logger.warn:(Ljava/lang/String;Ljava/lang/Object;)V
+      83: return
+    Exception table:
+       from    to  target type
+          10    28    31   Class java/lang/InterruptedException
+
+  private static void lambda$stop$0(org.openmuc.jeebus.ship.node.websocket.server.ShipServerHandler);
+    Code:
+       0: aload_0
+       1: invokevirtual #73                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler.getConnection:()Lorg/openmuc/jeebus/ship/shipconnection/ShipConnectionImpl;
+       4: ifnull        14
+       7: aload_0
+       8: invokevirtual #73                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler.getConnection:()Lorg/openmuc/jeebus/ship/shipconnection/ShipConnectionImpl;
+      11: invokevirtual #74                 // Method org/openmuc/jeebus/ship/shipconnection/ShipConnectionImpl.stopStateTimeouts:()V
+      14: aload_0
+      15: invokevirtual #75                 // Method org/openmuc/jeebus/ship/node/websocket/server/ShipServerHandler.getChannel:()Lio/netty/channel/Channel;
+      18: invokeinterface #44,  1           // InterfaceMethod io/netty/channel/Channel.close:()Lio/netty/channel/ChannelFuture;
+      23: pop
+      24: return
+
+  static {};
+    Code:
+       0: ldc           #76                 // class org/openmuc/jeebus/ship/node/websocket/server/ShipServer
+       2: invokestatic  #77                 // Method org/slf4j/LoggerFactory.getLogger:(Ljava/lang/Class;)Lorg/slf4j/Logger;
+       5: putstatic     #17                 // Field log:Lorg/slf4j/Logger;
+       8: return
+}

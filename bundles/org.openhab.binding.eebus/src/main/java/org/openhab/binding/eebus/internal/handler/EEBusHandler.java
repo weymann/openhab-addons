@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.eebus.internal.handler;
 
+import static org.openmuc.jeebus.shipspine.ShipCommunication.ConnectClientsTo.NONE;
 import static org.openmuc.jeebus.shipspine.ShipCommunication.ConnectClientsTo.TRUSTED;
 
 import java.io.File;
@@ -19,12 +20,14 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.eebus.internal.EEBusBindingConstants;
 import org.openhab.binding.eebus.internal.config.EEBusConfiguration;
 import org.openhab.binding.eebus.internal.config.EEBusPeerConfiguration;
 import org.openhab.binding.eebus.internal.transport.EEBusLpcServerUseCase;
@@ -33,6 +36,7 @@ import org.openhab.binding.eebus.internal.transport.EEBusMdnsBrowser;
 import org.openhab.binding.eebus.internal.transport.EEBusMetadataService;
 import org.openhab.binding.eebus.internal.transport.EEBusMpcClientUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusMpcServerUseCase;
+import org.openhab.binding.eebus.internal.transport.EEBusPortPool;
 import org.openhab.core.OpenHAB;
 import org.openhab.core.io.transport.mdns.MDNSClient;
 import org.openhab.core.thing.Bridge;
@@ -139,13 +143,24 @@ public class EEBusHandler extends BaseBridgeHandler {
     private @Nullable Device device;
     private @Nullable EEBusMdnsBrowser mdnsBrowser;
 
+    /**
+     * The port taken out of {@link #portPool} by {@link #initialize()} (either the configured
+     * port or a free one assigned by the pool) - released back to the pool in
+     * {@link #handleRemoval()}, never in {@link #dispose()}. See {@link EEBusPortPool}'s class
+     * javadoc for the lifecycle contract.
+     */
+    private @Nullable Integer reservedPort;
+
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
+    private final EEBusPortPool portPool;
 
-    public EEBusHandler(Bridge bridge, EEBusMetadataService metadataService, MDNSClient mdnsClient) {
+    public EEBusHandler(Bridge bridge, EEBusMetadataService metadataService, MDNSClient mdnsClient,
+            EEBusPortPool portPool) {
         super(bridge);
         this.metadataService = metadataService;
         this.mdnsClient = mdnsClient;
+        this.portPool = portPool;
     }
 
     /**
@@ -153,7 +168,10 @@ public class EEBusHandler extends BaseBridgeHandler {
      *         existed for this Thing's UID, creating it on first use.
      */
     private Lifecycle lifecycle() {
-        return LIFECYCLES.computeIfAbsent(thing.getUID(), uid -> new Lifecycle());
+        // Map#computeIfAbsent is annotated as returning @Nullable (the mapping function is
+        // allowed to return null, in which case no mapping is added) even though our mapping
+        // function here never does - same pattern as EEBusMetadataService#itemNameOf.
+        return Objects.requireNonNull(LIFECYCLES.computeIfAbsent(thing.getUID(), uid -> new Lifecycle()));
     }
 
     @Override
@@ -168,6 +186,14 @@ public class EEBusHandler extends BaseBridgeHandler {
             generation = ++lifecycle.generation;
         }
 
+        // Diagnostic instrumentation for the still-open "why does initialize() run more than once
+        // for the same Thing without an intervening dispose()" question (see ADR-005's "Negative"
+        // section). Deliberately no trailing Throwable here (an earlier version printed one purely
+        // to capture the caller's stack trace, with message "no error" - dropped since it reads
+        // like a real exception in the log and was confusing to read at a glance).
+        logger.debug("initialize() called for {} (handler={}, generation={}, thread={})", thing.getUID(),
+                System.identityHashCode(this), generation, Thread.currentThread().getName());
+
         EEBusConfiguration cfg = getConfigAs(EEBusConfiguration.class);
         this.config = cfg;
 
@@ -178,11 +204,21 @@ public class EEBusHandler extends BaseBridgeHandler {
             return;
         }
 
+        Optional<Integer> resolvedPortOrEmpty = resolvePort(cfg);
+        if (resolvedPortOrEmpty.isEmpty()) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    "No free port available in the EEBus port pool (" + EEBusPortPool.PORT_RANGE_START + "-"
+                            + EEBusPortPool.PORT_RANGE_END + "); configure a port explicitly");
+            return;
+        }
+        int resolvedPort = resolvedPortOrEmpty.get();
+        this.reservedPort = resolvedPort;
+
         updateStatus(ThingStatus.UNKNOWN);
 
         scheduler.execute(() -> {
             try {
-                if (startShipSpine(cfg, lifecycle, generation)) {
+                if (startShipSpine(cfg, resolvedPort, lifecycle, generation)) {
                     updateStatus(ThingStatus.ONLINE);
                 }
                 // else: superseded while starting - startShipSpine() already shut back down
@@ -194,19 +230,46 @@ public class EEBusHandler extends BaseBridgeHandler {
                     stillCurrent = generation == lifecycle.generation;
                 }
                 if (stillCurrent) {
-                    logger.warn("Failed to start EEBus service instance '{}'", thing.getUID(), e);
+                    logger.warn("Failed to start EEBus service instance '{}' (generation={}, handler={})",
+                            thing.getUID(), generation, System.identityHashCode(this), e);
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                 } else {
-                    logger.debug("EEBus service instance '{}' failed to start after being superseded by a newer "
-                            + "attempt; ignoring: {}", thing.getUID(), e.getMessage());
+                    logger.debug(
+                            "EEBus service instance '{}' failed to start after being superseded by a newer "
+                                    + "attempt; ignoring (generation={}, handler={}): {}",
+                            thing.getUID(), generation, System.identityHashCode(this), e.getMessage());
                 }
             }
         });
     }
 
     /**
+     * Resolves the port to bind the local SHIP server to, taking it out of {@link #portPool}: the
+     * Thing's explicitly configured port if one was set, otherwise a free port assigned by the
+     * pool. Called once from {@link #initialize()} - the resolved port is only released back to
+     * the pool in {@link #handleRemoval()}, never {@link #dispose()} (see {@link EEBusPortPool}'s
+     * class javadoc for why).
+     *
+     * @param cfg this Thing's configuration
+     * @return the resolved port; empty if no port was configured and the pool
+     *         ({@value EEBusPortPool#PORT_RANGE_START}-{@value EEBusPortPool#PORT_RANGE_END}) is
+     *         exhausted
+     */
+    private Optional<Integer> resolvePort(EEBusConfiguration cfg) {
+        Integer configuredPort = cfg.port;
+        if (configuredPort == null) {
+            return portPool.acquireFreePort();
+        }
+        portPool.reservePort(configuredPort);
+        return Optional.of(configuredPort);
+    }
+
+    /**
      * @param cfg
      *            the configuration to start the SHIP/SPINE service instance with
+     * @param resolvedPort
+     *            the port to bind the SHIP server to, as resolved by {@link #resolvePort} in
+     *            {@link #initialize()}
      * @param lifecycle
      *            this Thing's shared {@link Lifecycle}, see ADR-005
      * @param myGeneration
@@ -216,7 +279,8 @@ public class EEBusHandler extends BaseBridgeHandler {
      *         ({@link #shipCommunication} etc. were set); {@code false} if it was superseded while
      *         connecting and shut itself back down instead
      */
-    private boolean startShipSpine(EEBusConfiguration cfg, Lifecycle lifecycle, long myGeneration) throws Exception {
+    private boolean startShipSpine(EEBusConfiguration cfg, int resolvedPort, Lifecycle lifecycle, long myGeneration)
+            throws Exception {
         // CONCEPT §7.1 - verified against the actual org.openmuc.jeebus:ship:2.2.0 source
         // (github.com/openmuc/jeebus.ship, tag v2.2.0): the ShipNodeConfiguration constructor
         // that takes a certPath auto-creates the certificate/keystore at that path if none is
@@ -234,12 +298,18 @@ public class EEBusHandler extends BaseBridgeHandler {
         // certPath, keyStorePassphrase, keyPairPassphrase, distinguishedName, certificateValidityInDays.
         // Note: the 4th parameter is "keepAlive" (TCP keep-alive), NOT autoAccept - autoAccept is
         // wired separately below via ShipCommunication#withAutoAcceptMode.
-        ShipNodeConfiguration nodeConfig = new ShipNodeConfiguration("0.0.0.0", cfg.port, "/ship/", true, shipId,
+        ShipNodeConfiguration nodeConfig = new ShipNodeConfiguration("0.0.0.0", resolvedPort, "/ship/", true, shipId,
                 "local.", cfg.mdnsServiceInstance, "eebus", keystoreFile.getAbsolutePath(), new char[0], new char[0],
                 distinguishedName, 3650);
 
+        // cfg.connectToPeers defaults to true (normal SHIP behavior: dial trusted peers as soon
+        // as mDNS discovers them, in addition to accepting their connections). Set to false only
+        // as a diagnostic workaround when pairing two self-built instances against each other -
+        // see EEBusConfiguration#connectToPeers and TEST_PAIRING.md (Test 2, "Known Bug
+        // Encountered") for why: with both sides dialing out, a bug in the embedded SHIP
+        // library's simultaneous-connection handling can abort the handshake.
         ShipCommunication communication = new ShipCommunication(nodeConfig).withTrustedSkis(currentPeerSkis())
-                .withConnectClientsTo(TRUSTED).withAutoAcceptMode(cfg.autoAcceptEnabled);
+                .withConnectClientsTo(cfg.connectToPeers ? TRUSTED : NONE).withAutoAcceptMode(cfg.autoAcceptEnabled);
 
         // CONCEPT §5.5/§7.8: server-role UseCase implementations are attached here, one per
         // entry in cfg.supportedUseCasesServer. Only MPC is implemented so far
@@ -281,19 +351,34 @@ public class EEBusHandler extends BaseBridgeHandler {
         List<UseCase> allUseCases = new ArrayList<>(serverUseCases);
         allUseCases.addAll(clientUseCases);
 
-        Device localDevice = Device.getBuilder().withDeviceType(DeviceTypeEnumType.ENERGY_MANAGEMENT_SYSTEM)
-                .withCommunication(communication).withId("d:_n:" + shipId).withDiscoverDevices(true).addEntity()
-                .setType(EntityTypeEnumType.CEM).withUseCases(allUseCases.toArray(new UseCase[0])).applyToDevice()
-                .build();
-
         // The actual network I/O - generates/loads the certificate and binds the SHIP server's
-        // port. Deliberately not holding lifecycle.lock here: this can take a moment, and holding
+        // port - happens inside build() below: DeviceBuilder.build() calls
+        // buildWithoutConnecting() and then device.connect(), which calls
+        // Communication.connect() (= ShipCommunication.connect()) internally (confirmed by
+        // decompiling the actually-embedded spine-4.0.1 classes, since the checked-out
+        // jeebus.spine source did not match). No separate, explicit connect() call is needed or
+        // wanted here - one used to exist right after this block, calling
+        // communication.connect() a second time on the same, already-connected instance. That
+        // was a genuine bug: build() already binds the port, so the second call always bound the
+        // same port again and reliably failed with BindException - deterministically, regardless
+        // of which port was configured, which is what eventually gave it away (see the
+        // investigation that found this, referenced from the git history around this change).
+        // Deliberately not holding lifecycle.lock here: this can take a moment, and holding
         // the lock across it would block dispose() (see ADR-005 for why that is unacceptable -
         // it collides with openHAB's own SafeCaller timeout). This means a concurrent dispose()
         // or newer initialize() - on this object or, per the class javadoc, a different
         // EEBusHandler object for the same Thing - can bump the generation while this call is in
         // flight; that is detected and handled immediately below.
-        communication.connect();
+        // Diagnostic instrumentation, see the matching comment in initialize(). Marks the moment
+        // the actual port bind is attempted, so it can be correlated by generation/handler with
+        // the initialize()/dispose() log lines and the eventual success/BindException outcome.
+        logger.debug("{}: startShipSpine() about to bind (generation={}, handler={}, thread={})", thing.getUID(),
+                myGeneration, System.identityHashCode(this), Thread.currentThread().getName());
+
+        Device localDevice = Device.getBuilder().withDeviceType(DeviceTypeEnumType.ENERGY_MANAGEMENT_SYSTEM)
+                .withCommunication(communication).withId("d:_n:" + shipId).withDiscoverDevices(true).addEntity()
+                .setType(EntityTypeEnumType.CEM).withUseCases(allUseCases.toArray(new UseCase[0])).applyToDevice()
+                .build();
 
         synchronized (lifecycle.lock) {
             if (myGeneration != lifecycle.generation) {
@@ -317,9 +402,11 @@ public class EEBusHandler extends BaseBridgeHandler {
             // and (b) resolving UseCasePartner#getCommunicationAddress() back to a peer's SKI
             // (§7.2).
             this.mdnsBrowser = new EEBusMdnsBrowser(mdnsClient);
+            logger.debug("{}: startShipSpine() bound and published successfully (generation={}, handler={})",
+                    thing.getUID(), myGeneration, System.identityHashCode(this));
         }
 
-        updateProperty("localSki", communication.getOwnSki());
+        updateProperty(EEBusBindingConstants.PROPERTY_LOCAL_SKI, communication.getOwnSki());
         return true;
     }
 
@@ -340,8 +427,9 @@ public class EEBusHandler extends BaseBridgeHandler {
         @Nullable
         EEBusMdnsBrowser browser;
         Lifecycle lifecycle = lifecycle();
+        long generation;
         synchronized (lifecycle.lock) {
-            lifecycle.generation++;
+            generation = ++lifecycle.generation;
             communication = this.shipCommunication;
             localDevice = this.device;
             browser = this.mdnsBrowser;
@@ -349,6 +437,13 @@ public class EEBusHandler extends BaseBridgeHandler {
             this.device = null;
             this.mdnsBrowser = null;
         }
+
+        // Diagnostic instrumentation, see the matching comment in initialize(). "hadCommunication"
+        // shows whether this dispose() actually found a published instance to tear down, or ran
+        // against an object that never got that far.
+        logger.debug("dispose() called for {} (handler={}, generation={}, thread={}, hadCommunication={})",
+                thing.getUID(), System.identityHashCode(this), generation, Thread.currentThread().getName(),
+                communication != null);
 
         if (communication != null) {
             communication.disconnect();
@@ -371,6 +466,17 @@ public class EEBusHandler extends BaseBridgeHandler {
         // one small entry per Thing UID ever created, which is harmless short-term but unbounded
         // over a long-running instance's lifetime.
         LIFECYCLES.remove(thing.getUID());
+
+        // Same dispose()-vs-handleRemoval() distinction applies to the port reserved from
+        // portPool in initialize()/resolvePort(): only give it back once the Thing is actually
+        // deleted, not on every restart/reconfigure, or a still-running Bridge could lose its
+        // port to a different Bridge mid-restart. See EEBusPortPool's class javadoc.
+        Integer port = this.reservedPort;
+        if (port != null) {
+            portPool.releasePort(port);
+            this.reservedPort = null;
+        }
+
         updateStatus(ThingStatus.REMOVED);
     }
 

@@ -12,9 +12,11 @@
  */
 package org.openhab.binding.eebus.internal.discovery;
 
+import static org.openhab.binding.eebus.internal.EEBusBindingConstants.PROPERTY_LOCAL_SKI;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.SERVICE_TYPE_SHIP_MDNS;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_NETWORK;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_PEER;
+import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_SERVICE;
 
 import java.util.Set;
 
@@ -22,6 +24,7 @@ import javax.jmdns.ServiceInfo;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.eebus.internal.EEBusBindingConstants;
 import org.openhab.binding.eebus.internal.config.EEBusPeerConfiguration;
 import org.openhab.binding.eebus.internal.transport.EEBusShipTxtRecord;
 import org.openhab.core.config.discovery.DiscoveryResult;
@@ -55,6 +58,15 @@ import org.osgi.service.component.annotations.Reference;
  * (see ADR-003 "Negative consequences").
  * </p>
  *
+ * <p>
+ * {@link #createResult(ServiceInfo)} also excludes SKIs that are either already paired
+ * ({@link #isAlreadyPaired(String)}) or belong to one of this openHAB instance's own
+ * {@code eebus:service} Bridges ({@link #isOwnService(String)}) - without the latter, a Bridge's
+ * own SHIP mDNS self-announcement (necessary so other EEBUS devices can find it) would otherwise
+ * be re-discovered by this same participant and offered back as a bogus Inbox suggestion for
+ * itself. See ADR-008.
+ * </p>
+ *
  * @author Bernd Weymann - Initial contribution
  */
 @NonNullByDefault
@@ -85,7 +97,7 @@ public class EEBusMdnsDiscoveryParticipant implements MDNSDiscoveryParticipant {
             return null;
         }
         ThingUID bridgeUid = findNetworkBridgeUid();
-        if (bridgeUid == null || isAlreadyPaired(txt.ski())) {
+        if (bridgeUid == null || isAlreadyPaired(txt.ski()) || isOwnService(txt.ski())) {
             return null;
         }
 
@@ -128,5 +140,19 @@ public class EEBusMdnsDiscoveryParticipant implements MDNSDiscoveryParticipant {
         return thingRegistry.getAll().stream().filter(thing -> THING_TYPE_PEER.equals(thing.getThingTypeUID()))
                 .map(thing -> thing.getConfiguration().as(EEBusPeerConfiguration.class))
                 .anyMatch(peerConfig -> ski.equals(peerConfig.ski));
+    }
+
+    /**
+     * @param ski the SKI read from a discovered service's TXT record
+     * @return {@code true} if this SKI belongs to one of this openHAB instance's own
+     *         {@code eebus:service} Bridges (see {@link EEBusBindingConstants#PROPERTY_LOCAL_SKI},
+     *         published once a Bridge's SHIP server is up). An {@code eebus:service} Bridge
+     *         announces itself over mDNS so other EEBUS devices can find it - which means this
+     *         same participant would otherwise re-discover it and offer it as a bogus
+     *         {@code eebus:peer} Inbox suggestion for itself. See ADR-008.
+     */
+    private boolean isOwnService(String ski) {
+        return thingRegistry.getAll().stream().filter(thing -> THING_TYPE_SERVICE.equals(thing.getThingTypeUID()))
+                .anyMatch(thing -> ski.equals(thing.getProperties().get(PROPERTY_LOCAL_SKI)));
     }
 }

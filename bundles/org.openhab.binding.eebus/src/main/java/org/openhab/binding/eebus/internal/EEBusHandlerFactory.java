@@ -22,6 +22,7 @@ import org.openhab.binding.eebus.internal.handler.EEBusHandler;
 import org.openhab.binding.eebus.internal.handler.EEBusNetworkHandler;
 import org.openhab.binding.eebus.internal.handler.EEBusPeerHandler;
 import org.openhab.binding.eebus.internal.transport.EEBusMetadataService;
+import org.openhab.binding.eebus.internal.transport.EEBusPortPool;
 import org.openhab.core.io.transport.mdns.MDNSClient;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
@@ -48,11 +49,14 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
 
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
+    private final EEBusPortPool portPool;
 
     @Activate
-    public EEBusHandlerFactory(@Reference EEBusMetadataService metadataService, @Reference MDNSClient mdnsClient) {
+    public EEBusHandlerFactory(@Reference EEBusMetadataService metadataService, @Reference MDNSClient mdnsClient,
+            @Reference EEBusPortPool portPool) {
         this.metadataService = metadataService;
         this.mdnsClient = mdnsClient;
+        this.portPool = portPool;
     }
 
     @Override
@@ -65,7 +69,7 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_SERVICE.equals(thingTypeUID) && thing instanceof Bridge bridge) {
-            return new EEBusHandler(bridge, metadataService, mdnsClient);
+            return new EEBusHandler(bridge, metadataService, mdnsClient, portPool);
         }
         if (THING_TYPE_NETWORK.equals(thingTypeUID) && thing instanceof Bridge bridge) {
             return new EEBusNetworkHandler(bridge);

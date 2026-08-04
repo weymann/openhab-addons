@@ -141,8 +141,10 @@ ausging (siehe §5.2, §4.1 für die Korrekturen):_
 
 - Konfiguration: `vendorCode`, `deviceBrand`, `deviceModel`, `serialNumber`,
   `mdnsServiceInstance` (Anzeigename für Discovery), `port`, `autoAcceptEnabled`,
-  `supportedUseCasesClient`, `supportedUseCasesServer` (Checkbox-Auswahl, siehe §4.3;
-  noch nicht in `thing-types.xml` umgesetzt — siehe §7).
+  `connectToPeers` (Default `true`; auf `false` nur als Diagnose-Workaround beim Pairing
+  zweier selbstgebauter Instanzen gegeneinander — siehe `TEST_PAIRING.md`, Test 2,
+  „Known Bug Encountered"), `supportedUseCasesClient`, `supportedUseCasesServer`
+  (Checkbox-Auswahl, siehe §4.3; noch nicht in `thing-types.xml` umgesetzt — siehe §7).
 - Properties (read-only, nach Start gesetzt): `localSki`.
 - Aufgabe: hält `ShipCommunication` + SPINE-`Device`, legt/lädt das Zertifikat, berechnet die
   Trusted-SKI-Menge aus den konfigurierten `eebus:peer`-Kind-Things (§5.2) — **kein**

@@ -44,4 +44,12 @@ public class EEBusBindingConstants {
      * binding-scoped) - see ADR-003.
      */
     public static final String SERVICE_TYPE_SHIP_MDNS = "_ship._tcp.local.";
+
+    /**
+     * Thing property key an {@code eebus:service} Bridge publishes its own SKI under, once its
+     * SHIP server is up ({@code EEBusHandler#startShipSpine}). Also read by
+     * {@code EEBusMdnsDiscoveryParticipant} to recognize and exclude a Bridge's own mDNS
+     * self-announcement from the Inbox - see ADR-008.
+     */
+    public static final String PROPERTY_LOCAL_SKI = "localSki";
 }

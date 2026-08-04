@@ -26,7 +26,6 @@ import org.openhab.core.types.State;
 import org.openmuc.jeebus.spine.api.DataValidationException;
 import org.openmuc.jeebus.spine.api.Entity;
 import org.openmuc.jeebus.spine.api.Feature;
-import org.openmuc.jeebus.spine.impl.FeatureInformationService;
 import org.openmuc.jeebus.spine.spi.AllowedEntityTypes;
 import org.openmuc.jeebus.spine.spi.FeatureRequirement;
 import org.openmuc.jeebus.spine.spi.Inject;
@@ -174,8 +173,18 @@ public class EEBusMpcServerUseCase implements UseCase {
                 .orElseThrow(() -> new IllegalStateException(
                         "MEASUREMENT server feature missing - Entity#addUseCase() should have added it "
                                 + "from getFeatureRequirements()"));
-        MeasurementFeature measurementFeature = (MeasurementFeature) FeatureInformationService.getInstance()
-                .createFeatureWrapper(rawFeature);
+        // Deliberately rawFeature.getFeatureWrapper(...) - the feature's canonical wrapper - not
+        // FeatureInformationService.getInstance().createFeatureWrapper(rawFeature), which would
+        // create a second, disconnected wrapper instance whose function fields never get
+        // populated (jeebus.spine's FeatureImpl only calls updateFunction(...) on the one
+        // canonical wrapper it created itself in setType()). See
+        // AbstractEEBusLimitControllableSystemUseCase#findFeatureWrapper for the full
+        // explanation of this failure mode, found while diagnosing the same pattern crashing
+        // there.
+        MeasurementFeature measurementFeature = rawFeature.getFeatureWrapper(MeasurementFeature.class);
+        if (measurementFeature == null) {
+            throw new IllegalStateException("MEASUREMENT feature has no MeasurementFeature wrapper attached");
+        }
 
         MeasurementDescriptionListDataFunction descriptionFunction = measurementFeature
                 .addMeasurementDescriptionListDataFunction();
