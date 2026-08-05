@@ -59,12 +59,13 @@ import org.osgi.service.component.annotations.Reference;
  * </p>
  *
  * <p>
- * {@link #createResult(ServiceInfo)} also excludes SKIs that are either already paired
- * ({@link #isAlreadyPaired(String)}) or belong to one of this openHAB instance's own
- * {@code eebus:service} Bridges ({@link #isOwnService(String)}) - without the latter, a Bridge's
- * own SHIP mDNS self-announcement (necessary so other EEBUS devices can find it) would otherwise
- * be re-discovered by this same participant and offered back as a bogus Inbox suggestion for
- * itself. See ADR-008.
+ * {@link #createResult(ServiceInfo)} also excludes SKIs that already have an {@code eebus:peer}
+ * Thing ({@link #isAlreadyKnown(String)} - CONCEPT.md §4.5: this Thing type no longer implies
+ * trust/pairing, only that the device is already known) or belong to one of this openHAB
+ * instance's own {@code eebus:service} Bridges ({@link #isOwnService(String)}) - without the
+ * latter, a Bridge's own SHIP mDNS self-announcement (necessary so other EEBUS devices can find
+ * it) would otherwise be re-discovered by this same participant and offered back as a bogus
+ * Inbox suggestion for itself. See ADR-008.
  * </p>
  *
  * @author Bernd Weymann - Initial contribution
@@ -97,7 +98,7 @@ public class EEBusMdnsDiscoveryParticipant implements MDNSDiscoveryParticipant {
             return null;
         }
         ThingUID bridgeUid = findNetworkBridgeUid();
-        if (bridgeUid == null || isAlreadyPaired(txt.ski()) || isOwnService(txt.ski())) {
+        if (bridgeUid == null || isAlreadyKnown(txt.ski()) || isOwnService(txt.ski())) {
             return null;
         }
 
@@ -133,10 +134,12 @@ public class EEBusMdnsDiscoveryParticipant implements MDNSDiscoveryParticipant {
 
     /**
      * @param ski the SKI read from a discovered service's TXT record
-     * @return {@code true} if an {@code eebus:peer} Thing with this SKI already exists,
-     *         regardless of which Bridge it belongs to
+     * @return {@code true} if an {@code eebus:peer} Thing with this SKI already exists (i.e.
+     *         already an Inbox-approved real-device record, not a pairing/trust statement -
+     *         see CONCEPT.md §4.5), regardless of which {@code eebus:network} Bridge it
+     *         belongs to
      */
-    private boolean isAlreadyPaired(String ski) {
+    private boolean isAlreadyKnown(String ski) {
         return thingRegistry.getAll().stream().filter(thing -> THING_TYPE_PEER.equals(thing.getThingTypeUID()))
                 .map(thing -> thing.getConfiguration().as(EEBusPeerConfiguration.class))
                 .anyMatch(peerConfig -> ski.equals(peerConfig.ski));

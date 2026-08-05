@@ -16,7 +16,10 @@ import static org.openmuc.jeebus.shipspine.ShipCommunication.ConnectClientsTo.NO
 import static org.openmuc.jeebus.shipspine.ShipCommunication.ConnectClientsTo.TRUSTED;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +32,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.eebus.internal.EEBusBindingConstants;
 import org.openhab.binding.eebus.internal.config.EEBusConfiguration;
-import org.openhab.binding.eebus.internal.config.EEBusPeerConfiguration;
+import org.openhab.binding.eebus.internal.config.EEBusOhPeerConfiguration;
 import org.openhab.binding.eebus.internal.transport.EEBusLpcServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusLppServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusMdnsBrowser;
@@ -38,7 +41,10 @@ import org.openhab.binding.eebus.internal.transport.EEBusMpcClientUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusMpcServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusPortPool;
 import org.openhab.core.OpenHAB;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.io.transport.mdns.MDNSClient;
+import org.openhab.core.storage.Storage;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -70,19 +76,33 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * <p>
- * <strong>Pairing model</strong> (see CONCEPT.md §5.2, §6 decision 4): there is no
- * separate approve/reject action. Trust is derived purely from which {@code eebus:peer}
- * child Things exist — see {@link #recomputeTrustedSkis()}, called whenever a child Thing
- * is added or removed. Creating a peer Thing pairs it; removing it revokes trust on the
- * next restart/recompute.
+ * <strong>Pairing model</strong> (see CONCEPT.md §5.2, §6 decision 4, §4.5, revised by §4.6 /
+ * docs/ADR/012-pairing-trust-property-and-actions.md): trust is derived from which
+ * {@code eebus:oh-peer} child Things exist <em>and</em> currently carry
+ * {@value EEBusBindingConstants#PROPERTY_PAIRED} - see {@link #recomputeTrustedSkis()}, called
+ * whenever a child Thing is added or removed, or explicitly whenever a child's {@code pair()}/
+ * {@code unpair()} Thing Action runs ({@link EEBusOhPeerHandler#pair()}/
+ * {@link EEBusOhPeerHandler#unpair()}). Creating an oh-peer Thing configures it but no longer by
+ * itself pairs it; removing it always revokes trust regardless of its pairing state.
  * </p>
  *
  * <p>
  * <strong>Verified</strong> (CONCEPT.md §7 item 1, resolved): {@link ShipNodeConfiguration}'s
  * certPath constructor does auto-create the certificate/keystore if none exists at the given
  * path, confirmed against the actual {@code org.openmuc.jeebus:ship:2.2.0} source
- * (github.com/openmuc/jeebus.ship, tag {@code v2.2.0}). No custom certificate persistence
- * code was needed.
+ * (github.com/openmuc/jeebus.ship, tag {@code v2.2.0}).
+ * </p>
+ *
+ * <p>
+ * <strong>Certificate persistence</strong> (docs/ADR/010-storageservice-keystore-mirror.md): the
+ * keystore file above remains the operational source of truth handed to
+ * {@link ShipNodeConfiguration} - the pinned jeebus.ship/jeebus.spine versions do not support
+ * pluggable {@code CertificateStorage}, and changing that would require modifying the protected
+ * jeebus.spine project (human approval required, not sought for this pass). As a pragmatic
+ * middle ground, {@link #restoreKeystoreFromStorage} / {@link #persistKeystoreToStorage} mirror
+ * the file's bytes into openHAB's {@code StorageService} (java-coding-rules.md's standard
+ * persistence mechanism) around every start, so the identity is not solely dependent on a loose
+ * file under userdata surviving.
  * </p>
  *
  * <p>
@@ -154,13 +174,25 @@ public class EEBusHandler extends BaseBridgeHandler {
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
     private final EEBusPortPool portPool;
+    private final StorageService storageService;
+
+    /**
+     * Per-Thing {@link Storage} obtained in {@link #initialize()}, holding a base64-encoded
+     * mirror of the SHIP keystore file ({@link #getKeystoreFile()}) under
+     * {@link #KEYSTORE_STORAGE_KEY}. See {@link #restoreKeystoreFromStorage(File)}/
+     * {@link #persistKeystoreToStorage(File)} for why this exists alongside the file, and
+     * {@link #handleRemoval()} for why - unlike the usual {@code StorageService} pattern
+     * (java-coding-rules.md) - this entry is deliberately not removed there.
+     */
+    private @Nullable Storage<String> keystoreStorage;
 
     public EEBusHandler(Bridge bridge, EEBusMetadataService metadataService, MDNSClient mdnsClient,
-            EEBusPortPool portPool) {
+            EEBusPortPool portPool, StorageService storageService) {
         super(bridge);
         this.metadataService = metadataService;
         this.mdnsClient = mdnsClient;
         this.portPool = portPool;
+        this.storageService = storageService;
     }
 
     /**
@@ -193,6 +225,11 @@ public class EEBusHandler extends BaseBridgeHandler {
         // like a real exception in the log and was confusing to read at a glance).
         logger.debug("initialize() called for {} (handler={}, generation={}, thread={})", thing.getUID(),
                 System.identityHashCode(this), generation, Thread.currentThread().getName());
+
+        // See java-coding-rules.md's StorageService lifecycle pattern: obtained here in
+        // initialize(), not removed in handleRemoval() (deliberate deviation, see the field
+        // javadoc on keystoreStorage and the comment in handleRemoval() for why).
+        keystoreStorage = storageService.getStorage(thing.getUID().toString(), String.class.getClassLoader());
 
         EEBusConfiguration cfg = getConfigAs(EEBusConfiguration.class);
         this.config = cfg;
@@ -245,10 +282,15 @@ public class EEBusHandler extends BaseBridgeHandler {
 
     /**
      * Resolves the port to bind the local SHIP server to, taking it out of {@link #portPool}: the
-     * Thing's explicitly configured port if one was set, otherwise a free port assigned by the
-     * pool. Called once from {@link #initialize()} - the resolved port is only released back to
-     * the pool in {@link #handleRemoval()}, never {@link #dispose()} (see {@link EEBusPortPool}'s
-     * class javadoc for why).
+     * Thing's explicitly configured port if one was set (occupied via
+     * {@link EEBusPortPool#reservePort(int)}), otherwise a free port assigned by the pool
+     * ({@link EEBusPortPool#acquireFreePort()}) - which is then immediately persisted back into
+     * the Thing's configuration ({@link #persistAutoAssignedPort(int)}), so that a later
+     * {@code dispose()}/{@code initialize()} cycle (e.g. a restart) resolves the exact same port
+     * again here instead of possibly drawing a different one from the pool. Called once from
+     * {@link #initialize()} - the resolved port is only released back to the pool in
+     * {@link #handleRemoval()}, never {@link #dispose()} (see {@link EEBusPortPool}'s class
+     * javadoc for why).
      *
      * @param cfg this Thing's configuration
      * @return the resolved port; empty if no port was configured and the pool
@@ -257,11 +299,37 @@ public class EEBusHandler extends BaseBridgeHandler {
      */
     private Optional<Integer> resolvePort(EEBusConfiguration cfg) {
         Integer configuredPort = cfg.port;
-        if (configuredPort == null) {
-            return portPool.acquireFreePort();
+        if (configuredPort != null) {
+            portPool.reservePort(configuredPort);
+            return Optional.of(configuredPort);
         }
-        portPool.reservePort(configuredPort);
-        return Optional.of(configuredPort);
+        Optional<Integer> freePort = portPool.acquireFreePort();
+        freePort.ifPresent(this::persistAutoAssignedPort);
+        return freePort;
+    }
+
+    /**
+     * Writes an auto-assigned port back into the Thing's persisted configuration under
+     * {@link EEBusConfiguration#PARAM_PORT}, so it is no longer {@code null} on the next
+     * {@code initialize()} - see {@link #resolvePort} for why.
+     *
+     * <p>
+     * Deliberately {@code editConfiguration()}/{@code updateConfiguration(Configuration)} - the
+     * documented, safe way for a handler to write back a value it computed itself. This does
+     * <strong>not</strong> go through {@code handleConfigurationUpdate()} (the
+     * {@code dispose()}+{@code initialize()} cycle openHAB runs for configuration changes coming
+     * from the UI/REST API, confirmed against the {@code ThingResource#updateConfiguration} ->
+     * {@code BaseThingHandler#handleConfigurationUpdate} call chain seen in this Bridge's own
+     * debug logs). Calling that path instead from inside {@code initialize()} itself would cause
+     * a reentrant/looping re-initialize.
+     * </p>
+     *
+     * @param port the port to persist
+     */
+    private void persistAutoAssignedPort(int port) {
+        Configuration configuration = editConfiguration();
+        configuration.put(EEBusConfiguration.PARAM_PORT, port);
+        updateConfiguration(configuration);
     }
 
     /**
@@ -285,10 +353,23 @@ public class EEBusHandler extends BaseBridgeHandler {
         // (github.com/openmuc/jeebus.ship, tag v2.2.0): the ShipNodeConfiguration constructor
         // that takes a certPath auto-creates the certificate/keystore at that path if none is
         // found there yet (see its javadoc: "If there is no certificate found at the location,
-        // a new certificate will be created ... at the location"). No custom persistence code
-        // needed here.
+        // a new certificate will be created ... at the location").
+        //
+        // Persistence note (see docs/ADR/010-storageservice-keystore-mirror.md): the file at
+        // getKeystoreFile() remains the actual source of truth handed to ShipNodeConfiguration
+        // below - the pinned org.openmuc.jeebus:ship:2.3.0/spine:4.0.1 only exposes the
+        // deprecated, file-path-only ShipNodeConfiguration constructor, not the newer
+        // ConfigBuilder#withCertificateStorage(CertificateStorage) added in ship 2.3.0 (which
+        // would allow a fully file-free, StorageService-backed CertificateStorage
+        // implementation). Changing that would mean modifying the protected jeebus.spine
+        // project, which requires prior human approval this has not (yet) been sought for. As a
+        // pragmatic middle ground, restoreKeystoreFromStorage()/persistKeystoreToStorage() mirror
+        // the file's bytes into openHAB's StorageService (java-coding-rules.md's standard
+        // persistence mechanism) around this call, so the identity survives even where the raw
+        // file might not (e.g. a userdata folder that isn't part of a backup/restore routine).
         File keystoreFile = getKeystoreFile();
         keystoreFile.getParentFile().mkdirs();
+        restoreKeystoreFromStorage(keystoreFile);
 
         String shipId = cfg.vendorCode + "-" + cfg.deviceModel + "-" + cfg.serialNumber;
         String distinguishedName = "CN=" + cfg.deviceModel + "-" + cfg.serialNumber;
@@ -308,22 +389,26 @@ public class EEBusHandler extends BaseBridgeHandler {
         // see EEBusConfiguration#connectToPeers and TEST_PAIRING.md (Test 2, "Known Bug
         // Encountered") for why: with both sides dialing out, a bug in the embedded SHIP
         // library's simultaneous-connection handling can abort the handshake.
-        ShipCommunication communication = new ShipCommunication(nodeConfig).withTrustedSkis(currentPeerSkis())
+        ShipCommunication communication = new ShipCommunication(nodeConfig).withTrustedSkis(currentPairedOhPeerSkis())
                 .withConnectClientsTo(cfg.connectToPeers ? TRUSTED : NONE).withAutoAcceptMode(cfg.autoAcceptEnabled);
 
         // CONCEPT §5.5/§7.8: server-role UseCase implementations are attached here, one per
         // entry in cfg.supportedUseCasesServer. Only MPC is implemented so far
         // (EEBusMpcServerUseCase, matches the user's original "Wechselrichter/ImSys"
         // scenario) - the other core use cases remain logged-but-unimplemented.
+        // CONCEPT §4.5: each is given this Bridge's Thing ID as oh-service-id, so
+        // EEBusMetadataService#find(...) can disambiguate Item metadata when more than one
+        // eebus:service Bridge offers the same use case/datapoint.
+        String ohServiceId = thing.getUID().getId();
         List<UseCase> serverUseCases = new ArrayList<>();
         if (cfg.supportedUseCasesServer.contains("MPC")) {
-            serverUseCases.add(new EEBusMpcServerUseCase(metadataService));
+            serverUseCases.add(new EEBusMpcServerUseCase(metadataService, ohServiceId));
         }
         if (cfg.supportedUseCasesServer.contains("LPC")) {
-            serverUseCases.add(new EEBusLpcServerUseCase(metadataService));
+            serverUseCases.add(new EEBusLpcServerUseCase(metadataService, ohServiceId));
         }
         if (cfg.supportedUseCasesServer.contains("LPP")) {
-            serverUseCases.add(new EEBusLppServerUseCase(metadataService));
+            serverUseCases.add(new EEBusLppServerUseCase(metadataService, ohServiceId));
         }
         List<String> unimplementedServerUseCases = cfg.supportedUseCasesServer.stream()
                 .filter(useCase -> !Set.of("MPC", "LPC", "LPP").contains(useCase)).toList();
@@ -339,7 +424,7 @@ public class EEBusHandler extends BaseBridgeHandler {
         // (EEBusMpcClientUseCase, the consumer-side counterpart of EEBusMpcServerUseCase).
         List<UseCase> clientUseCases = new ArrayList<>();
         if (cfg.supportedUseCasesClient.contains("MPC")) {
-            clientUseCases.add(new EEBusMpcClientUseCase(metadataService, this::peerThingUidForCommunicationAddress));
+            clientUseCases.add(new EEBusMpcClientUseCase(this::ohPeerThingUidForCommunicationAddress));
         }
         List<String> unimplementedClientUseCases = cfg.supportedUseCasesClient.stream()
                 .filter(useCase -> !"MPC".equals(useCase)).toList();
@@ -407,6 +492,7 @@ public class EEBusHandler extends BaseBridgeHandler {
         }
 
         updateProperty(EEBusBindingConstants.PROPERTY_LOCAL_SKI, communication.getOwnSki());
+        persistKeystoreToStorage(keystoreFile);
         return true;
     }
 
@@ -477,6 +563,16 @@ public class EEBusHandler extends BaseBridgeHandler {
             this.reservedPort = null;
         }
 
+        // Deliberately NOT removing the keystoreStorage entry here, unlike the otherwise-standard
+        // StorageService handleRemoval() pattern (java-coding-rules.md). Keeping it lets a
+        // `service` Bridge later recreated with the exact same Thing ID pick its old SHIP
+        // certificate/SKI back up instead of generating a new identity - see README.md ("The
+        // Thing ID matters") and SKI.md ("Deleting and recreating the oh-service Bridge itself").
+        // The already-existing keystore *file* on disk survives Thing deletion for the same
+        // reason (see getKeystoreFile()'s javadoc reference above); this just keeps the
+        // StorageService mirror consistent with that existing, intentional behavior. If a Thing
+        // ID is retired for good, the stray entry is one small base64 keystore keyed by a now
+        // unused UID - harmless clutter, not a correctness or security issue.
         updateStatus(ThingStatus.REMOVED);
     }
 
@@ -500,16 +596,26 @@ public class EEBusHandler extends BaseBridgeHandler {
     }
 
     /**
-     * Recomputes the trusted-SKI set from all currently configured {@code eebus:peer}
-     * child Things and pushes it to {@link ShipCommunication}. See CONCEPT.md §5.2: a
-     * peer Thing's existence is what constitutes pairing.
+     * Recomputes the trusted-SKI set from all currently configured {@code eebus:oh-peer}
+     * child Things that are currently paired ({@link #currentPairedOhPeerSkis()}) and pushes it
+     * to {@link ShipCommunication}. See CONCEPT.md §4.6 / docs/ADR/012-pairing-trust-property-
+     * and-actions.md: a child Thing's existence alone no longer constitutes pairing - only
+     * children carrying {@value EEBusBindingConstants#PROPERTY_PAIRED} do.
+     *
+     * <p>
+     * Package-private (not {@code private}): called both from this class's own
+     * {@link #childHandlerInitialized}/{@link #childHandlerDisposed} callbacks and directly by
+     * {@link EEBusOhPeerHandler#pair()}/{@link EEBusOhPeerHandler#unpair()} on a sibling child
+     * handler, whenever those Thing Actions change a child's pairing property without a full
+     * Thing lifecycle (dispose/initialize) cycle.
+     * </p>
      */
-    private void recomputeTrustedSkis() {
+    void recomputeTrustedSkis() {
         ShipCommunication communication = this.shipCommunication;
         if (communication == null) {
             return;
         }
-        communication.withTrustedSkis(currentPeerSkis());
+        communication.withTrustedSkis(currentPairedOhPeerSkis());
     }
 
     // Note (ADR-003): the public pairedSkis() accessor that used to exist here was removed -
@@ -518,21 +624,20 @@ public class EEBusHandler extends BaseBridgeHandler {
     // ThingRegistry directly instead of asking one specific eebus:service Bridge.
 
     /**
-     * Resolves a SKI to the {@code eebus:peer} child Thing's UID string, if a Thing with that
-     * SKI is currently configured. Used to compose the {@code peerThingUidResolver} passed to
-     * {@code EEBusMpcClientUseCase} (CONCEPT.md §7.3/§8): combined with
+     * Resolves a SKI to the {@code eebus:oh-peer} child Thing's UID string, if a Thing with
+     * that SKI is currently configured. Used to compose the {@code ohPeerThingUidResolver}
+     * passed to {@code EEBusMpcClientUseCase} (CONCEPT.md §7.3/§8): combined with
      * {@link EEBusMdnsBrowser#skiForCommunicationAddress}, this resolves a SPINE
-     * {@code communicationAddress} all the way back to the paired peer Thing that
-     * {@code eebus="..." [peer="..."]} Item metadata references.
+     * {@code communicationAddress} all the way back to the paired {@code eebus:oh-peer}
+     * Thing (CONCEPT.md §4.5).
      *
      * @param ski the SKI to look up
-     * @return the matching child Thing's UID as a string (matches
-     *         {@code Metadata#getConfiguration().get("peer")}), if any
+     * @return the matching child Thing's UID as a string, if any
      */
-    Optional<String> peerThingUidForSki(String ski) {
+    Optional<String> ohPeerThingUidForSki(String ski) {
         for (Thing child : getThing().getThings()) {
-            EEBusPeerConfiguration peerConfig = child.getConfiguration().as(EEBusPeerConfiguration.class);
-            if (ski.equals(peerConfig.ski)) {
+            EEBusOhPeerConfiguration ohPeerConfig = child.getConfiguration().as(EEBusOhPeerConfiguration.class);
+            if (ski.equals(ohPeerConfig.ski)) {
                 return Optional.of(child.getUID().getAsString());
             }
         }
@@ -541,26 +646,34 @@ public class EEBusHandler extends BaseBridgeHandler {
 
     /**
      * Composes {@link EEBusMdnsBrowser#skiForCommunicationAddress} with
-     * {@link #peerThingUidForSki} - the full {@code communicationAddress -> peer Thing UID}
+     * {@link #ohPeerThingUidForSki} - the full {@code communicationAddress -> oh-peer Thing UID}
      * resolver that {@code EEBusMpcClientUseCase} (and future Client-role UseCases) need to
-     * route a detected {@code UseCasePartner} back to the Item metadata that references it.
+     * route a detected {@code UseCasePartner} back to the paired {@code eebus:oh-peer} Thing.
      * Read lazily (not captured at construction time) so it keeps working regardless of
      * {@link #mdnsBrowser}'s startup order relative to Client-UseCase registration.
      */
-    private Optional<String> peerThingUidForCommunicationAddress(String communicationAddress) {
+    private Optional<String> ohPeerThingUidForCommunicationAddress(String communicationAddress) {
         EEBusMdnsBrowser browser = this.mdnsBrowser;
         if (browser == null) {
             return Optional.empty();
         }
-        return browser.skiForCommunicationAddress(communicationAddress).flatMap(this::peerThingUidForSki);
+        return browser.skiForCommunicationAddress(communicationAddress).flatMap(this::ohPeerThingUidForSki);
     }
 
-    private Set<String> currentPeerSkis() {
+    /**
+     * @return the {@code ski} of every child {@code eebus:oh-peer} Thing that both has a
+     *         non-blank {@code ski} configured <strong>and</strong> currently carries
+     *         {@value EEBusBindingConstants#PROPERTY_PAIRED} (see docs/ADR/012-pairing-trust-
+     *         property-and-actions.md). A configured-but-not-yet-paired child is deliberately
+     *         excluded here.
+     */
+    private Set<String> currentPairedOhPeerSkis() {
         Set<String> skis = new HashSet<>();
         for (Thing child : getThing().getThings()) {
-            EEBusPeerConfiguration peerConfig = child.getConfiguration().as(EEBusPeerConfiguration.class);
-            if (!peerConfig.ski.isBlank()) {
-                skis.add(peerConfig.ski);
+            EEBusOhPeerConfiguration ohPeerConfig = child.getConfiguration().as(EEBusOhPeerConfiguration.class);
+            boolean paired = "true".equals(child.getProperties().get(EEBusBindingConstants.PROPERTY_PAIRED));
+            if (!ohPeerConfig.ski.isBlank() && paired) {
+                skis.add(ohPeerConfig.ski);
             }
         }
         return skis;
@@ -571,9 +684,70 @@ public class EEBusHandler extends BaseBridgeHandler {
                 thing.getUID().getAsString().replace(':', '_') + ".jks");
     }
 
+    /** The single key used inside {@link #keystoreStorage} - one entry per Thing UID. */
+    private static final String KEYSTORE_STORAGE_KEY = "keystore";
+
+    /**
+     * Restores {@code keystoreFile} from {@link #keystoreStorage}, if openHAB's StorageService
+     * has a mirror of it (persisted by an earlier {@link #persistKeystoreToStorage(File)} call)
+     * but the file itself is missing on disk. Called from {@link #startShipSpine} before
+     * constructing {@link ShipNodeConfiguration}, which would otherwise treat a missing file as
+     * "no certificate yet" and silently generate a brand-new one - changing this node's SKI, see
+     * README.md/SKI.md.
+     *
+     * <p>
+     * Deliberately a no-op whenever the file already exists: the file is the operational source
+     * of truth (it's what {@link ShipNodeConfiguration} actually reads/writes), so an existing
+     * file is never overwritten from a possibly-older storage snapshot.
+     * </p>
+     *
+     * @param keystoreFile this Thing's keystore file, as returned by {@link #getKeystoreFile()}
+     */
+    private void restoreKeystoreFromStorage(File keystoreFile) throws IOException {
+        Storage<String> storage = this.keystoreStorage;
+        if (storage == null || keystoreFile.exists()) {
+            return;
+        }
+        String encoded = storage.get(KEYSTORE_STORAGE_KEY);
+        if (encoded == null) {
+            // Nothing persisted yet for this Thing UID (e.g. first-ever start, or a Thing ID that
+            // was never started before this change was introduced) - ShipNodeConfiguration will
+            // create a brand-new certificate below, exactly as it always has.
+            return;
+        }
+        Files.write(keystoreFile.toPath(), Base64.getDecoder().decode(encoded));
+        logger.debug("Restored SHIP keystore for {} from StorageService ({} bytes)", thing.getUID(),
+                keystoreFile.length());
+    }
+
+    /**
+     * Mirrors {@code keystoreFile}'s current bytes into {@link #keystoreStorage}, base64-encoded.
+     * Called from {@link #startShipSpine} right after a successful start, so the identity this
+     * Thing just established/confirmed on disk is also available through openHAB's normal
+     * StorageService persistence (java-coding-rules.md) - not only as a loose file under
+     * userdata.
+     *
+     * @param keystoreFile this Thing's keystore file, as returned by {@link #getKeystoreFile()}
+     */
+    private void persistKeystoreToStorage(File keystoreFile) {
+        Storage<String> storage = this.keystoreStorage;
+        if (storage == null) {
+            return;
+        }
+        try {
+            byte[] bytes = Files.readAllBytes(keystoreFile.toPath());
+            storage.put(KEYSTORE_STORAGE_KEY, Base64.getEncoder().encodeToString(bytes));
+        } catch (IOException e) {
+            // Non-fatal: the file on disk is still fully functional for this run, this only means
+            // the StorageService mirror is stale until the next successful start.
+            logger.warn("Failed to mirror SHIP keystore for {} into StorageService (file at {} is unaffected)",
+                    thing.getUID(), keystoreFile, e);
+        }
+    }
+
     /**
      * @return the SPINE device backing this Bridge, or {@code null} before/after
-     *         {@link #initialize()}/{@link #dispose()}. Used by {@link EEBusPeerHandler}
+     *         {@link #initialize()}/{@link #dispose()}. Used by {@link EEBusOhPeerHandler}
      *         to reach {@code Device#getNodeManagement()}.
      */
     @Nullable
@@ -584,8 +758,8 @@ public class EEBusHandler extends BaseBridgeHandler {
     /**
      * @return the mDNS browser backing this Bridge, or {@code null} before/after
      *         {@link #initialize()}/{@link #dispose()}, or if it failed to start (see
-     *         {@link #startShipSpine}). Used by {@link EEBusPeerHandler} to resolve
-     *         {@code UseCasePartner#getCommunicationAddress()} back to a peer's SKI
+     *         {@link #startShipSpine}). Used by {@link EEBusOhPeerHandler} to resolve
+     *         {@code UseCasePartner#getCommunicationAddress()} back to a paired peer's SKI
      *         (CONCEPT.md §7.2/§7.9).
      */
     @Nullable

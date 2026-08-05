@@ -14,12 +14,23 @@ _Which different types are supported, which models were tested etc.?_
 _Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
 
 - `service` (Bridge): one local EEBus SHIP/SPINE service instance - own certificate, own mDNS
-  presence. Required if openHAB itself should offer or consume EEBus use cases.
+  presence, labeled "EEBus OH Service" in the Main UI. Required if openHAB itself should offer
+  or consume EEBus use cases.
+  **The Thing ID matters:** this Thing's own SHIP certificate (and therefore its SKI, the
+  identity real devices trust) is persisted keyed by this Thing's ID. Define the Thing ID
+  yourself and write it down (do not rely on an auto-generated one) - if you ever need to
+  delete and recreate this Thing, reusing the exact same ID lets it pick the existing
+  certificate back up, so already-paired real devices (like a Hager Energy S10) still
+  recognize it without a new manual confirmation. A different ID means a brand-new identity
+  and re-pairing on the device side.
 - `network` (Bridge): lightweight anchor with no mandatory configuration. Add this first - it
   has no local identity of its own, but is the parent Thing that discovered real EEBus devices
   attach to.
-- `peer`: one paired remote EEBus device, identified by its SKI. Creating this Thing is the
-  pairing action.
+- `peer`: a real EEBus device seen on the network, identified by its SKI, ideally populated via
+  mDNS discovery. Child of `network` only - not paired, no channels.
+- `oh-peer`: an openHAB-managed pairing with a real EEBus device, identified by its SKI. Child of
+  `service` only. Creating this Thing only configures it - it does **not** by itself grant
+  trust; use the "Pair" Thing Action afterwards (see "Pairing" below).
 
 ## Discovery
 
@@ -30,7 +41,27 @@ to be configured first.
 Discovered devices only appear in the Inbox once an `eebus:network` Thing has been added
 manually (it has no real-world counterpart to discover itself, so it is not auto-suggested).
 Devices whose SKI already belongs to an existing `peer` Thing are excluded, since they are
-already paired.
+already known.
+
+## Pairing
+
+To pair a device with a local `service` (trust it, so it can exchange data):
+
+1. Create an `oh-peer` Thing under that `service`. Its `ski` parameter offers a selectable list
+   of known devices/services (discovered `peer` Things, and other local `service` Bridges' own
+   SKI for pairing two local services with each other) - free text entry remains possible for a
+   SKI not yet seen, e.g. read from the device's display or QR code.
+1. Open the new `oh-peer` Thing's Actions page in Main UI and invoke "Pair". This is what
+   actually grants trust - creating the Thing alone does not.
+1. To temporarily revoke trust without losing the SKI configuration, invoke "Unpair" - the
+   Thing and its `ski` remain, so it can be re-paired later with "Pair" again. To forget the
+   pairing entirely, delete the `oh-peer` Thing instead.
+
+Pairing two local `service` Bridges with each other (e.g. a test double talking to a real
+service on the same openHAB instance) needs an `oh-peer` Thing under **each** side, each
+configured with the other side's SKI - normal mDNS discovery does not surface a local service to
+itself (see "Discovery" above), so pick it from the `ski` option list's "other local services"
+entries instead of a discovered `peer`.
 
 ## Binding Configuration
 

@@ -34,8 +34,18 @@ public class EEBusBindingConstants {
      * {@code eebus:peer} Inbox entries (ADR-003). Holds no SHIP/SPINE identity itself.
      */
     public static final ThingTypeUID THING_TYPE_NETWORK = new ThingTypeUID(BINDING_ID, "network");
-    /** One paired remote EEBUS device, identified by its SKI. */
+    /**
+     * A "real" EEBus device seen on the network, identified by its SKI. Child of
+     * {@link #THING_TYPE_NETWORK} only - carries no channels and does not establish trust. See
+     * CONCEPT.md §4.5.
+     */
     public static final ThingTypeUID THING_TYPE_PEER = new ThingTypeUID(BINDING_ID, "peer");
+    /**
+     * An openHAB-managed pairing with a real EEBus device, identified by its SKI. Child of
+     * {@link #THING_TYPE_SERVICE} only - creating this Thing performs pairing (CONCEPT.md
+     * §5.2/§4.5).
+     */
+    public static final ThingTypeUID THING_TYPE_OH_PEER = new ThingTypeUID(BINDING_ID, "oh-peer");
 
     /**
      * mDNS service type for SHIP 7.3.2 device announcements. Shared between
@@ -52,4 +62,15 @@ public class EEBusBindingConstants {
      * self-announcement from the Inbox - see ADR-008.
      */
     public static final String PROPERTY_LOCAL_SKI = "localSki";
+
+    /**
+     * Thing property key an {@code eebus:oh-peer} Thing records its pairing state under: present
+     * with value {@code "true"} once its {@code pair()} Thing Action has been invoked and not
+     * since undone by {@code unpair()}; absent otherwise (including before {@code pair()} has
+     * ever been invoked). Read by {@code EEBusHandler#currentPairedOhPeerSkis()} to decide which
+     * child {@code eebus:oh-peer} Things contribute to the parent Bridge's trusted-SKI set -
+     * Thing existence alone no longer implies trust. See docs/ADR/012-pairing-trust-property-and-
+     * actions.md and CONCEPT.md §4.6.
+     */
+    public static final String PROPERTY_PAIRED = "paired";
 }

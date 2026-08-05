@@ -64,9 +64,10 @@ import org.slf4j.LoggerFactory;
  * </p>
  *
  * <p>
- * Data flow (CONCEPT.md §4.2): the value comes from whichever Item declares
- * {@code eebus="MPC.power"} metadata (Bridge-wide, no {@code peer} attribute — a Server
- * feature is visible to the whole network, not to one peer). {@link EEBusMetadataService}
+ * Data flow (CONCEPT.md §4.2, §4.5): the value comes from whichever Item declares
+ * {@code eebus="<ohServiceId>:MPC.power"} metadata, where {@code <ohServiceId>} is this
+ * Bridge's Thing ID — a Server feature is visible to the whole network, not to one peer, so
+ * the prefix disambiguates by offering Bridge rather than by peer. {@link EEBusMetadataService}
  * pushes state changes for that Item to {@link #onItemStateChanged(State)}, which updates the
  * SPINE {@code Measurement} feature's cached data — SPINE itself serves read requests and
  * subscription notifications from that cache (verified against
@@ -88,6 +89,7 @@ public class EEBusMpcServerUseCase implements UseCase {
 
     private final Logger logger = LoggerFactory.getLogger(EEBusMpcServerUseCase.class);
     private final EEBusMetadataService metadataService;
+    private final String ohServiceId;
     private final Consumer<State> itemStateListener = this::onItemStateChanged;
 
     @Inject
@@ -97,8 +99,14 @@ public class EEBusMpcServerUseCase implements UseCase {
     private @Nullable String itemName;
     private @Nullable MeasurementListDataFunction measurementListDataFunction;
 
-    public EEBusMpcServerUseCase(EEBusMetadataService metadataService) {
+    /**
+     * @param metadataService the service used to resolve {@code eebus} Item metadata
+     * @param ohServiceId the offering {@code eebus:service} Thing's ID, passed through to
+     *            {@link EEBusMetadataService#find} (CONCEPT.md §4.5)
+     */
+    public EEBusMpcServerUseCase(EEBusMetadataService metadataService, String ohServiceId) {
         this.metadataService = metadataService;
+        this.ohServiceId = ohServiceId;
     }
 
     @Override
@@ -114,7 +122,10 @@ public class EEBusMpcServerUseCase implements UseCase {
 
     @Override
     public String getName() {
-        return "MonitoringOfPowerConsumption";
+        // Confirmed 2026-08-05 against a real Hager Energy S10's discovery JSON (jeebus.spine's
+        // DiscoveryLogger output, see docs/ADR/011-usecasename-lowercamelcase.md): the wire
+        // format is lowerCamelCase, not PascalCase - was "MonitoringOfPowerConsumption" before.
+        return "monitoringOfPowerConsumption";
     }
 
     @Override
@@ -158,10 +169,12 @@ public class EEBusMpcServerUseCase implements UseCase {
         this.address = new FeatureAddressType().withDevice(localEntity.getStaticAddress().getDevice())
                 .withEntity(localEntity.getStaticAddress().getEntity());
 
-        Optional<Metadata> metadata = metadataService.find("MPC", "power", null);
+        Optional<Metadata> metadata = metadataService.find(ohServiceId, "MPC", "power");
         if (metadata.isEmpty()) {
-            logger.info("No Item declares eebus=\"MPC.power\" metadata - the MPC server use case "
-                    + "is registered but will not expose any value until one does. See CONCEPT.md §4.2.");
+            logger.info(
+                    "No Item declares eebus=\"{}:MPC.power\" metadata - the MPC server use case "
+                            + "is registered but will not expose any value until one does. See CONCEPT.md §4.2/§4.5.",
+                    ohServiceId);
             return;
         }
         String resolvedItemName = EEBusMetadataService.itemNameOf(metadata.get());

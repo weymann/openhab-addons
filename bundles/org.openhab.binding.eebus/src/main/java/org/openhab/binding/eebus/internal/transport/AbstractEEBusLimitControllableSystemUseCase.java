@@ -151,6 +151,7 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
 
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final EEBusMetadataService metadataService;
+    private final String ohServiceId;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     @Inject
@@ -163,17 +164,24 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
     private @Nullable ScaledNumberType lastWrittenLimitValue;
     private volatile long failsafeDurationMinimumSeconds = DEFAULT_FAILSAFE_DURATION_MINIMUM_SECONDS;
 
-    protected AbstractEEBusLimitControllableSystemUseCase(EEBusMetadataService metadataService) {
+    /**
+     * @param metadataService the service used to resolve {@code eebus} Item metadata
+     * @param ohServiceId the offering {@code eebus:service} Thing's ID, passed through to every
+     *            {@link EEBusMetadataService#find} call (CONCEPT.md §4.5)
+     */
+    protected AbstractEEBusLimitControllableSystemUseCase(EEBusMetadataService metadataService, String ohServiceId) {
         this.metadataService = metadataService;
+        this.ohServiceId = ohServiceId;
     }
 
     /** @return the metadata short code used for Item lookups, e.g. {@code "LPC"} */
     protected abstract String getShortCode();
 
     /**
-     * @return the SPINE use case name, e.g. {@code "LimitationOfPowerConsumption"} (exact
-     *         wire-format casing not independently verified against the primary spec - same caveat as
-     *         {@code EEBusMpcServerUseCase#getName()}).
+     * @return the SPINE use case name, e.g. {@code "limitationOfPowerConsumption"} - lowerCamelCase,
+     *         confirmed against a real Hager Energy S10's discovery JSON (see
+     *         docs/ADR/011-usecasename-lowercamelcase.md), not the PascalCase this binding used
+     *         before that fix.
      */
     protected abstract String getUseCaseName();
 
@@ -328,7 +336,7 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
         if (hasValue) {
             this.lastWrittenLimitValue = data.getValue();
             double watts = new ScaledNumberWrapper(data.getValue()).toDouble();
-            metadataService.find(getShortCode(), getLimitDataPoint(), null).ifPresent(metadata -> metadataService
+            metadataService.find(ohServiceId, getShortCode(), getLimitDataPoint()).ifPresent(metadata -> metadataService
                     .sendCommand(EEBusMetadataService.itemNameOf(metadata), new QuantityType<>(watts, Units.WATT)));
         }
         boolean active = Boolean.TRUE.equals(data.getIsLimitActive()) && hasValue;
@@ -377,8 +385,9 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
             return;
         }
         double watts = new ScaledNumberWrapper(value.getScaledNumber()).toDouble();
-        metadataService.find(getShortCode(), getFailsafeLimitDataPoint(), null).ifPresent(metadata -> metadataService
-                .sendCommand(EEBusMetadataService.itemNameOf(metadata), new QuantityType<>(watts, Units.WATT)));
+        metadataService.find(ohServiceId, getShortCode(), getFailsafeLimitDataPoint())
+                .ifPresent(metadata -> metadataService.sendCommand(EEBusMetadataService.itemNameOf(metadata),
+                        new QuantityType<>(watts, Units.WATT)));
     }
 
     private void onFailsafeDurationWritten(DeviceConfigurationKeyValueDataType data) {
@@ -388,8 +397,9 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
         }
         long seconds = durationToSeconds(value.getDuration());
         this.failsafeDurationMinimumSeconds = seconds;
-        metadataService.find(getShortCode(), DATA_POINT_FAILSAFE_DURATION, null).ifPresent(metadata -> metadataService
-                .sendCommand(EEBusMetadataService.itemNameOf(metadata), new QuantityType<>(seconds, Units.SECOND)));
+        metadataService.find(ohServiceId, getShortCode(), DATA_POINT_FAILSAFE_DURATION)
+                .ifPresent(metadata -> metadataService.sendCommand(EEBusMetadataService.itemNameOf(metadata),
+                        new QuantityType<>(seconds, Units.SECOND)));
     }
 
     private void setupDeviceDiagnosis(Entity localEntity) {
@@ -447,7 +457,7 @@ public abstract class AbstractEEBusLimitControllableSystemUseCase implements Use
                 logger.warn("Failed to update {} limit isLimitActive for new state {}", getShortCode(), newState, e);
             }
         }
-        Optional<Metadata> metadata = metadataService.find(getShortCode(), DATA_POINT_STATE, null);
+        Optional<Metadata> metadata = metadataService.find(ohServiceId, getShortCode(), DATA_POINT_STATE);
         if (metadata.isPresent()) {
             metadataService.updateState(EEBusMetadataService.itemNameOf(metadata.get()),
                     new StringType(newState.name()));

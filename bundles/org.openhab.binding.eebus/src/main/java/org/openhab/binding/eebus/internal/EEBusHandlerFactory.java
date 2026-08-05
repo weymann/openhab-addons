@@ -20,10 +20,12 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.eebus.internal.handler.EEBusHandler;
 import org.openhab.binding.eebus.internal.handler.EEBusNetworkHandler;
+import org.openhab.binding.eebus.internal.handler.EEBusOhPeerHandler;
 import org.openhab.binding.eebus.internal.handler.EEBusPeerHandler;
 import org.openhab.binding.eebus.internal.transport.EEBusMetadataService;
 import org.openhab.binding.eebus.internal.transport.EEBusPortPool;
 import org.openhab.core.io.transport.mdns.MDNSClient;
+import org.openhab.core.storage.StorageService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
@@ -45,18 +47,20 @@ import org.osgi.service.component.annotations.Reference;
 public class EEBusHandlerFactory extends BaseThingHandlerFactory {
 
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_SERVICE, THING_TYPE_NETWORK,
-            THING_TYPE_PEER);
+            THING_TYPE_PEER, THING_TYPE_OH_PEER);
 
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
     private final EEBusPortPool portPool;
+    private final StorageService storageService;
 
     @Activate
     public EEBusHandlerFactory(@Reference EEBusMetadataService metadataService, @Reference MDNSClient mdnsClient,
-            @Reference EEBusPortPool portPool) {
+            @Reference EEBusPortPool portPool, @Reference StorageService storageService) {
         this.metadataService = metadataService;
         this.mdnsClient = mdnsClient;
         this.portPool = portPool;
+        this.storageService = storageService;
     }
 
     @Override
@@ -69,13 +73,16 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (THING_TYPE_SERVICE.equals(thingTypeUID) && thing instanceof Bridge bridge) {
-            return new EEBusHandler(bridge, metadataService, mdnsClient, portPool);
+            return new EEBusHandler(bridge, metadataService, mdnsClient, portPool, storageService);
         }
         if (THING_TYPE_NETWORK.equals(thingTypeUID) && thing instanceof Bridge bridge) {
             return new EEBusNetworkHandler(bridge);
         }
         if (THING_TYPE_PEER.equals(thingTypeUID)) {
             return new EEBusPeerHandler(thing);
+        }
+        if (THING_TYPE_OH_PEER.equals(thingTypeUID)) {
+            return new EEBusOhPeerHandler(thing);
         }
 
         return null;

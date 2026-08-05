@@ -27,8 +27,8 @@ import org.openmuc.jeebus.spine.xsd.v1.EnergyDirectionEnumType;
 @NonNullByDefault
 public class EEBusLppServerUseCase extends AbstractEEBusLimitControllableSystemUseCase {
 
-    public EEBusLppServerUseCase(EEBusMetadataService metadataService) {
-        super(metadataService);
+    public EEBusLppServerUseCase(EEBusMetadataService metadataService, String ohServiceId) {
+        super(metadataService, ohServiceId);
     }
 
     @Override
@@ -38,7 +38,10 @@ public class EEBusLppServerUseCase extends AbstractEEBusLimitControllableSystemU
 
     @Override
     protected String getUseCaseName() {
-        return "LimitationOfPowerProduction";
+        // Confirmed 2026-08-05 against a real Hager Energy S10's discovery JSON (jeebus.spine's
+        // DiscoveryLogger output, see docs/ADR/011-usecasename-lowercamelcase.md): the wire
+        // format is lowerCamelCase, not PascalCase - was "LimitationOfPowerProduction" before.
+        return "limitationOfPowerProduction";
     }
 
     @Override

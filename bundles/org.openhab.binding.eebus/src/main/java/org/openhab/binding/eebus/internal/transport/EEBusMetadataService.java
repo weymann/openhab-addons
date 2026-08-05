@@ -19,7 +19,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.events.EventPublisher;
 import org.openhab.core.items.ItemNotFoundException;
 import org.openhab.core.items.ItemRegistry;
@@ -38,14 +37,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Resolves {@code eebus} Item metadata (CONCEPT.md §4.2) to concrete Items, and bridges Item
- * state changes / commands to and from {@code UseCase} implementations.
+ * Resolves {@code eebus} Item metadata (CONCEPT.md §4.2, §4.5) to concrete Items, and bridges
+ * Item state changes / commands to and from {@code UseCase} implementations.
  *
  * <p>
- * Value syntax: {@code eebus="<UseCase>.<Datenpunkt>"}, optional configuration
- * {@code [peer="<eebus:peer-Thing-UID>"]} for Client-role (per-peer) data points. See
- * CONCEPT.md §4.2 for the full design, including the deliberate decision (§4.2.1/§7 item 7)
- * against a separate Rule-tag mechanism.
+ * Value syntax: {@code eebus="<oh-service-id>:<UseCase>.<Datenpunkt>"} - Server-role data
+ * points only (Client-role consumption uses dynamically generated Channels instead, see
+ * CONCEPT.md §4.2). The {@code <oh-service-id>} prefix is the offering {@code eebus:service}
+ * Thing's ID (the segment after the second colon in its UID, e.g. {@code ems1} for
+ * {@code eebus:service:ems1}) - it disambiguates which Bridge a value belongs to when more
+ * than one {@code eebus:service} Bridge offers the same use case/datapoint (CONCEPT.md §4.5,
+ * resolves the ambiguity previously left open in the §4.2 revision history). See CONCEPT.md
+ * §4.2 for the full design, including the deliberate decision (§4.2.1/§7 item 7) against a
+ * separate Rule-tag mechanism.
  * </p>
  *
  * <p>
@@ -73,9 +77,6 @@ public class EEBusMetadataService extends AbstractItemEventSubscriber {
     /** The metadata namespace used by this binding, see CONCEPT.md §4.2. */
     public static final String NAMESPACE = "eebus";
 
-    /** Metadata configuration key for the optional peer Thing UID (Client-role data points). */
-    public static final String CONFIG_PEER = "peer";
-
     private final Logger logger = LoggerFactory.getLogger(EEBusMetadataService.class);
 
     private final MetadataRegistry metadataRegistry;
@@ -93,24 +94,47 @@ public class EEBusMetadataService extends AbstractItemEventSubscriber {
     }
 
     /**
-     * Finds the {@code eebus} metadata entry matching the given use case and data point.
+     * Finds the {@code eebus} metadata entry matching the given offering service, use case, and
+     * data point (CONCEPT.md §4.5). Server-role data points only - Client-role consumption uses
+     * dynamically generated Channels instead (CONCEPT.md §4.2), never this method.
      *
+     * <p>
+     * A metadata entry in the {@value #NAMESPACE} namespace whose value has no
+     * {@code <oh-service-id>:} prefix (i.e. no colon) never matches anything and is logged as a
+     * warning the first time it is encountered during a lookup, since it can only be a
+     * misconfiguration (CONCEPT.md §4.5 "server-metadata" delta spec, scenario "Metadata value
+     * missing the oh-service-id prefix is ignored").
+     * </p>
+     *
+     * @param ohServiceId the offering {@code eebus:service} Thing's ID (the segment after the
+     *            second colon in its UID, e.g. {@code ems1} for {@code eebus:service:ems1})
      * @param useCase the use case short name, e.g. {@code "MPC"}
-     * @param dataPoint the data point name, e.g. {@code "power"} (together:
-     *            {@code "MPC.power"}, matching {@link Metadata#getValue()})
-     * @param peerThingUid for Client-role data points, the {@code eebus:peer} Thing UID that
-     *            must match the {@value #CONFIG_PEER} configuration entry; {@code null} for
-     *            Server-role (Bridge-wide) data points, in which case any {@value #CONFIG_PEER}
-     *            value is ignored
+     * @param dataPoint the data point name, e.g. {@code "power"} (together, expected metadata
+     *            value: {@code "<ohServiceId>:MPC.power"}, matching {@link Metadata#getValue()})
      * @return the matching metadata entry, if any (the first match if several Items happen to
      *         declare the same data point - not disambiguated further in v1)
      */
-    public Optional<Metadata> find(String useCase, String dataPoint, @Nullable String peerThingUid) {
-        String expectedValue = useCase + "." + dataPoint;
+    public Optional<Metadata> find(String ohServiceId, String useCase, String dataPoint) {
+        String expectedValue = ohServiceId + ":" + useCase + "." + dataPoint;
         return metadataRegistry.getAll().stream().filter(metadata -> NAMESPACE.equals(metadata.getUID().getNamespace()))
-                .filter(metadata -> expectedValue.equals(metadata.getValue())).filter(metadata -> peerThingUid == null
-                        || peerThingUid.equals(metadata.getConfiguration().get(CONFIG_PEER)))
-                .findFirst();
+                .filter(metadata -> hasOhServiceIdPrefix(metadata, metadata.getValue()))
+                .filter(metadata -> expectedValue.equals(metadata.getValue())).findFirst();
+    }
+
+    /**
+     * @param metadata the metadata entry, used only for the Item name in the warning log
+     * @param value the metadata value to check
+     * @return {@code true} if {@code value} contains the {@code <oh-service-id>:} prefix
+     *         required by {@link #find}; logs a warning and returns {@code false} otherwise
+     */
+    private boolean hasOhServiceIdPrefix(Metadata metadata, String value) {
+        if (value.indexOf(':') >= 0) {
+            return true;
+        }
+        logger.warn("eebus metadata value '{}' on Item '{}' has no <oh-service-id>: prefix - expected "
+                + "\"<oh-service-id>:<UseCase>.<Datapoint>\", e.g. \"ems1:MPC.power\" (CONCEPT.md §4.5); ignoring",
+                value, itemNameOf(metadata));
+        return false;
     }
 
     /**

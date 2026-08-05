@@ -125,15 +125,20 @@ Modbus-Item als Server-Feature bereitstellt) ist im Diagramm nicht mitgezeichnet
 zu halten — dafür bleibt es bei Item-Metadata, siehe §4.2.
 
 **Kernaussage zur Thing2Thing-Frage:** die einzige "Verknüpfung" zwischen zwei Devices, die
-openHAB explizit anlegen lässt, ist Schritt 2 oben — ein `eebus:peer`-Thing unter der
-passenden Bridge (SHIP-Pairing). Alles danach (Kanäle, Item-Links) entsteht automatisch aus
-der SPINE-Discovery oder ist ganz normales openHAB-Alltagsgeschäft (Channel mit Item verlinken)
-— es gibt keinen dritten, eebus-spezifischen Verknüpfungsschritt.
+openHAB explizit anlegen lässt, ist Schritt 2 oben — ein `eebus:peer`- bzw. `eebus:oh-peer`-Thing
+unter der passenden Bridge (SHIP-Pairing). Alles danach (Kanäle, Item-Links) entsteht automatisch
+aus der SPINE-Discovery oder ist ganz normales openHAB-Alltagsgeschäft (Channel mit Item
+verlinken) — es gibt keinen dritten, eebus-spezifischen Verknüpfungsschritt.
 
-| Thing | ThingTypeUID (Vorschlag) | Repräsentiert | Kardinalität |
-|---|---|---|---|
-| Bridge | `eebus:service` | eine lokale SHIP/SPINE-Serviceinstanz (genau ein `Device` in jeebus.spine) | 1:1, exklusiv — **entschieden, kein Teilen einer Identität über mehrere Bridges** |
-| Thing | `eebus:peer` | ein gepairtes entferntes Gerät, identifiziert über SKI | n pro Bridge |
+**Tabelle revidiert (2026-08-04, siehe §4.5):** `eebus:peer` ist nicht mehr ein einziger Typ mit
+zwei erlaubten Eltern-Bridges, sondern in zwei Typen aufgeteilt — Begründung und Details in §4.5.
+
+| Thing | ThingTypeUID | Repräsentiert | Eltern-Bridge | Kardinalität |
+|---|---|---|---|---|
+| Bridge | `eebus:network` | Discovery-Anker, keine eigene SHIP/SPINE-Identität | — (Top-Level) | empfohlen genau 1 (siehe §4.5) |
+| Bridge | `eebus:service` | eine lokale SHIP/SPINE-Serviceinstanz (genau ein `Device` in jeebus.spine), UI-Label "EEBus OH Service" | — (Top-Level, **bewusst nicht** Kind von `eebus:network`, siehe §4.5) | 1:1, exklusiv — **entschieden, kein Teilen einer Identität über mehrere Bridges** |
+| Thing | `eebus:peer` ("EEBus Peer") | ein "echtes" EEBus-Gerät, per mDNS discovered, keine Channels | `eebus:network` | n pro Network |
+| Thing | `eebus:oh-peer` ("EEBus OH Peer") | manuell angelegter Pairing-Partner eines Service (Anlegen = Pairing-Vorgang, §5.2) | `eebus:service` | n pro Service |
 
 **Bridge (`eebus:service`)** — _aktueller Stand, ersetzt die ursprüngliche Fassung dieses
 Absatzes, die noch von einem separaten Transport-Bundle und einer `approvePairing`-Action
@@ -152,7 +157,11 @@ ausging (siehe §5.2, §4.1 für die Korrekturen):_
 - Besitzt genau ein SPINE-`Device`-Objekt exklusiv — keine zwei Bridges teilen sich je ein
   Zertifikat/SKI (bestätigte Entscheidung, siehe Abschnitt 6).
 
-**Peer (`eebus:peer`)**
+**Peer (`eebus:peer` / `eebus:oh-peer`)** — _die folgende Beschreibung galt ursprünglich für
+einen einzigen Typ; **revidiert (2026-08-04, §4.5):** aufgeteilt in `eebus:peer` (Network,
+"echtes" Gerät, keine Channels, SKI-Label bleibt "SKI") und `eebus:oh-peer` (Service, Channels +
+Server-Metadata, SKI-Label "Trusted SKI"). Was unten als Kanal-/Metadata-Verhalten beschrieben
+ist, gilt nur noch für `eebus:oh-peer` — siehe §4.5 für die vollständige, aktuelle Aufteilung._
 
 - Konfiguration: `ski` (Pflichtfeld, aus Discovery übernommen), `shipId` (wird beim ersten
   Handshake gelernt und muss laut `EEBusEventHandler#onServiceShipIdUpdate` persistiert
@@ -307,11 +316,11 @@ anhand der openHAB-Core-Javadocs, siehe Quellen):
   `metadataRegistry.getAll()`, filtert auf `key.getNamespace().equals("eebus")` und
   `metadata.getValue().equals(useCase + "." + dataPoint)`. Das frühere `peerThingUid`-Argument
   ist entfallen, da nur noch die Bridge-weite Server-Rolle Metadata nutzt.
-  **Offener Punkt:** bei **mehreren** lokalen `eebus:service`-Bridges, die denselben
-  UseCase+Datenpunkt als Server anbieten, ist `find(...)` aktuell mehrdeutig — es fehlt ein
-  Unterscheidungsmerkmal (z. B. ein optionales `[service="eebus:service:..."]`-Konfigurations-
-  Attribut). Für den heutigen Regelfall (eine Bridge bietet einen bestimmten UseCase an)
-  unkritisch, aber offen für den Mehrfach-Bridge-Fall.
+  **Offener Punkt — gelöst (2026-08-04, §4.5):** bei **mehreren** lokalen `eebus:service`-
+  Bridges, die denselben UseCase+Datenpunkt als Server anbieten, war `find(...)` bisher
+  mehrdeutig. Gelöst durch einen `oh-service-id`-Präfix im Metadata-Wert (`eebus="<oh-service-
+  id>:<UseCase>.<Datenpunkt>"`, z. B. `eebus="ems1:MPC.power"`) statt des hier ursprünglich
+  vorgeschlagenen `[service="..."]`-Attributs — Details in §4.5.
 - Lese-Pfad (**korrigiert nach Implementierung** — kein Abfrage-Callback, siehe §7 Punkt 6):
   SPINE hält Server-Feature-Daten in einem lokalen Cache (`ReadListFeatureFunction`/
   `DataListHolder`) und beantwortet Leseanfragen sowie Subscriptions automatisch daraus. Das
@@ -418,6 +427,125 @@ verifizierte Vorgehensweise. Diese Sektion ersetzt **keine** der Vorschläge B�
 Diskussion (eigenes `eebus:link`-Thing, Discovery-Erkennung von Geschwister-Bridges,
 Status-Channel pro Peer) — die bleiben zurückgestellt, nicht verworfen.
 
+### 4.5 "Echte" vs. "openHAB"-Geräte — Aufteilung von `eebus:peer` — **entschieden (2026-08-04)**
+
+**Auslöser:** `eebus:peer` erlaubte laut `thing-types.xml` bisher zwei Eltern-Bridges
+(`eebus:service` **und** `eebus:network`) mit identischer Konfiguration, aber unterschiedlichem
+Laufzeitverhalten. Bei der Umsetzung zeigte sich: das passt nicht zusammen.
+`EEBusPeerHandler`s Javadoc hält fest, dass Pairing (Trusted-SKI-Berechnung) ausschließlich vom
+Eltern-`EEBusHandler` (`eebus:service`) übernommen wird; `EEBusNetworkHandler` dagegen hält laut
+eigenem Javadoc bewusst keine SHIP/SPINE-Identität und geht bedingungslos auf ONLINE. Ein
+`eebus:peer`-Thing unter `eebus:network` war damit funktional inert — es pairt nichts, verbindet
+nichts, spiegelt nur den (immer-ONLINE) Bridge-Status. Historischer Grund: `eebus:network` kam
+erst mit ADR-003 dazu, `eebus:peer` wurde nie vollständig darauf umgestellt.
+
+**Vier Entscheidungen im Zuge dieser Revision:**
+
+1. **`eebus:service` bleibt Top-Level-Bridge.** Ein zwischenzeitlicher Vorschlag, `eebus:service`
+   als Kind-Bridge unter `eebus:network` zu hängen (damit Disable von Network automatisch alle
+   Services stoppt — openHABs Framework propagiert `BRIDGE_OFFLINE` an Kind-Things ohnehin
+   automatisch), wurde **verworfen**. Der Status bleibt wie in §3/§4 beschrieben: zwei
+   unabhängige Top-Level-Bridges. UI-Label von `eebus:service` wird zu "EEBus OH Service"
+   präzisiert (rein kosmetisch, keine strukturelle Änderung), um im Zusammenspiel mit "EEBus
+   Network"/"EEBus Peer" (siehe unten) die "echt" vs. "openHAB"-Unterscheidung auch im Namen
+   sichtbar zu machen.
+1. **`eebus:peer` wird aufgeteilt in zwei Thing-Types:**
+   - `eebus:peer` ("EEBus Peer"), Kind ausschließlich von `eebus:network`: ein "echtes" EEBus-
+     Gerät, idealerweise per mDNS-Discovery gefunden. **Keine Channels.** SKI-Konfiguration
+     bleibt frei editierbar mit Label "SKI" (kein Vertrauens-Statement, da `eebus:network` keine
+     Identität besitzt, gegenüber der man Vertrauen herstellen könnte).
+   - `eebus:oh-peer` ("EEBus OH Peer"), Kind ausschließlich von `eebus:service`: manuell
+     angelegt und vollständig konfiguriert. Anlegen dieses Things **ist** der Pairing-Vorgang
+     (§5.2, unverändert) — die SKI wird Teil der Trusted-SKI-Menge der Service-Bridge. SKI-Label
+     wird zu "Trusted SKI", da der Eintrag hier tatsächlich Vertrauen herstellt. Client-Rolle-
+     UseCases werden wie bisher in §4.2 beschrieben als dynamisch erzeugte Channels
+     bereitgestellt; Server-Rolle-UseCases weiterhin über Item-Metadata (siehe Punkt 3 unten).
+1. **Kein automatischer Link zwischen `eebus:peer` und `eebus:oh-peer`.** Beide werden
+   unabhängig konfiguriert — die SKI eines `eebus:oh-peer` wird manuell eingetragen (typischerweise
+   abgeschrieben von einem zuvor gesehenen `eebus:peer`), es gibt keine Thing-Referenz oder
+   sonstige technische Kopplung zwischen den beiden Things. Das entspricht dem bereits in §4.4/
+   §5.2 verifizierten manuellen SKI-Copy-Paste-Weg; die dort beschriebene, noch unter
+   Testvorbehalt stehende `pairWith`-Action bliebe der einzige Weg, diesen Schritt später zu
+   automatisieren — keine neue Entscheidung an dieser Stelle nötig.
+1. **Server-Rolle-Metadata wird auf `oh-service-id` statt bridge-weit skaliert.** Löst den in
+   §4.2a offen gelassenen Punkt (Mehrdeutigkeit bei mehreren `eebus:service`-Bridges mit
+   identischem angebotenem UseCase+Datenpunkt). Mechanismus bleibt Item-**Metadata** im
+   bestehenden `eebus`-Namespace (keine Abkehr zu Item-**Tags** — Tags wurden diskutiert und
+   verworfen, da sie sich den Namensraum mit openHABs Semantic-Model-Tags teilen und keinen
+   eingebauten Namespace-Schutz bieten). Wert-Syntax:
+
+   ```text
+   eebus="<oh-service-id>:<UseCase>.<Datenpunkt>"
+   ```
+
+   Beispiel:
+
+   ```java
+   Number:Power WR_Leistung "Wechselrichter Leistung" { eebus="ems1:MPC.power" }
+   ```
+
+   `EEBusMetadataService#find(...)` (§4.2a) filtert damit zusätzlich auf den `oh-service-id`-
+   Präfix vor dem ersten Doppelpunkt, statt wie bisher nur auf `useCase + "." + dataPoint`.
+
+**Auswirkung auf `thing-types.xml`:** neuer Bridge-/Thing-Type-Zuschnitt (Punkt 2) ist hier nur
+konzeptionell entschieden, noch nicht umgesetzt — Umsetzung (neues `eebus:oh-peer`, Anpassung von
+`eebus:peer`s `supported-bridge-type-refs`, Label-/Description-Änderungen) ist ein
+`$Spec`/`$Architect`-Folgeschritt.
+
+### 4.6 Pairing-Bestätigung: Config-Schritt und Trust-Schritt getrennt — **entschieden (2026-08-05)**
+
+**Auslöser:** Ein SKI-Dropdown für den `ski`-Parameter von `eebus:oh-peer` (Punkt 2 aus §4.5,
+über einen `ConfigOptionProvider` gespeist aus bekannten `eebus:peer`-Things und den `localSki`-
+Properties anderer `eebus:service`-Bridges) löst nur das Tippfehler-Problem beim Anlegen. Am
+Verhalten aus §5.2 ändert er nichts: **Anlegen des Things ist weiterhin sofort der Pairing-
+Vorgang** (`EEBusHandler.recomputeTrustedSkis()` läuft bei jedem `childHandlerInitialized`). Das
+bleibt überraschend — eine Config speichern löst unsichtbar eine Vertrauensentscheidung aus. Für
+den Zwei-Services-Fall (§4.4) kommt hinzu, dass beide Seiten ihr jeweiliges `oh-peer`-Thing
+anlegen müssten, ohne die Möglichkeit, erst beide SKIs zu prüfen und dann bewusst zu bestätigen.
+
+**Entscheidung:** Konfiguration und Vertrauen werden getrennt:
+
+1. Ein neues `eebus:oh-peer`-Thing wird über den SKI-Dropdown (§4.5) angelegt, ist danach aber
+   **nicht** automatisch Teil der Trusted-SKI-Menge der Parent-Bridge — reine Konfiguration, kein
+   Vertrauen.
+1. Eine parameterlose Thing Action (Arbeitstitel `pair()`) auf dem `oh-peer`-Thing selbst löst
+   den eigentlichen Pairing-Schritt aus: sie markiert dieses Thing als aktiv gepairt und stößt
+   `recomputeTrustedSkis()` auf der Parent-Bridge an.
+1. Für den Zwei-Services-Fall (§4.4) bleibt es bei zwei Klicks — einmal `pair()` pro Seite. Das
+   ist gewollt: echtes gegenseitiges Vertrauen soll von beiden Seiten einzeln bestätigt werden,
+   nicht atomar über beide Bridges hinweg ausgelöst werden.
+1. Symmetrisch dazu eine zweite parameterlose Thing Action `unpair()` auf demselben Thing: leert
+   die Pairing-Property wieder und stößt ebenfalls `recomputeTrustedSkis()` an. Das Thing (und
+   damit die SKI-Konfiguration) bleibt erhalten — nur das Vertrauen wird entzogen. Das ist die
+   weiche Variante gegenüber dem bisherigen Weg "Thing löschen entzieht Vertrauen" (§5.2,
+   weiterhin gültig und unverändert): `unpair()` für "temporär sperren, SKI-Konfiguration
+   behalten", Thing löschen weiterhin für "ganz vergessen". Beide Actions sind idempotent —
+   `pair()` auf einem bereits gepairten bzw. `unpair()` auf einem bereits ungepairten Thing ist
+   ein harmloser No-Op, da openHAB Thing Actions nicht laufzeitabhängig ein-/ausblenden kann und
+   deshalb ohnehin immer beide gleichzeitig sichtbar sind.
+
+**Warum das die beiden Risiken vermeidet, die in §4.4 noch unter Testvorbehalt standen:**
+
+- Keine Options-Liste als Action-Parameter mehr nötig (die Ziel-SKI steht schon in der Config)
+  — die Action ist parameterlos, exakt das bereits community-verifizierte
+  `reboot()`/`permitJoin()`-Muster.
+- Die Action schreibt nur in die eine Parent-Bridge des Things, auf dem sie aufgerufen wird —
+  kein gleichzeitiger Schreibzugriff auf zwei `EEBusHandler`-Instanzen wie bei der ursprünglichen
+  `pairWith`-Idee.
+
+**Konsequenz für §5.2:** die dortige Aussage "kein separates Approve/Reject-API nötig ... ein
+Thing anzulegen ist der Pairing-Vorgang" wird revidiert — es gibt jetzt zwei Schritte, aber
+weiterhin ohne ein bespoke Approve/Reject-API im SHIP-Sinn: der zweite Schritt ist nur ein
+erneuter `withTrustedSkis()`-Aufruf, ausgelöst durch die Action statt allein durch den
+Thing-Lifecycle.
+
+**Offener Punkt — gelöst (2026-08-05):** der Zustand "konfiguriert, aber noch nicht gepairt"
+wird als Thing-**Property** auf `eebus:oh-peer` persistiert, analog zu `PROPERTY_LOCAL_SKI` auf
+`eebus:service`. Überlebt damit einen openHAB-Neustart, ohne dass die `pair()`-Action erneut
+ausgelöst werden müsste. `EEBusHandler.recomputeTrustedSkis()` (§5.2) liest bei jedem
+Kind-Thing-Lifecycle-Event nur die `oh-peer`-Things ein, deren Property gesetzt ist; `pair()`
+setzt die Property und stößt anschließend den Recompute an.
+
 ## 5. Die vier Anforderungen im Detail
 
 ### 5.1 Schlüsselerzeugung
@@ -438,6 +566,11 @@ stattdessen §6.1 und §7 Punkt 1 für den aktuellen, noch zu verifizierenden St
   **offen** — siehe §7 Punkt 1.
 
 ### 5.2 Pairing — **Modell bei Implementierung präzisiert**
+
+_Revidiert (2026-08-05, siehe §4.6): "Ein Thing anzulegen ist der Pairing-Vorgang" und "kein
+separates Approve/Reject-API nötig" gelten nicht mehr unverändert — Config-Schritt (Thing
+anlegen) und Trust-Schritt (`pair()`-Action) sind jetzt getrennt. Details und offener Punkt zur
+Persistenz in §4.6._
 
 - `ConfigBuilder.withAutoAcceptEnabled(...)`/`ShipNodeConfiguration`s Auto-Accept-Flag und
   `ShipCommunication.withConnectClientsTo(ALL|TRUSTED|NONE)` decken automatisches und

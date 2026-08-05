@@ -27,34 +27,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The {@link EEBusPeerHandler} represents exactly one paired remote EEBUS device
+ * The {@link EEBusPeerHandler} represents exactly one "real" EEBus device seen on the network
  * ({@code eebus:peer} Thing), identified by its SKI.
  *
  * <p>
- * Pairing itself is handled by the parent {@link EEBusHandler} (Bridge): this Thing's
- * mere existence adds its {@link EEBusPeerConfiguration#ski} to the Bridge's trusted-SKI
- * set. See CONCEPT.md §5.2.
- * </p>
- *
- * <p>
- * <strong>Architecture note (revised 2026-07-30):</strong> Client-role use-case detection
- * ({@code NodeManagement#addUseCaseListener(...)}) does <em>not</em> live here per-peer.
- * SPINE ties {@code addUseCaseListener} to the local {@code CEM} entity's UseCase list
- * (added once via {@code Device.getBuilder()...withUseCases(...)}, exactly like Server-role
- * use cases - verified against jeebus.spine's demo {@code ExampleUseCase}), not to an
- * individual peer. The callback receives all matching {@code UseCasePartner}s across every
- * paired peer at once, so registration and per-peer routing both happen centrally in
- * {@link EEBusHandler#startShipSpine} (see {@code EEBusMpcClientUseCase} for the first
- * implementation, CONCEPT.md §7.3/§8). This Thing/handler stays a thin per-peer status
- * holder; it does not itself talk to jeebus.spine.
- * </p>
- * <p>
- * <strong>Resolved</strong> (CONCEPT.md §7 items 2 and 9): {@code UseCasePartner
- * #getCommunicationAddress()} is confirmed to be an {@code "ip:port"} string, not the SKI.
- * {@link org.openhab.binding.eebus.internal.transport.EEBusMdnsBrowser} (owned by the parent
- * {@link EEBusHandler}, reachable via {@link EEBusHandler#getMdnsBrowser()}) maintains the
- * matching {@code communicationAddress -> SKI} map by browsing {@code _ship._tcp.local.}
- * directly; {@link EEBusHandler#peerThingUidForSki} completes the chain to this Thing's UID.
+ * <strong>Revised (CONCEPT.md §4.5):</strong> split out of the former single {@code eebus:peer}
+ * Thing type. This Thing is a child of {@code eebus:network} only, which holds no SHIP/SPINE
+ * identity of its own - there is nothing to pair against here. This handler is therefore a thin
+ * status holder that simply mirrors its parent Bridge's status; it performs no pairing, no SHIP
+ * handshake, and defines no channels. Pairing (trust, dynamically generated channels once
+ * use-case detection is implemented) is the responsibility of {@code EEBusOhPeerHandler}
+ * (Thing type {@code eebus:oh-peer}, child of {@code eebus:service}) instead.
  * </p>
  *
  * @author Bernd Weymann - Initial contribution
@@ -80,11 +63,8 @@ public class EEBusPeerHandler extends BaseThingHandler {
             return;
         }
 
-        // Adding this Thing already pairs it - see EEBusHandler#childHandlerInitialized(),
-        // which recomputes the Bridge's trusted-SKI set. Per-peer online/offline detection
-        // beyond following the Bridge's status is still a placeholder. Use-case detection
-        // itself is wired centrally in EEBusHandler#startShipSpine, not here - see class
-        // javadoc "Architecture note".
+        // No pairing/trust happens here - see class javadoc. This Thing just tracks that a
+        // real device with this SKI was seen on the network.
         logger.debug("EEBus peer '{}' configured with SKI {}", thing.getUID(), cfg.ski);
 
         applyBridgeStatus();

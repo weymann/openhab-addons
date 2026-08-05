@@ -4,9 +4,11 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<!-- Bridge: one local SHIP/SPINE service instance (one certificate/SKI). See CONCEPT.md. -->
+	<!-- Bridge: one local SHIP/SPINE service instance (one certificate/SKI). See CONCEPT.md §4.5:
+		label "EEBus OH Service" (openHAB-managed identity) distinguishes it from the real,
+		discovered devices represented by eebus:network/eebus:peer. -->
 	<bridge-type id="service">
-		<label>EEBus Service</label>
+		<label>EEBus OH Service</label>
 		<description>One local EEBus SHIP/SPINE service instance (own certificate, mDNS presence).</description>
 
 		<config-description>
@@ -175,21 +177,54 @@
 			EEBus Service identity.</description>
 	</bridge-type>
 
-	<!-- Thing: one paired remote EEBUS device. Creating this Thing is the pairing action - see CONCEPT.md §5.2. -->
+	<!-- Thing: a "real" EEBus device, ideally populated via mDNS discovery. See CONCEPT.md §4.5:
+		child of eebus:network only - no local SHIP/SPINE identity exists there to pair against,
+		so this Thing carries no channels and its SKI entry does not establish trust. -->
 	<thing-type id="peer">
 		<supported-bridge-type-refs>
-			<bridge-type-ref id="service"/>
 			<bridge-type-ref id="network"/>
 		</supported-bridge-type-refs>
 
 		<label>EEBus Peer</label>
-		<description>A paired remote EEBus device, identified by its SKI. Use case based channels are not yet implemented -
-			see CONCEPT.md §5.4/§7.</description>
+		<description>A real EEBus device seen on the network, identified by its SKI. Not paired - see
+			eebus:oh-peer for pairing
+			a real device to a local EEBus OH Service. CONCEPT.md §4.5.</description>
 
 		<config-description>
 			<parameter name="ski" type="text" required="true">
 				<label>SKI</label>
 				<description>Subject Key Identifier of the remote device (40 hex characters), e.g. read from its display or QR code.</description>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<!-- Thing: an openHAB-managed pairing with a real EEBus device. Configuring this Thing no
+		longer by itself performs pairing - see the "Pair"/"Unpair" Thing Actions and CONCEPT.md
+		§4.6 / docs/ADR/012-pairing-trust-property-and-actions.md. -->
+	<thing-type id="oh-peer">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="service"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH Peer</label>
+		<description>An openHAB-managed pairing with a real EEBus device, identified by its SKI. Use the "Pair"
+			Thing Action to
+			grant trust after configuring this Thing, and "Unpair" to revoke it again without
+			deleting this Thing. Use case based
+			channels are not yet implemented - see
+			CONCEPT.md §5.4/§7.</description>
+
+		<config-description>
+			<parameter name="ski" type="text" required="true">
+				<label>Trusted SKI</label>
+				<description>Subject Key Identifier of the remote device (40 hex characters). Offered as a selectable
+					list of known
+					devices/services (docs/ADR/013-oh-peer-ski-config-options-provider.md) - free text
+					entry (e.g. read from the
+					device's display or QR code) remains possible for a SKI not yet seen.
+					Selecting/entering a SKI here only configures
+					this Thing; it does not by itself grant trust - use
+					the "Pair" Thing Action afterwards.</description>
 			</parameter>
 			<parameter name="shipId" type="text">
 				<label>SHIP ID</label>

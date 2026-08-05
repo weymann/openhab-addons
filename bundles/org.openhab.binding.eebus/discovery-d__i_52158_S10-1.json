@@ -1,0 +1,684 @@
+{
+  "deviceId" : "d:_i:52158_S10-1",
+  "detailedDiscovery" : {
+    "specificationVersionList" : {
+      "specificationVersion" : [ {
+        "value" : "1.3.0"
+      } ]
+    },
+    "deviceInformation" : {
+      "description" : {
+        "deviceAddress" : {
+          "device" : "d:_i:52158_S10-1"
+        },
+        "deviceType" : "Generic",
+        "networkFeatureSet" : "smart",
+        "lastStateChange" : "added"
+      }
+    },
+    "entityInformation" : [ {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 0 ]
+        },
+        "entityType" : "DeviceInformation"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 1 ]
+        },
+        "entityType" : "CEM"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 2 ]
+        },
+        "entityType" : "CEM"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 3 ]
+        },
+        "entityType" : "CEM"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 4 ]
+        },
+        "entityType" : "CEM"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 5 ]
+        },
+        "entityType" : "CEM"
+      }
+    }, {
+      "description" : {
+        "entityAddress" : {
+          "entity" : [ 6 ]
+        },
+        "entityType" : "CEM"
+      }
+    } ],
+    "featureInformation" : [ {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 0,
+          "entity" : [ 0 ]
+        },
+        "featureType" : "NodeManagement",
+        "role" : "special",
+        "supportedFunction" : [ {
+          "function" : "nodeManagementBindingData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "nodeManagementBindingDeleteCall",
+          "possibleOperations" : { }
+        }, {
+          "function" : "nodeManagementBindingRequestCall",
+          "possibleOperations" : { }
+        }, {
+          "function" : "nodeManagementDetailedDiscoveryData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "nodeManagementSubscriptionData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "nodeManagementSubscriptionDeleteCall",
+          "possibleOperations" : { }
+        }, {
+          "function" : "nodeManagementSubscriptionRequestCall",
+          "possibleOperations" : { }
+        }, {
+          "function" : "nodeManagementUseCaseData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 0 ]
+        },
+        "featureType" : "DeviceClassification",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceClassificationManufacturerData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 1 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1000,
+          "entity" : [ 1 ]
+        },
+        "featureType" : "DeviceDiagnosis",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceDiagnosisHeartbeatData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "deviceDiagnosisStateData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ],
+        "description" : "Device diagnosis server feature"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 2 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1000,
+          "entity" : [ 2 ]
+        },
+        "featureType" : "DeviceDiagnosis",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceDiagnosisHeartbeatData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "deviceDiagnosisStateData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ],
+        "description" : "Device diagnosis server feature"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 3 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1000,
+          "entity" : [ 3 ]
+        },
+        "featureType" : "DeviceDiagnosis",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceDiagnosisHeartbeatData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "deviceDiagnosisStateData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ],
+        "description" : "Device diagnosis server feature"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 4 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1000,
+          "entity" : [ 4 ]
+        },
+        "featureType" : "DeviceDiagnosis",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceDiagnosisHeartbeatData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "deviceDiagnosisStateData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ],
+        "description" : "Device diagnosis server feature"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1,
+          "entity" : [ 5 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 7,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "ElectricalConnection",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "electricalConnectionCharacteristicListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "electricalConnectionDescriptionListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "electricalConnectionParameterDescriptionListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 10,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "LoadControl",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "loadControlLimitDescriptionListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "loadControlLimitListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            },
+            "write" : {
+              "partial" : { }
+            }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 11,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "Measurement",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "measurementConstraintsListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "measurementDescriptionListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "measurementListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 24,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "DeviceConfiguration",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceConfigurationKeyValueDescriptionListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            }
+          }
+        }, {
+          "function" : "deviceConfigurationKeyValueListData",
+          "possibleOperations" : {
+            "read" : {
+              "partial" : { }
+            },
+            "write" : {
+              "partial" : { }
+            }
+          }
+        } ]
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1000,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "DeviceDiagnosis",
+        "role" : "server",
+        "supportedFunction" : [ {
+          "function" : "deviceDiagnosisHeartbeatData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        }, {
+          "function" : "deviceDiagnosisStateData",
+          "possibleOperations" : {
+            "read" : { }
+          }
+        } ],
+        "description" : "Device diagnosis server feature"
+      }
+    }, {
+      "description" : {
+        "featureAddress" : {
+          "feature" : 1001,
+          "entity" : [ 6 ]
+        },
+        "featureType" : "Generic",
+        "role" : "client",
+        "description" : "Heartbeat device diagnosis client feature"
+      }
+    } ]
+  },
+  "useCaseDiscovery" : {
+    "useCaseInformation" : [ {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 2 ]
+      },
+      "actor" : "EnergyGuard",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 2 ]
+      },
+      "actor" : "MonitoringAppliance",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfGridConnectionPoint",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfGridConnectionPoint",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 6 ]
+      },
+      "actor" : "ControllableSystem",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 6 ]
+      },
+      "actor" : "GridConnectionPoint",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfGridConnectionPoint",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 1 ]
+      },
+      "actor" : "CEM",
+      "useCaseSupport" : [ {
+        "useCaseName" : "evChargingSummary",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "evseCommissioningAndConfiguration",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "coordinatedEvCharging",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7, 8 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "evCommissioningAndConfiguration",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5, 6, 7, 8 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "measurementOfElectricityDuringEvCharging",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "overloadProtectionByEvChargingCurrentCurtailment",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "optimizationOfSelfConsumptionDuringEvCharging",
+        "useCaseVersion" : "1.0.1",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 1 ]
+      },
+      "actor" : "EnergyGuard",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 1 ]
+      },
+      "actor" : "MonitoringAppliance",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "evStateOfCharge",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "RC2"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 5 ]
+      },
+      "actor" : "CEM",
+      "useCaseSupport" : [ {
+        "useCaseName" : "flexibleStartForWhiteGoods",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "RC1"
+      }, {
+        "useCaseName" : "flexibleStartForWhiteGoods",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "RC1"
+      }, {
+        "useCaseName" : "flexibleStartForWhiteGoods",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "RC1"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 3 ]
+      },
+      "actor" : "CEM",
+      "useCaseSupport" : [ {
+        "useCaseName" : "optimizationOfSelfConsumptionByHeatPumpCompressorFlexibility",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2 ],
+        "useCaseDocumentSubRevision" : "RC2"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 3 ]
+      },
+      "actor" : "EnergyGuard",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 3 ]
+      },
+      "actor" : "MonitoringAppliance",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 4 ]
+      },
+      "actor" : "EnergyGuard",
+      "useCaseSupport" : [ {
+        "useCaseName" : "limitationOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      }, {
+        "useCaseName" : "limitationOfPowerProduction",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    }, {
+      "address" : {
+        "device" : "d:_i:52158_S10-1",
+        "entity" : [ 4 ]
+      },
+      "actor" : "MonitoringAppliance",
+      "useCaseSupport" : [ {
+        "useCaseName" : "monitoringOfPowerConsumption",
+        "useCaseVersion" : "1.0.0",
+        "useCaseAvailable" : true,
+        "scenarioSupport" : [ 1, 2, 3, 4, 5 ],
+        "useCaseDocumentSubRevision" : "release"
+      } ]
+    } ]
+  }
+}

@@ -16,15 +16,17 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
  * The {@link EEBusPeerConfiguration} class contains the configuration parameters of the
- * {@code eebus:peer} Thing, i.e. of exactly one paired remote EEBUS device.
+ * {@code eebus:peer} Thing, i.e. of exactly one "real" EEBus device seen on the network.
  *
  * <p>
- * Pairing in this binding follows the standard openHAB Bridge/Thing convention: creating
- * an {@code eebus:peer} Thing under a Bridge <strong>is</strong> the act of pairing — its
- * {@link #ski} is added to the Bridge's trusted-SKI set (see
- * {@code EEBusBridgeHandler#recomputeTrustedSkis()}). Removing the Thing revokes trust.
- * There is deliberately no separate "approve/reject" action (see CONCEPT.md §6 decision 4:
- * no PIN pairing, and §5.2: pairing == Thing lifecycle, not a bespoke API).
+ * <strong>Revised (CONCEPT.md §4.5):</strong> this Thing is a child of {@code eebus:network}
+ * only, which holds no SHIP/SPINE identity of its own - there is nothing for it to pair
+ * against here, so adding this Thing does <strong>not</strong> establish trust and it never
+ * performs a SHIP handshake (hence no {@code shipId} field - that only applies once a device
+ * is actually paired, see {@code EEBusOhPeerConfiguration}). It is a passive record, ideally
+ * populated by {@code EEBusMdnsDiscoveryParticipant}'s Inbox suggestions, of a device seen on
+ * the network. Pairing (trust) happens by creating an {@code eebus:oh-peer} Thing under an
+ * {@code eebus:service} Bridge instead - see {@code EEBusOhPeerConfiguration}.
  * </p>
  *
  * @author Bernd Weymann - Initial contribution
@@ -34,19 +36,9 @@ public class EEBusPeerConfiguration {
 
     /**
      * Subject Key Identifier (SKI) of the remote device, 40 lowercase hex characters.
-     * For v1, this must be entered manually (e.g. read from the remote device's own
-     * display/QR code per SHIP Installation Process) — see CONCEPT.md §6 for why an
-     * auto-discovery inbox of unpaired peers is deferred.
-     *
-     * TODO(CONCEPT §7.4): decide whether to request a ShipCommunication extension (raw mDNS
-     * events) to enable a real discovery inbox, or keep manual SKI entry permanently.
+     * Ideally taken over from an {@code EEBusMdnsDiscoveryParticipant} Inbox suggestion; can
+     * also be entered manually (e.g. read from the remote device's own display/QR code per
+     * SHIP Installation Process).
      */
     public String ski = "";
-
-    /**
-     * SHIP-ID of the remote device. Empty until learned during the first successful
-     * handshake; the handler persists it here via {@code updateConfiguration()} once
-     * known, so it does not need to be re-learned on every restart.
-     */
-    public String shipId = "";
 }

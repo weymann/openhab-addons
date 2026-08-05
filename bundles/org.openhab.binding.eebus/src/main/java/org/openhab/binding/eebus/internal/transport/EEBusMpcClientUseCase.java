@@ -20,9 +20,6 @@ import java.util.function.Function;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.core.items.Metadata;
-import org.openhab.core.library.types.QuantityType;
-import org.openhab.core.library.unit.Units;
 import org.openmuc.jeebus.spine.api.CommunicationPartnerFeatureRequirement;
 import org.openmuc.jeebus.spine.api.Device;
 import org.openmuc.jeebus.spine.api.Entity;
@@ -52,9 +49,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Detects the MPC (Monitoring of Power Consumption) use case in the **Client role** — i.e.
  * openHAB looks for a paired peer offering MPC as the "CEM" server actor (e.g. a real inverter
- * or energy management system) and mirrors its power reading into a local Item. This is the
- * consumer-side counterpart to {@link EEBusMpcServerUseCase} (CONCEPT.md §1, §5.4.1, §5.4.2,
- * §7 item 3/8 follow-up: Client-role wiring for {@code supportedUseCasesClient}).
+ * or energy management system) and reads its power measurement via SPINE subscription. This is
+ * the consumer-side counterpart to {@link EEBusMpcServerUseCase} (CONCEPT.md §1, §5.4.1,
+ * §5.4.2, §7 item 3/8 follow-up: Client-role wiring for {@code supportedUseCasesClient}).
  *
  * <p>
  * <strong>How detection works</strong> (verified against jeebus.spine's
@@ -71,11 +68,15 @@ import org.slf4j.LoggerFactory;
  * <p>
  * <strong>Per-peer routing:</strong> unlike the Server-role use case (one value, Bridge-wide),
  * Client-role data is inherently per-peer - several paired peers could each offer MPC. Each
- * found {@link UseCasePartner} is resolved back to a paired {@code eebus:peer} Thing UID via
- * the {@code peerThingUidResolver} passed into the constructor (composed in
+ * found {@link UseCasePartner} is resolved back to a paired {@code eebus:oh-peer} Thing UID via
+ * the {@code ohPeerThingUidResolver} passed into the constructor (composed in
  * {@code org.openhab.binding.eebus.internal.handler.EEBusHandler} from
- * {@link EEBusMdnsBrowser#skiForCommunicationAddress}), then matched against
- * {@code eebus="MPC.power" [peer="<uid>"]} Item metadata (CONCEPT.md §4.2).
+ * {@link EEBusMdnsBrowser#skiForCommunicationAddress}). Per CONCEPT.md §4.2, this data belongs
+ * on dynamically generated Channels on that {@code eebus:oh-peer} Thing, <strong>not</strong>
+ * Item metadata (metadata is Server-role only as of CONCEPT.md §4.5) - that Channel mechanism
+ * is not yet implemented (CONCEPT.md §5.4.1 "zurückgestellt"/§7 item 8), so
+ * {@link #onUseCasePartnersFound} currently only logs what it detects; see that method's
+ * comment.
  * </p>
  *
  * <p>
@@ -96,8 +97,7 @@ import org.slf4j.LoggerFactory;
 public class EEBusMpcClientUseCase implements UseCase {
 
     private final Logger logger = LoggerFactory.getLogger(EEBusMpcClientUseCase.class);
-    private final EEBusMetadataService metadataService;
-    private final Function<String, Optional<String>> peerThingUidResolver;
+    private final Function<String, Optional<String>> ohPeerThingUidResolver;
 
     @Inject
     private @Nullable Entity entity;
@@ -105,10 +105,12 @@ public class EEBusMpcClientUseCase implements UseCase {
     private @Nullable FeatureAddressType address;
     private @Nullable Device device;
 
-    public EEBusMpcClientUseCase(EEBusMetadataService metadataService,
-            Function<String, Optional<String>> peerThingUidResolver) {
-        this.metadataService = metadataService;
-        this.peerThingUidResolver = peerThingUidResolver;
+    /**
+     * @param ohPeerThingUidResolver resolves a SPINE {@code communicationAddress} to the paired
+     *            {@code eebus:oh-peer} Thing UID, if any (see class javadoc "Per-peer routing")
+     */
+    public EEBusMpcClientUseCase(Function<String, Optional<String>> ohPeerThingUidResolver) {
+        this.ohPeerThingUidResolver = ohPeerThingUidResolver;
     }
 
     @Override
@@ -122,10 +124,11 @@ public class EEBusMpcClientUseCase implements UseCase {
     @Override
     public String getName() {
         // Must match the use case name a real peer's Server role advertises. Kept identical to
-        // EEBusMpcServerUseCase#getName() for interop with another instance of this binding;
-        // the exact wire-format use case name string is not independently verified against the
-        // primary EEBUS spec (same caveat as the Server-role class).
-        return "MonitoringOfPowerConsumption";
+        // EEBusMpcServerUseCase#getName() for interop with another instance of this binding.
+        // Confirmed 2026-08-05 against a real Hager Energy S10's discovery JSON (jeebus.spine's
+        // DiscoveryLogger output, see docs/ADR/011-usecasename-lowercamelcase.md): the wire
+        // format is lowerCamelCase, not PascalCase - was "MonitoringOfPowerConsumption" before.
+        return "monitoringOfPowerConsumption";
     }
 
     @Override
@@ -201,24 +204,17 @@ public class EEBusMpcClientUseCase implements UseCase {
                         partner.getCommunicationAddress());
                 continue;
             }
-            Optional<String> peerThingUid = peerThingUidResolver.apply(partner.getCommunicationAddress());
-            if (peerThingUid.isEmpty()) {
-                logger.debug("MPC partner at {} could not be resolved to a paired eebus:peer Thing (mDNS not (yet) "
+            Optional<String> ohPeerThingUid = ohPeerThingUidResolver.apply(partner.getCommunicationAddress());
+            if (ohPeerThingUid.isEmpty()) {
+                logger.debug("MPC partner at {} could not be resolved to a paired eebus:oh-peer Thing (mDNS not (yet) "
                         + "seeing it?), skipping", partner.getCommunicationAddress());
                 continue;
             }
-            Optional<Metadata> metadata = metadataService.find("MPC", "power", peerThingUid.get());
-            if (metadata.isEmpty()) {
-                logger.debug("No Item declares eebus=\"MPC.power\" [peer=\"{}\"] - ignoring detected MPC partner",
-                        peerThingUid.get());
-                continue;
-            }
-            String itemName = EEBusMetadataService.itemNameOf(metadata.get());
-            subscribe(featureAddress, itemName);
+            subscribe(featureAddress, ohPeerThingUid.get());
         }
     }
 
-    private void subscribe(FeatureAddressType featureAddress, String itemName) {
+    private void subscribe(FeatureAddressType featureAddress, String ohPeerThingUid) {
         Device localDevice = this.device;
         if (localDevice == null) {
             return;
@@ -227,8 +223,8 @@ public class EEBusMpcClientUseCase implements UseCase {
 
         // Resolve the description once (measurementId -> scopeType/measurementType mapping, see
         // class javadoc), then subscribe for ongoing MeasurementListData notifications using
-        // that ID. An initial read is issued as well so the Item gets a value immediately rather
-        // than waiting for the peer's next spontaneous notification.
+        // that ID. An initial read is issued as well so the eventual Channel gets a value
+        // immediately rather than waiting for the peer's next spontaneous notification.
         CmdType descriptionReadCmd = new CmdType()
                 .withMeasurementDescriptionListData(new MeasurementDescriptionListDataType());
         nodeManagement.requestRead(featureAddress, descriptionReadCmd).thenAccept(result -> {
@@ -242,18 +238,19 @@ public class EEBusMpcClientUseCase implements UseCase {
 
             CmdType valueReadCmd = new CmdType().withMeasurementListData(new MeasurementListDataType());
             nodeManagement.requestRead(featureAddress, valueReadCmd)
-                    .thenAccept(valueResult -> applyMeasurement(valueResult, id, itemName)).exceptionally(ex -> {
-                        logger.debug("Initial MPC.power read failed for Item '{}'", itemName, ex);
+                    .thenAccept(valueResult -> applyMeasurement(valueResult, id, ohPeerThingUid)).exceptionally(ex -> {
+                        logger.debug("Initial MPC.power read failed for oh-peer '{}'", ohPeerThingUid, ex);
                         return null;
                     });
 
             nodeManagement.requestSubscription(featureAddress, FeatureTypeEnumType.MEASUREMENT,
-                    notification -> applyMeasurement(notification, id, itemName)).exceptionally(ex -> {
-                        logger.warn("Failed to subscribe to MPC.power for Item '{}'", itemName, ex);
+                    notification -> applyMeasurement(notification, id, ohPeerThingUid)).exceptionally(ex -> {
+                        logger.warn("Failed to subscribe to MPC.power for oh-peer '{}'", ohPeerThingUid, ex);
                         return null;
                     });
         }).exceptionally(ex -> {
-            logger.warn("Failed to read MeasurementDescriptionListData for MPC partner (Item '{}')", itemName, ex);
+            logger.warn("Failed to read MeasurementDescriptionListData for MPC partner (oh-peer '{}')", ohPeerThingUid,
+                    ex);
             return null;
         });
     }
@@ -286,7 +283,7 @@ public class EEBusMpcClientUseCase implements UseCase {
         return Optional.empty();
     }
 
-    private void applyMeasurement(RequestResult result, long measurementId, String itemName) {
+    private void applyMeasurement(RequestResult result, long measurementId, String ohPeerThingUid) {
         MeasurementListDataType list = result.getCmd().getMeasurementListData();
         if (list == null) {
             return;
@@ -298,7 +295,13 @@ public class EEBusMpcClientUseCase implements UseCase {
             return;
         }
         double watts = new ScaledNumberWrapper(data.get().getValue()).toDouble();
-        metadataService.updateState(itemName, new QuantityType<>(watts, Units.WATT));
+        // Not yet delivered anywhere: per CONCEPT.md §4.2/§4.5, this belongs on a dynamically
+        // generated Channel on the ohPeerThingUid Thing, which is not yet implemented (§5.4.1,
+        // §7 item 8) - logging at debug level so the detection/subscription path above remains
+        // observable and testable in the meantime, instead of silently dropping the value or
+        // reusing the now Server-role-only eebus Item metadata mechanism (§4.5) for this.
+        logger.debug("MPC.power = {} W for oh-peer '{}' (not yet delivered - dynamic Channels not implemented, "
+                + "see CONCEPT.md §5.4.1)", watts, ohPeerThingUid);
     }
 
     @Override

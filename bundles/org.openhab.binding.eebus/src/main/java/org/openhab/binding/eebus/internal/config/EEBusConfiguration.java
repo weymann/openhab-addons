@@ -27,6 +27,14 @@ import org.eclipse.jdt.annotation.Nullable;
 @NonNullByDefault
 public class EEBusConfiguration {
 
+    /**
+     * Configuration parameter key for {@link #port}, matching the {@code port}
+     * config-description parameter in {@code thing-types.xml}. Used by {@code EEBusHandler} to
+     * write an auto-assigned port back into the persisted configuration via
+     * {@code editConfiguration()}/{@code updateConfiguration(Configuration)}.
+     */
+    public static final String PARAM_PORT = "port";
+
     /** 5-character vendor code assigned by the EEBUS Initiative, e.g. {@code "12345"}. */
     public String vendorCode = "";
 
