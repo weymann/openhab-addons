@@ -371,6 +371,62 @@ beliebigen anderen Bindings, kein `ChannelTypeProvider` nötig, und die Bridge-C
 Checkboxen in §4.3) legt bereits fest, welche Use-Cases überhaupt angeboten werden — die
 Metadaten binden dann nur noch die konkreten Datenpunkte an Items.
 
+### 4.2.2 Dynamische Channels — Gating, Sichtbarkeit und Struktur (Client-Rolle) — **entschieden (2026-08-06)**
+
+**Auslöser:** §4.2 legt fest, dass die Client-Rolle über dynamisch erzeugte Channels läuft, aber
+weder wie diese Channels technisch entstehen, noch wie mehrere Datenpunkte pro Use-Case
+strukturiert werden, war bisher festgelegt. Konkret sichtbar an
+`EEBusMpcClientUseCase#applyMeasurement()`: der MPC-Leistungswert eines gepairten Peers wird
+bereits zuverlässig gelesen, aber nur geloggt statt auf einen Channel geschrieben — mangels
+Channel.
+
+**Vier Entscheidungen:**
+
+1. **Channel-Erzeugung: statischer Channel-Type + Laufzeit-`editThing()`, kein
+   `ChannelTypeProvider`.** Widerspricht der Andeutung in §4.2.1 ("dort erzeugt der
+   ChannelTypeProvider-Mehraufwand genau den Automatismus..."), die vom tatsächlichen
+   Umsetzungsstand überholt ist: aktuell existiert nur eine einzige Client-Rolle-UseCase-Klasse
+   (`EEBusMpcClientUseCase`), das Datenpunkt-Vokabular ist also klein und vorab bekannt genug,
+   um als normale `channel-type`-Deklarationen in `thing-types.xml` gepflegt zu werden. Ein
+   `ChannelTypeProvider` (voll dynamisch generierte Channel-Types für beliebige, erst zur
+   Laufzeit bekannte Use-Cases) bleibt die Lösung, sobald die Zahl der Use-Cases das nicht mehr
+   rechtfertigt — für v1 wäre das verfrühter Aufwand. Zugriff auf `EEBusOhPeerHandler` (nicht nur
+   dessen Thing-UID als String, wie bisher beim `ohPeerThingUidResolver`) ist dafür notwendig,
+   da nur der Handler `editThing()`/`updateState()` aufrufen kann.
+1. **Gating: nur konfigurierte Use-Cases erzeugen Channels, unabhängig davon, was Discovery
+   tatsächlich liefert.** `supportedUseCasesClient`/`supportedUseCasesServer` auf der
+   `eebus:service`-Bridge legen abschließend fest, welche Use-Case-Klassen überhaupt bei SPINE
+   registriert werden (`Device.getBuilder()...withUseCases(...)`) — ein Peer, der zusätzliche,
+   nicht konfigurierte Use-Cases anbietet, wird dafür gar nicht erst erkannt, weil keine
+   passende `addUseCaseListener`-Registrierung existiert. Das ist keine neue Einschränkung,
+   sondern macht nur explizit, was der bestehende Code (`cfg.supportedUseCasesClient.contains
+   ("MPC")`) ohnehin schon erzwingt.
+1. **Sichtbarkeit erkannter Use-Cases: Thing-Property auf dem `eebus:oh-peer`.** Sobald ein
+   Use-Case bei einem gepairten Peer erkannt wird, wird das als Thing-Property auf dem
+   jeweiligen `eebus:oh-peer` festgehalten — Key = Use-Case-Name in Kleinschreibung (z. B.
+   `lpc`), Value = `server`/`client`. **Offener Punkt (Rückfrage im Chat gestellt):** die genaue
+   Bedeutung von Value ist noch zu klären — beschreibt es die Rolle, die der **Peer** für diesen
+   Use-Case spielt (aus SPINE-Actor-Sicht), oder die Rolle, die **wir selbst** gegenüber diesem
+   Peer einnehmen? Bei nur einer bisher implementierten Client-Rolle-Klasse (MPC) lässt sich das
+   noch nicht anhand von Code-Präzedenz entscheiden.
+1. **Struktur: eine Channel Group pro Use-Case, ein Channel pro Datenpunkt darin.** Statt eines
+   flachen Channel-Namensraums pro Thing bekommt jeder erkannte Use-Case eine eigene Channel
+   Group (Group-ID = Use-Case-Name, z. B. `lpc`), darunter je ein Channel pro SPINE-Datenpunkt
+   (z. B. `lpc#limit-active`, `lpc#limit-value`, `lpc#limit-duration`). Vermeidet
+   Namenskollisionen zwischen Use-Cases mit ähnlichen Datenpunktnamen und spiegelt die
+   SPINE-Struktur (ein Feature/eine Funktion pro Use-Case-Szenario) direkter als ein einzelner
+   flacher Channel pro Use-Case.
+
+**Channels bleiben nach Depairing/Verbindungsabbruch bestehen** (letzter bekannter Wert, Item
+bleibt verlinkt) — kein automatisches Entfernen beim `unpair()` (§4.6) oder Verbindungsverlust.
+
+**Nächster Schritt:** `$Spec` erstellt eine Datenpunkt-/Channel-Tabelle je Use-Case,
+primärquellenbasiert (LPC/LPP: `C:\Projects\eebus\EEBus_UC_TS_LimitationOfPowerConsumption_
+V1.0.0_public.pdf`; MPC seit 2026-08-06 ebenfalls primärquellenbasiert:
+`C:\Projects\eebus\EEBus_UC_TS_MonitoringOfPowerConsumption_V1.0.0_public.pdf`, siehe §5.4.2/
+§5.4.3) — als Vorlage für `channel-type`-Deklarationen in `thing-types.xml`. Scope für die erste
+Umsetzung: MPC (einziger bisher implementierter Client-Rolle-Use-Case).
+
 ### 4.3 Bridge-Konfiguration: Use-Case-Auswahl per Checkbox
 
 Die Bridge (`eebus:service`) bekommt zwei Multi-Select-Konfigurationsparameter (in
@@ -758,8 +814,10 @@ Primärtext verifiziert") ist für LPC/LPP jetzt vollständig aufgelöst — die
 (Server-Rolle) übersetzt, siehe §7 Punkt 13. Die Client-Rolle (openHAB als Energy Guard, die
 einen fremden Controllable System-Peer steuert) bleibt weiterhin offen.
 
-**MPC und MGCP bleiben auf Sekundärquellen-Stand** (`eebus-go`, siehe unten) — keine TS-PDF für
-diese beiden in `C:\Projects\eebus` vorhanden, nur für LPC/LPP.
+**MPC ist seit 2026-08-06 primärquellenbasiert verifiziert**
+(`EEBus_UC_TS_MonitoringOfPowerConsumption_V1.0.0_public.pdf`, jetzt in `C:\Projects\eebus`
+vorhanden) — Details in §5.4.3. **MGCP bleibt auf Sekundärquellen-Stand** (`eebus-go`) — keine
+TS-PDF für MGCP in `C:\Projects\eebus` vorhanden.
 
 **MPC** (`usecases/ma/mpc`) — im Referenzcode die **Client-/Konsumentenseite** (trotz Package-
 Name "ma" registriert `AddFeatures()` nur Client-Features — wir lesen also von einem Peer, der
@@ -777,11 +835,11 @@ des Nutzers ab):
 | 5 | nein | ElectricalConnection, Measurement |
 
 Client-Features (unsere Bridge, Konsumentenrolle): `ElectricalConnection`, `Measurement`
-(jeweils Client). **Offen:** welche der fünf Szenarien welchem der von jeebus.spine bereits
-bereitgestellten Measurement-Funktionsbausteine entspricht (`MeasurementListDataFunction` =
-Gesamtwert vermutlich Szenario 1, `MeasurementSeriesListDataFunction` = Zeitreihe, je-Phase
-via `ElectricalConnectionCharacteristicListData`/`ParameterDescriptionListData` — nicht anhand
-des Referenzcodes, nur anhand von jeebus.spine-Klassennamen vermutet, **nicht verifiziert**).
+(jeweils Client). Primärquelle bestätigt (Table 20, S. 45): `Measurement` liefert
+`measurementDescriptionListData` (M), `measurementConstraintsListData` (R/R/R/R/M je Szenario
+1–5) und `measurementListData` (M) — Szenario 1 nutzt also `measurementListData` für den
+Gesamtwert; die Feld-/Funktionszuordnung der übrigen Szenarien ist jetzt textlich verifiziert
+(Tables 1–6, siehe §5.4.3), nicht mehr nur anhand von jeebus.spine-Klassennamen vermutet.
 
 **MGCP** (`usecases/ma/mgcp`) — ebenfalls Client-/Konsumentenseite im Referenzcode, Partner-
 Entity-Typen `CEM`/`GridConnectionPointOfPremises`:
@@ -816,6 +874,88 @@ Funktionsbausteine kapseln) abgeleitet und mit einem echten Peer getestet, statt
 den PDF-Text zu warten — Risiko: falsch abgeleitete `PresenceIndication`-Werte führen bestenfalls
 zu einer zu strengen/zu laxen Validierung, nicht zu Datenkorruption (siehe
 `MeasurementFeature#setStrictMode`, das genau für diesen Fall existiert).
+
+#### 5.4.3 Vollständige Use-Case-Datenpunkttabelle (LPC + MPC) — primärquellenverifiziert (2026-08-06)
+
+**Zweck:** Vorlage für `channel-type`-Kandidaten für beide bisher primärquellenverifizierten
+Client-Rolle-Use-Cases — siehe §4.2.2 Punkt 4 ("Channel Group pro Use-Case, ein Channel pro
+Datenpunkt"). **Nicht Teil der aktuellen Umsetzung** (Scope für die erste Umsetzung bleibt MPC,
+§4.2.2; die LPC-Zeilen sind Referenz für eine spätere Erweiterung). Primärquellen:
+
+- LPC: `EEBus_UC_TS_LimitationOfPowerConsumption_V1.0.0_public.pdf`, Tables 3–6
+  (Szenario-Datenpunkte, S. 20–24), Tables 22–23 (Funktion `loadControlLimitListData`, S. 53–54)
+  und Table 27 (Funktion `electricalConnectionCharacteristicListData`, S. 57–58).
+- MPC: `EEBus_UC_TS_MonitoringOfPowerConsumption_V1.0.0_public.pdf`, Tables 1–6
+  (Szenario-Datenpunkte, S. 10–14) und Tables 19–20 (Feature-/Funktionsebene Actor
+  "Monitored Unit", S. 44–46).
+
+##### LPC — Energy Guard (Client) ↔ Controllable System (Server)
+
+**Szenario 1 — Control active power consumption limit** (Table 3 verdichtet einen einzigen
+konzeptionellen Datenpunkt "Active Power Consumption Limit"; Tables 22/23 zeigen, dass dieser
+auf SPINE-Ebene aus mehreren einzeln lesbaren/schreibbaren Feldern der Funktion
+`loadControlLimitListData` besteht — genau die Granularität, die §4.2.2 Punkt 4 als
+"ein Channel pro Datenpunkt" verlangt):
+
+| Kandidat-Channel-ID | SPINE-Feld (Table 23) | Typ | Item-Type | Bemerkung |
+|---|---|---|---|---|
+| `limit-active` | `isLimitActive` | `"true"`/`"false"` | `Switch` | [LPC-007]/[LPC-008]/[LPC-009]; wenn `false`, werden `value`/`timePeriod` ignoriert |
+| `limit-value` | `value.number` + `value.scale` | Scaled Number, Einheit `"W"` | `Number:Power` | [LPC-001]/[LPC-011]; laut Table 3 ≥0, Vorzeichenkonvention siehe Doc §2.8.1 |
+| `limit-duration` | `timePeriod.endTime` | absoluter Zeitpunkt | `Number:Time` _(abgeleitet: Restdauer = `endTime - now`, keine 1:1-SPINE-Feld-Übernahme — Designentscheidung, noch nicht verifiziert)_ | [LPC-004]; fehlt/leer = unbefristet |
+| _(optional)_ `limit-changeable` | `isLimitChangeable` | `"true"`/`"false"` | `Switch` (read-only) | Fähigkeits-Flag, kein eigentlicher Nutzdatenpunkt — vermutlich kein eigener Channel nötig |
+
+**Szenario 2 — Failsafe values** (Table 24, SPINE-Feldebene noch nicht im Detail gegen Table 3
+abgeglichen wie Szenario 1, aber Datenpunkte selbst primärquellenverifiziert):
+
+| Kandidat-Channel-ID | Datenpunkt (Table 3) | Item-Type | Bemerkung |
+|---|---|---|---|
+| `failsafe-limit-value` | Failsafe Consumption Active Power Limit [LPC-021] | `Number:Power` | Grenzwert, der bei Kommunikationsausfall gilt |
+| `failsafe-duration-minimum` | Failsafe Duration Minimum [LPC-022] | `Number:Time` | Mindestdauer, die der Failsafe-Wert nach Ausfall gehalten wird |
+
+**Szenario 3 — Heartbeat**: Heartbeat of Energy Guard / Controllable System [LPC-031/032] —
+vermutlich kein Nutzer-Channel (Protokoll-intern, reine Liveness-Prüfung, kein für den Nutzer
+relevanter Datenpunkt).
+
+**Szenario 4 — Constraints** (Table 27, Funktion `electricalConnectionCharacteristicListData`,
+jetzt vollständig extrahiert): zwei `ElectricalConnectionCharacteristic`-Einträge unter
+derselben `electricalConnectionId`/`parameterId` — bei koexistierendem MPC auf demselben Peer
+identisch mit dessen `ElectricalConnection`-IDs:
+
+| Kandidat-Channel-ID | SPINE-Feld (Table 27) | Typ | Item-Type | Bemerkung |
+|---|---|---|---|---|
+| `nominal-max` | `characteristicType: "powerConsumptionNominalMax"`, `value.number`+`value.scale`, `unit: "W"` | Scaled Number | `Number:Power` (read-only) | [LPC-041]; `characteristicContext: "entity"` |
+| `contractual-nominal-max` | `characteristicType: "contractualConsumptionNominalMax"`, `value.number`+`value.scale`, `unit: "W"` | Scaled Number | `Number:Power` (read-only) | [LPC-042]; gleiche Struktur, vertraglich statt technisch begrenzter Wert |
+
+LPP ist strukturell identisch (§5.4.2) — dieselbe Tabelle gilt mit gespiegeltem Naming
+(`ActivePowerProductionLimit`, `powerProductionNominalMax`, `contractualProductionNominalMax`
+etc.).
+
+##### MPC — Monitoring Appliance (Client) ↔ Monitored Unit (Server)
+
+Alle fünf Szenarien nutzen `Measurement`/`ElectricalConnection` (Table 20); Szenario 1 ist als
+einziges mandatory (Table 1) und bereits implementiert (`EEBusMpcClientUseCase`, `mpc#power`).
+Phasenbezogene Datenpunkte (Szenarien 1 Phase-Specific, 3, 4) sind laut Table 1 nur
+`R*1`/`O*1` — nur relevant, wenn der Peer seine angeschlossenen Phasen kennt/meldet.
+
+| Szenario | Mandatory | Datenpunkt (Table-Name, [ID]) | Kandidat-Channel-ID | Item-Type |
+|---|---|---|---|---|
+| 1 – Monitor power | M | Total Active Power [MPC-011] | `power` _(implementiert)_ | `Number:Power` |
+| 1 – Monitor power | O*1 | Phase-Specific Active Power A/B/C [MPC-012/1,2,3] | `power-phase-a`/`-b`/`-c` | `Number:Power` |
+| 2 – Monitor energy | O (M*1) | Total Consumed Energy [MPC-021] | `energy-consumed` | `Number:Energy` |
+| 2 – Monitor energy | O (M*2) | Total Produced Energy [MPC-022] | `energy-produced` | `Number:Energy` |
+| 3 – Monitor current | R (R*1) | Phase-Specific AC Current A/B/C [MPC-031/1,2,3] | `current-phase-a`/`-b`/`-c` | `Number:ElectricCurrent` |
+| 4 – Monitor voltage | O (M*1) | AC Voltage A-neutral/B-neutral/C-neutral [MPC-041/1,2,3] | `voltage-phase-a`/`-b`/`-c` | `Number:ElectricPotential` |
+| 4 – Monitor voltage | O (O*1) | AC Voltage A-B/B-C/C-A [MPC-041/4,5,6] | `voltage-a-b`/`-b-c`/`-c-a` | `Number:ElectricPotential` |
+| 5 – Monitor frequency | O | AC Frequency [MPC-051] | `frequency` | `Number:Frequency` |
+
+Feature-/Funktionsebene (Table 20, Actor "Monitored Unit"): `ElectricalConnection`
+(`electricalConnectionDescriptionListData` M, `electricalConnectionParameterDescriptionListData`
+M — für alle Szenarien) liefert die Struktur (welche `electricalConnectionId`/`parameterId` zu
+welcher Phase gehört); `Measurement` (`measurementDescriptionListData` M,
+`measurementConstraintsListData` R/R/R/R/M je Szenario 1–5, `measurementListData` M) liefert die
+eigentlichen Werte. Szenario 1 ("Total Active Power") entspricht damit
+`measurementListData` für den ohne Phasenbezug beschriebenen `measurementId` — konsistent mit
+der bereits implementierten `EEBusMpcClientUseCase#applyMeasurement()`.
 
 ### 5.5 Use-Case-Bereitstellung (Server-Rolle) — **neu, durch Rückfrage aufgedeckt**
 
