@@ -35,6 +35,7 @@ import org.openhab.binding.mercedesme.internal.exception.MercedesMeApiException;
 import org.openhab.binding.mercedesme.internal.exception.MercedesMeAuthException;
 import org.openhab.binding.mercedesme.internal.exception.MercedesMeBindingException;
 import org.openhab.binding.mercedesme.internal.utils.Mapper;
+import org.openhab.binding.mercedesme.internal.utils.Utils;
 import org.openhab.core.auth.client.oauth2.AccessTokenRefreshListener;
 import org.openhab.core.auth.client.oauth2.AccessTokenResponse;
 import org.openhab.core.i18n.LocaleProvider;
@@ -66,13 +67,13 @@ import com.daimler.mbcarkit.proto.Vehicleapi.AppTwinPendingCommandsResponse;
  * The {@link AccountHandler} acts as Bridge between MercedesMe Account and the associated vehicles
  *
  * @author Bernd Weymann - Initial contribution
+ * @author Bernd Weymann - Added force update action
  */
 @NonNullByDefault
 public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefreshListener {
     private static final int VARIANCE_PERCENT = 15; // 15% variance for refresh interval
 
     // placeholders replacing personal data in TRACE output - see anonymizeForTrace()
-    private static final String TRACE_VIN_PLACEHOLDER = "ANONYMIZED";
     private static final double TRACE_POSITION_LAT_PLACEHOLDER = 1.23;
     private static final double TRACE_POSITION_LONG_PLACEHOLDER = 4.56;
 
@@ -86,7 +87,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
     private final Storage<String> storage;
     private final HttpClient httpClient;
 
-    private @Nullable ScheduledFuture<?> refreshScheduler;
+    // written by the scheduler thread and by ThingActions, which run on a rule thread
+    private volatile @Nullable ScheduledFuture<?> refreshScheduler;
     private List<PushMessage> eventQueue = new ArrayList<>();
     private boolean updateRunning = false;
 
@@ -120,7 +122,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         } else {
             api = new Websocket(this, httpClient, config, localeProvider, storage);
             api.websocketDispose(false);
-            scheduler.schedule(this::refresh, 2, TimeUnit.SECONDS);
+            // tracked like every other refresh, otherwise a forced update or a keep alive could not move it
+            scheduleRefresh(2);
         }
     }
 
@@ -142,6 +145,19 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             authorize();
         }
         scheduleRefresh(nextRefreshSeconds());
+    }
+
+    /**
+     * Refreshes vehicle data immediately, outside the regular refresh interval. The interval is restarted, so the
+     * next regular update is again {@code refreshInterval} minutes away instead of following shortly after this
+     * out-of-order update.
+     *
+     * @param vin vehicle which requested the force update - used for logging only
+     */
+    public void forceUpdate(String vin) {
+        logger.trace("Force update requested by {} - refreshing immediately and restarting refresh interval",
+                Utils.maskVin(vin));
+        refresh();
     }
 
     private void scheduleRefresh(long delayInSeconds) {
@@ -303,9 +319,8 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             // TRACE-only dump of the raw update in protobuf TextFormat, meant to be turned into a test fixture;
             // VIN and GPS position are anonymized first (see anonymizeForTrace()).
             if (logger.isTraceEnabled()) {
-                vsu.getVehicleStatusUpdatesMap()
-                        .forEach((vin, update) -> logger.trace("Raw VehicleStatusUpdate for {}:\n{}",
-                                TRACE_VIN_PLACEHOLDER, anonymizeForTrace(update)));
+                vsu.getVehicleStatusUpdatesMap().forEach((vin, update) -> logger
+                        .trace("Raw VehicleStatusUpdate for {}:\n{}", Utils.maskVin(vin), anonymizeForTrace(update)));
             }
             Map<String, VehicleStatusAttributes> converted = new HashMap<>();
             vsu.getVehicleStatusUpdatesMap().forEach((vin, update) -> converted.put(vin,
@@ -348,19 +363,21 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         } else if (pm.hasDebugMessage()) {
             logger.trace("MB Debug Message: {}", pm.getDebugMessage().getMessage());
         } else {
-            logger.trace("MB Message: {} not handled", pm.getAllFields());
+            logger.trace("MB Message: {} not handled", Utils.maskVinsIn(pm.getAllFields().toString()));
         }
     }
 
     /**
-     * Returns a copy of the given {@link VehicleStatusUpdate} with the personal data ({@code fin_or_vin} and the
-     * GPS position) replaced by fixed placeholders, so it is safe to log at TRACE level.
+     * Returns a copy of the given {@link VehicleStatusUpdate} with the personal data anonymized, so it is safe to log
+     * at TRACE level: the {@code fin_or_vin} is masked to its last 4 characters and the GPS position is replaced by
+     * fixed placeholders.
      *
      * @param update the raw update as received from the backend
      * @return an anonymized copy of update, safe for logging
      */
-    private static VehicleStatusUpdate anonymizeForTrace(VehicleStatusUpdate update) {
-        VehicleStatusUpdate.Builder anonymized = update.toBuilder().setFinOrVin(TRACE_VIN_PLACEHOLDER);
+    // package-private for AccountHandlerTest
+    static VehicleStatusUpdate anonymizeForTrace(VehicleStatusUpdate update) {
+        VehicleStatusUpdate.Builder anonymized = update.toBuilder().setFinOrVin(Utils.maskVin(update.getFinOrVin()));
         if (update.hasPositionLat()) {
             anonymized.setPositionLat(
                     DoubleAttribute.newBuilder(update.getPositionLat()).setValue(TRACE_POSITION_LAT_PLACEHOLDER));
@@ -387,7 +404,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
         });
         notFoundList.forEach(vin -> {
             discovery(vin); // add vehicle to discovery
-            logger.trace("No VehicleHandler available for VIN {}", vin);
+            logger.trace("No VehicleHandler available for VIN {}", Utils.maskVin(vin));
         });
         return notFoundList.isEmpty();
     }
@@ -398,7 +415,7 @@ public class AccountHandler extends BaseBridgeHandler implements AccessTokenRefr
             if (h != null) {
                 h.distributeCommandStatus(value);
             } else {
-                logger.trace("No VehicleHandler available for VIN {}", key);
+                logger.trace("No VehicleHandler available for VIN {}", Utils.maskVin(key));
             }
         });
     }
