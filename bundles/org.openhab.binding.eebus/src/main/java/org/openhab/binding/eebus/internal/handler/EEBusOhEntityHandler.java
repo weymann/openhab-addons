@@ -31,6 +31,7 @@ import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.QuantityType;
+import org.openhab.core.library.types.StringType;
 import org.openhab.core.library.unit.Units;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
@@ -207,7 +208,9 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
         EEBusOhEntityConfiguration cfg = getConfigAs(EEBusOhEntityConfiguration.class);
         this.config = cfg;
 
-        if (!ensureSkiConfigured(cfg)) {
+        // docs/ADR/053-hems-convenience-entity.md: the HEMS Thing has up to three optional SKIs, no
+        // auto-selection - it goes ONLINE even if none is configured yet, see applyStatus().
+        if (!isHems() && !ensureSkiConfigured(cfg)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_PENDING,
                     "ski not set - auto-selected once the parent Bridge trusts exactly one device, otherwise pick one manually from its Trusted SKIs");
             return;
@@ -243,7 +246,7 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
         // this is the only other point in this handler's lifecycle where that could happen
         // without the user reconfiguring this Thing itself.
         EEBusOhEntityConfiguration cfg = this.config;
-        if (cfg != null && !ensureSkiConfigured(cfg)) {
+        if (cfg != null && !isHems() && !ensureSkiConfigured(cfg)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_PENDING,
                     "ski not set - auto-selected once the parent Bridge trusts exactly one device, otherwise pick one manually from its Trusted SKIs");
             return;
@@ -291,6 +294,20 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
             return;
         }
         EEBusOhEntityConfiguration cfg = this.config;
+        if (isHems()) {
+            // docs/ADR/053: every SKI that IS configured (gateway, wallbox, heat pump) must be trusted;
+            // having none configured is fine - the Thing is then ONLINE with a hint instead.
+            List<String> skis = cfg == null ? List.of() : hemsSkis(cfg);
+            boolean allTrusted = skis.isEmpty() || (bridge.getHandler() instanceof EEBusHandler bridgeHandler
+                    && skis.stream().allMatch(bridgeHandler::isTrusted));
+            if (!allTrusted) {
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_PENDING,
+                        "A configured SKI is not yet trusted by the parent Bridge - see its Trusted SKIs config");
+                return;
+            }
+            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE, cfg == null ? null : hemsOnlineHint(cfg));
+            return;
+        }
         String ski = cfg == null ? "" : cfg.ski;
         boolean trusted = bridge.getHandler() instanceof EEBusHandler bridgeHandler && bridgeHandler.isTrusted(ski);
         if (!trusted) {
@@ -391,9 +408,7 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
     private void handleLimitChannelCommand(ChannelUID channelUID, Command command) {
         String group = channelUID.getGroupId();
         String id = channelUID.getIdWithoutGroup();
-        if (group == null
-                || !(EEBusBindingConstants.CHANNEL_GROUP_LPC.equals(group)
-                        || EEBusBindingConstants.CHANNEL_GROUP_LPP.equals(group))
+        if (group == null || !isLimitGroup(group)
                 || !(EEBusBindingConstants.CHANNEL_LIMIT_ACTIVE.equals(id)
                         || EEBusBindingConstants.CHANNEL_LIMIT_VALUE.equals(id)
                         || EEBusBindingConstants.CHANNEL_LIMIT_DURATION.equals(id))
@@ -414,6 +429,63 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
                 lastKnownState.get(new ChannelUID(uid, group, EEBusBindingConstants.CHANNEL_LIMIT_DURATION)));
     }
 
+    /** @return {@code true} if this handler serves an {@code eebus:oh-hems-entity} Thing (docs/ADR/053). */
+    private boolean isHems() {
+        return EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY.equals(thing.getThingTypeUID());
+    }
+
+    /**
+     * @param cfg the configuration of an {@code eebus:oh-hems-entity} Thing
+     * @return its non-blank SKIs (gateway, wallbox, heat pump), docs/ADR/053-hems-convenience-entity.md
+     */
+    static List<String> hemsSkis(EEBusOhEntityConfiguration cfg) {
+        List<String> skis = new ArrayList<>();
+        for (String ski : List.of(cfg.gatewaySki, cfg.wallboxSki, cfg.heatPumpSki)) {
+            if (!ski.isBlank()) {
+                skis.add(ski);
+            }
+        }
+        return skis;
+    }
+
+    /**
+     * @param cfg the configuration of an {@code eebus:oh-hems-entity} Thing
+     * @return the hint shown with the {@code ONLINE} status while roles are not linked to a device
+     *         (docs/ADR/053): "Energy Guard not configured" if no CLS gateway SKI is set, "Neither
+     *         wallbox nor heatpump configured" if neither of those is set (both, separated by
+     *         "; ", if both apply); {@code null} if every role has a device
+     */
+    static @Nullable String hemsOnlineHint(EEBusOhEntityConfiguration cfg) {
+        List<String> hints = new ArrayList<>();
+        if (cfg.gatewaySki.isBlank()) {
+            hints.add("Energy Guard not configured");
+        }
+        if (cfg.wallboxSki.isBlank() && cfg.heatPumpSki.isBlank()) {
+            hints.add("Neither wallbox nor heatpump configured");
+        }
+        return hints.isEmpty() ? null : String.join("; ", hints);
+    }
+
+    /**
+     * @param group a Channel Group id
+     * @return {@code true} for the limit Channel Groups this handler accepts commands on:
+     *         {@code lpc}/{@code lpp} and, on the HEMS Thing, {@code wallbox-lpc}/{@code heatpump-lpc}
+     *         (docs/ADR/053)
+     */
+    private static boolean isLimitGroup(String group) {
+        if (EEBusBindingConstants.CHANNEL_GROUP_LPC.equals(group)
+                || EEBusBindingConstants.CHANNEL_GROUP_LPP.equals(group)) {
+            return true;
+        }
+        for (String prefix : List.of(EEBusBindingConstants.HEMS_PREFIX_WALLBOX,
+                EEBusBindingConstants.HEMS_PREFIX_HEAT_PUMP)) {
+            if (group.equals(prefix + "-" + EEBusBindingConstants.CHANNEL_GROUP_LPC)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Creates the {@code mpc#power} Channel on first call (idempotent, see {@link #ensureChannel})
      * and updates its state to {@code watts}. Called from {@code EEBusMpcClientUseCase} on every
@@ -428,6 +500,55 @@ public class EEBusOhEntityHandler extends BaseThingHandler {
     public void applyMpcPower(double watts) {
         applyMpcMeasurement(EEBusBindingConstants.CHANNEL_MPC_POWER, EEBusBindingConstants.CHANNEL_TYPE_UID_MPC_POWER,
                 "Number:Power", "Power", watts, Units.WATT);
+    }
+
+    /**
+     * Writes a read-only text value of a HEMS EV group (docs/ADR/054); creates the Channel on
+     * first call.
+     *
+     * @param group the Channel Group id, e.g. {@code wallbox-ev}
+     * @param channelId the Channel id within the group
+     * @param label the Channel's label
+     * @param value the text to publish
+     */
+    public void applyEvText(String group, String channelId, String label, String value) {
+        ChannelUID channelUID = new ChannelUID(thing.getUID(), group, channelId);
+        ensureChannel(channelUID, EEBusBindingConstants.CHANNEL_TYPE_UID_EV_TEXT, "String", label);
+        updateCachedState(channelUID, new StringType(value));
+    }
+
+    /**
+     * Writes a read-only switch value of a HEMS EV group (docs/ADR/054); creates the Channel on
+     * first call.
+     *
+     * @param group the Channel Group id, e.g. {@code wallbox-ev}
+     * @param channelId the Channel id within the group
+     * @param label the Channel's label
+     * @param value the state to publish
+     */
+    public void applyEvSwitch(String group, String channelId, String label, boolean value) {
+        ChannelUID channelUID = new ChannelUID(thing.getUID(), group, channelId);
+        ensureChannel(channelUID, EEBusBindingConstants.CHANNEL_TYPE_UID_EV_SWITCH, "Switch", label);
+        updateCachedState(channelUID, OnOffType.from(value));
+    }
+
+    /**
+     * Writes a read-only quantity value of a HEMS EV group (docs/ADR/054); creates the Channel on
+     * first call.
+     *
+     * @param group the Channel Group id, e.g. {@code wallbox-evcem}
+     * @param channelId the Channel id within the group
+     * @param channelTypeUid the matching {@code channel-type} in thing-types.xml
+     * @param acceptedItemType the accepted item type, e.g. {@code "Number:Power"}
+     * @param label the Channel's label
+     * @param value the value in {@code unit}
+     * @param unit the physical unit of {@code value}
+     */
+    public void applyEvQuantity(String group, String channelId, ChannelTypeUID channelTypeUid, String acceptedItemType,
+            String label, double value, Unit<?> unit) {
+        ChannelUID channelUID = new ChannelUID(thing.getUID(), group, channelId);
+        ensureChannel(channelUID, channelTypeUid, acceptedItemType, label);
+        updateCachedState(channelUID, new QuantityType<>(value, unit));
     }
 
     /**

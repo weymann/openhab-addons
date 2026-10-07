@@ -691,11 +691,208 @@
 		</config-description>
 	</thing-type>
 
+	<!-- Thing: one convenience Thing for a complete HEMS (docs/ADR/053-hems-convenience-entity.md).
+		Its mere presence makes the parent eebus:oh-device Bridge build several local SPINE
+		Entities: Monitoring (MPC/MGCP Client), Controllable System (LPC/LPP Server, limit received
+		from the CLS gateway) and one Energy Guard (LPC Client) each for a wallbox and a heat
+		pump, so both receive their own limit. Same handler class (EEBusOhEntityHandler) as the other
+		Entity Thing types. At most one per Bridge. -->
+	<thing-type id="oh-hems-entity">
+		<supported-bridge-type-refs>
+			<bridge-type-ref id="oh-device"/>
+		</supported-bridge-type-refs>
+
+		<label>EEBus OH HEMS</label>
+		<description>Home energy management system on the parent eebus:oh-device Bridge. Receives limits
+			from a CLS gateway
+			(Controllable System: lpc/lpp Channel Groups, read-only) and sends an individual limit to a
+			wallbox
+			(wallbox-lpc) and a
+			heat pump (heatpump-lpc) as Energy Guard
+			(writable). The gateway limit is
+			distributed by an openHAB rule - the binding
+			does not split it.
+			Trust is granted on the parent Bridge's Trusted SKIs
+			list; all
+			configured SKIs below must be trusted
+			there. See docs/ADR/053-hems-convenience-entity.md.</description>
+
+		<channel-groups>
+			<channel-group id="lpc" typeId="lpc">
+				<label>CLS Gateway - LPC (consumption limit received)</label>
+				<description>Read-only. Consumption limit received from the CLS gateway (this HEMS is the
+					Controllable System).</description>
+			</channel-group>
+			<channel-group id="lpp" typeId="lpp">
+				<label>CLS Gateway - LPP (production limit received)</label>
+				<description>Read-only. Production limit received from the CLS gateway (this HEMS is the
+					Controllable System).</description>
+			</channel-group>
+			<channel-group id="wallbox-lpc" typeId="lpc-eg">
+				<label>Wallbox - LPC (consumption limit sent to wallbox)</label>
+				<description>Writable. Consumption limit this HEMS sends to the wallbox (Wallbox SKI).</description>
+			</channel-group>
+			<channel-group id="heatpump-lpc" typeId="lpc-eg">
+				<label>Heat Pump - LPC (consumption limit sent to heat pump)</label>
+				<description>Writable. Consumption limit this HEMS sends to the heat pump (Heat Pump SKI).</description>
+			</channel-group>
+			<channel-group id="mpc" typeId="mpc">
+				<label>Gateway - MPC (measurements)</label>
+			</channel-group>
+			<channel-group id="wallbox-evse" typeId="evse">
+				<label>Wallbox - EVSE (charging station, EVSECC)</label>
+				<description>Read-only. Manufacturer data and state of the wallbox (Wallbox SKI). Appears once
+					detected.</description>
+			</channel-group>
+			<channel-group id="wallbox-ev" typeId="ev">
+				<label>Wallbox - EV (connected vehicle, EVCC)</label>
+				<description>Read-only. Connection state, communication standard, identification and
+					manufacturer data of the vehicle
+					at the wallbox. Appears once detected.</description>
+			</channel-group>
+			<channel-group id="wallbox-evcem" typeId="evcem">
+				<label>Wallbox - EV charging measurement (EVCEM)</label>
+				<description>Read-only. Charging current per phase, power and charged energy of the vehicle at
+					the wallbox. Appears
+					once detected.</description>
+			</channel-group>
+		</channel-groups>
+
+		<config-description>
+			<parameter name="gatewaySki" type="text" required="false">
+				<label>CLS Gateway SKI</label>
+				<description>SKI (40 hex characters) of the CLS gateway that writes the grid limit to this HEMS
+					(Energy Guard partner
+					of its Controllable System). Its limit appears on the lpc/lpp Channel
+					Groups. Also the device whose MPC/MGCP
+					measurements appear on this Thing.</description>
+			</parameter>
+			<parameter name="wallboxSki" type="text" required="false">
+				<label>Wallbox SKI</label>
+				<description>SKI (40 hex characters) of the wallbox. If set, this HEMS acts as Energy Guard for it:
+					commands on the
+					wallbox-lpc Channels are sent only to this device. Leave blank for
+					no wallbox yet (the wallbox Energy Guard Entity
+					then exists but is bound to no device).</description>
+			</parameter>
+			<parameter name="heatPumpSki" type="text" required="false">
+				<label>Heat Pump SKI</label>
+				<description>SKI (40 hex characters) of the heat pump. If set, this HEMS acts as Energy Guard for
+					it: commands on the
+					heatpump-lpc Channels are sent only to this device. Leave
+					blank for no heat pump yet (the heat pump Energy Guard
+					Entity then exists but is bound to no device).</description>
+			</parameter>
+			<parameter name="entityType" type="text">
+				<label>Controllable System Entity Type</label>
+				<description>Which SPINE Entity type the Controllable System part is presented as.</description>
+				<default>CEM</default>
+				<options>
+					<option value="CEM">CEM</option>
+					<option value="EVSE">EVSE</option>
+					<option value="Inverter">Inverter</option>
+					<option value="SmartEnergyAppliance">SmartEnergyAppliance</option>
+					<option value="SubMeterElectricity">SubMeterElectricity</option>
+				</options>
+			</parameter>
+			<parameter name="egEntityType" type="text">
+				<label>Energy Guard Entity Type</label>
+				<description>Which SPINE Entity type the Energy Guard parts (wallbox, heat pump) are presented
+					as.</description>
+				<default>GridGuard</default>
+				<options>
+					<option value="GridGuard">GridGuard</option>
+					<option value="CEM">CEM</option>
+				</options>
+			</parameter>
+			<parameter name="failsafeConsumptionLimitSeedWatts" type="decimal" unit="W">
+				<label>Failsafe Consumption Limit (Seed)</label>
+				<description>The power limit (Watts) the Controllable System presents for LPC at every startup,
+					until the CLS gateway
+					writes a different value over EEBus.</description>
+				<default>0</default>
+			</parameter>
+			<parameter name="failsafeProductionLimitSeedWatts" type="decimal" unit="W">
+				<label>Failsafe Production Limit (Seed)</label>
+				<description>Same as Failsafe Consumption Limit (Seed), for LPP.</description>
+				<default>0</default>
+			</parameter>
+			<parameter name="failsafeDurationMinimumSeedSeconds" type="integer" min="1" unit="s">
+				<label>Failsafe Duration Minimum (Seed)</label>
+				<description>The minimum duration (seconds) the failsafe limit stays in effect, shared by LPC and
+					LPP, at every
+					startup.</description>
+				<default>120</default>
+			</parameter>
+		</config-description>
+	</thing-type>
+
 	<!-- Client-role use-case Channels for eebus:oh-entity, created dynamically at runtime by
 		EEBusOhEntityHandler - deliberately NOT referenced from oh-entity's own <channel-groups>,
 		since that would create this group unconditionally on every eebus:oh-entity Thing instead
 		of only once MPC is both configured and detected for that Entity. See CONCEPT.md §4.2.2 and
 		docs/ADR/014-dynamic-client-role-channels.md. -->
+	<!-- HEMS wallbox EV groups (docs/ADR/054): channels are created dynamically on first value. -->
+	<channel-group-type id="evse">
+		<label>EVSE (EVSECC)</label>
+		<description>Client-role data of the EVSE Commissioning and Configuration use case.</description>
+	</channel-group-type>
+
+	<channel-group-type id="ev">
+		<label>EV (EVCC)</label>
+		<description>Client-role data of the EV Commissioning and Configuration use case.</description>
+	</channel-group-type>
+
+	<channel-group-type id="evcem">
+		<label>EV Charging Measurement (EVCEM)</label>
+		<description>Client-role data of the EV Charging Electricity Measurement use case.</description>
+	</channel-group-type>
+
+	<channel-type id="ev-text">
+		<item-type>String</item-type>
+		<label>Text</label>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="ev-switch">
+		<item-type>Switch</item-type>
+		<label>State</label>
+		<state readOnly="true"/>
+	</channel-type>
+
+	<channel-type id="ev-power">
+		<item-type>Number:Power</item-type>
+		<label>Charging Power</label>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Power</tag>
+		</tags>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
+	<channel-type id="ev-current">
+		<item-type>Number:ElectricCurrent</item-type>
+		<label>Charging Current</label>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Current</tag>
+		</tags>
+		<state readOnly="true" pattern="%.2f %unit%"/>
+	</channel-type>
+
+	<channel-type id="ev-energy">
+		<item-type>Number:Energy</item-type>
+		<label>Charged Energy</label>
+		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
+		<state readOnly="true" pattern="%.0f %unit%"/>
+	</channel-type>
+
 	<channel-group-type id="mpc">
 		<label>MPC (Monitoring of Power Consumption)</label>
 		<description>Client-role data read from a trusted device's Entity offering MPC as a Server actor.

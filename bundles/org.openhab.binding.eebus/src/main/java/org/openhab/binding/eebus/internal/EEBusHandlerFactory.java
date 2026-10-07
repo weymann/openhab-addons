@@ -48,7 +48,7 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
 
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_OH_DEVICE,
             THING_TYPE_HW_DEVICE, THING_TYPE_OH_ENTITY, THING_TYPE_OH_CS_ENTITY, THING_TYPE_OH_EG_ENTITY,
-            THING_TYPE_OH_MPC_ENTITY);
+            THING_TYPE_OH_MPC_ENTITY, THING_TYPE_OH_HEMS_ENTITY);
 
     private final EEBusMetadataService metadataService;
     private final MDNSClient mdnsClient;
@@ -113,6 +113,11 @@ public class EEBusHandlerFactory extends BaseThingHandlerFactory {
         // to the MPC Client role; no dedicated convenience Bridge, same non-exclusive pattern as
         // eebus:oh-eg-entity).
         if (THING_TYPE_OH_MPC_ENTITY.equals(thingTypeUID)) {
+            return new EEBusOhEntityHandler(thing);
+        }
+        // eebus:oh-hems-entity (docs/ADR/053-hems-convenience-entity.md) is served by the very
+        // same EEBusOhEntityHandler class as the other Entity Thing types.
+        if (THING_TYPE_OH_HEMS_ENTITY.equals(thingTypeUID)) {
             return new EEBusOhEntityHandler(thing);
         }
 

@@ -285,9 +285,50 @@ public abstract class AbstractEEBusLimitEnergyGuardUseCase implements UseCase {
     protected AbstractEEBusLimitEnergyGuardUseCase(
             Function<String, Optional<EEBusOhEntityHandler>> ohEntityHandlerResolver,
             Supplier<Optional<EEBusOhEntityHandler>> writeSourceHandlerResolver, EEBusMetadataService metadataService) {
+        this(ohEntityHandlerResolver, writeSourceHandlerResolver, metadataService, null, null, ski -> Optional.empty());
+    }
+
+    /**
+     * Target-scoped variant for the HEMS convenience Thing (docs/ADR/053-hems-convenience-entity.md):
+     * this instance feeds exactly one partner device with its own limit, instead of fanning one
+     * value set out to every partner (ADR-047).
+     *
+     * @param partnerSki if non-{@code null}: only the partner whose SKI equals this value is
+     *            processed, every other use-case partner is ignored. Also disables the tagged-Item
+     *            write path (Item tags carry no device discriminator) - only Channel commands on
+     *            {@code channelGroupPrefix}-prefixed groups write to this partner.
+     * @param channelGroupPrefix if non-{@code null}: the write hook is registered under the
+     *            Channel Group {@code <prefix>-<shortCode>} (e.g. {@code wallbox-lpc}) instead of
+     *            {@code <shortCode>}.
+     * @param skiResolver resolves a SPINE {@code communicationAddress} to the partner's SKI (via
+     *            the mDNS browser); only used when {@code partnerSki} is set.
+     */
+    protected AbstractEEBusLimitEnergyGuardUseCase(
+            Function<String, Optional<EEBusOhEntityHandler>> ohEntityHandlerResolver,
+            Supplier<Optional<EEBusOhEntityHandler>> writeSourceHandlerResolver, EEBusMetadataService metadataService,
+            @Nullable String partnerSki, @Nullable String channelGroupPrefix,
+            Function<String, Optional<String>> skiResolver) {
         this.ohEntityHandlerResolver = ohEntityHandlerResolver;
         this.writeSourceHandlerResolver = writeSourceHandlerResolver;
         this.metadataService = metadataService;
+        this.partnerSki = partnerSki;
+        this.channelGroupPrefix = channelGroupPrefix;
+        this.skiResolver = skiResolver;
+    }
+
+    /** Target scope, see the scoped constructor (docs/ADR/053). {@code null} = ADR-047 fan-out. */
+    private final @Nullable String partnerSki;
+    private final @Nullable String channelGroupPrefix;
+    private final Function<String, Optional<String>> skiResolver;
+
+    /**
+     * @return the Channel Group this instance's write hook is registered under:
+     *         {@code <shortCode>} normally, {@code <prefix>-<shortCode>} for a target-scoped
+     *         HEMS instance (docs/ADR/053).
+     */
+    private String limitGroup() {
+        String prefix = channelGroupPrefix;
+        return prefix == null ? getShortCode() : prefix + "-" + getShortCode();
     }
 
     /**
@@ -476,6 +517,17 @@ public abstract class AbstractEEBusLimitEnergyGuardUseCase implements UseCase {
                 logger.debug("{} partner at {} has no LoadControl feature address, skipping", getShortCode(),
                         partner.getCommunicationAddress());
                 continue;
+            }
+            // docs/ADR/053: a target-scoped (HEMS) instance feeds exactly one device - ignore
+            // every other partner this listener is notified about.
+            String scopedSki = partnerSki;
+            if (scopedSki != null) {
+                Optional<String> partnerSkiResolved = skiResolver.apply(partner.getCommunicationAddress());
+                if (partnerSkiResolved.isEmpty() || !scopedSki.equalsIgnoreCase(partnerSkiResolved.get())) {
+                    logger.debug("{} partner at {} (SKI {}) is not this instance's target {} - ignoring", limitGroup(),
+                            partner.getCommunicationAddress(), partnerSkiResolved.orElse("unresolved"), scopedSki);
+                    continue;
+                }
             }
             // docs/ADR/047: the write path no longer requires a per-SKI eebus:oh-entity Thing for
             // this specific partner - it requires this Bridge's single eebus:oh-eg-entity Thing to
@@ -1030,6 +1082,10 @@ public abstract class AbstractEEBusLimitEnergyGuardUseCase implements UseCase {
      */
     private void registerWriteListenersOnce(EEBusOhEntityHandler writeSourceHandler) {
         registerChannelWriter(writeSourceHandler);
+        if (partnerSki != null) {
+            // docs/ADR/053: target-scoped instances are driven by their own Channel Group only.
+            return;
+        }
         if (writeListenersRegistered.get()) {
             return;
         }
@@ -1089,7 +1145,7 @@ public abstract class AbstractEEBusLimitEnergyGuardUseCase implements UseCase {
             }
             EEBusOhEntityHandler.LimitChannelWriter writer = (active, value,
                     duration) -> sendLimitWriteToAllPartners(toActive(active), toWatts(value), toSeconds(duration));
-            writeSourceHandler.registerLimitChannelWriter(getShortCode(), writer);
+            writeSourceHandler.registerLimitChannelWriter(limitGroup(), writer);
             channelWriterHandler = writeSourceHandler;
             channelWriter = writer;
         }
@@ -1307,7 +1363,7 @@ public abstract class AbstractEEBusLimitEnergyGuardUseCase implements UseCase {
             EEBusOhEntityHandler handler = channelWriterHandler;
             EEBusOhEntityHandler.LimitChannelWriter writer = channelWriter;
             if (handler != null && writer != null) {
-                handler.unregisterLimitChannelWriter(getShortCode(), writer);
+                handler.unregisterLimitChannelWriter(limitGroup(), writer);
             }
             channelWriterHandler = null;
             channelWriter = null;

@@ -43,6 +43,18 @@ public class EEBusLppClientUseCase extends AbstractEEBusLimitEnergyGuardUseCase 
         super(ohEntityHandlerResolver, writeSourceHandlerResolver, metadataService);
     }
 
+    /**
+     * Target-scoped variant for the HEMS convenience Thing - see
+     * {@link AbstractEEBusLimitEnergyGuardUseCase}'s scoped constructor and
+     * docs/ADR/053-hems-convenience-entity.md.
+     */
+    public EEBusLppClientUseCase(Function<String, Optional<EEBusOhEntityHandler>> ohEntityHandlerResolver,
+            Supplier<Optional<EEBusOhEntityHandler>> writeSourceHandlerResolver, EEBusMetadataService metadataService,
+            String partnerSki, String channelGroupPrefix, Function<String, Optional<String>> skiResolver) {
+        super(ohEntityHandlerResolver, writeSourceHandlerResolver, metadataService, partnerSki, channelGroupPrefix,
+                skiResolver);
+    }
+
     @Override
     protected String getShortCode() {
         return EEBusBindingConstants.CHANNEL_GROUP_LPP;

@@ -189,4 +189,31 @@ public class EEBusOhEntityConfiguration {
      * deliberately deferred.
      */
     public String entityType = "CEM";
+
+    /**
+     * {@code eebus:oh-hems-entity} only (docs/ADR/053-hems-convenience-entity.md): SKI of the CLS
+     * gateway, the Energy Guard partner of the HEMS's Controllable System Entity. Blank for every
+     * other Thing type.
+     */
+    public String gatewaySki = "";
+
+    /**
+     * {@code eebus:oh-hems-entity} only: SKI of the wallbox. If blank, the HEMS builds no
+     * wallbox Energy Guard Entity.
+     */
+    public String wallboxSki = "";
+
+    /**
+     * {@code eebus:oh-hems-entity} only: SKI of the heat pump. If blank, the HEMS builds no heat
+     * pump Energy Guard Entity.
+     */
+    public String heatPumpSki = "";
+
+    /**
+     * {@code eebus:oh-hems-entity} only: SPINE {@code entityType} of the HEMS's Energy Guard
+     * Entities. Spec-permitted for the Energy Guard actor: {@code CEM} or {@code GridGuard}
+     * (docs/ADR/042-configurable-entitytype.md). Default {@code GridGuard}, as the evcc HEMS
+     * presents it.
+     */
+    public String egEntityType = "GridGuard";
 }

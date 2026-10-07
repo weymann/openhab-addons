@@ -18,6 +18,7 @@ import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYP
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_OH_DEVICE;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_OH_EG_ENTITY;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_OH_ENTITY;
+import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY;
 import static org.openhab.binding.eebus.internal.EEBusBindingConstants.THING_TYPE_OH_MPC_ENTITY;
 
 import java.net.URI;
@@ -103,6 +104,9 @@ import org.slf4j.LoggerFactory;
 public class EEBusSkiOptionProvider implements ConfigOptionProvider {
 
     private static final String PARAM_SKI = "ski";
+    private static final String PARAM_GATEWAY_SKI = "gatewaySki";
+    private static final String PARAM_WALLBOX_SKI = "wallboxSki";
+    private static final String PARAM_HEAT_PUMP_SKI = "heatPumpSki";
     private static final String PARAM_TRUSTED_SKIS = "trustedSkis";
 
     private final Logger logger = LoggerFactory.getLogger(EEBusSkiOptionProvider.class);
@@ -132,6 +136,11 @@ public class EEBusSkiOptionProvider implements ConfigOptionProvider {
             // docs/ADR/036-oh-mpc-entity-static-channels.md.
             return trustedSkisOfTargetBridge(context);
         }
+        if (THING_TYPE_OH_HEMS_ENTITY.getAsString().equals(schemeSpecificPart) && (PARAM_GATEWAY_SKI.equals(param)
+                || PARAM_WALLBOX_SKI.equals(param) || PARAM_HEAT_PUMP_SKI.equals(param))) {
+            // docs/ADR/053: the three HEMS SKI parameters offer the same trusted-SKI list.
+            return trustedSkisOfTargetBridge(context);
+        }
         if (THING_TYPE_OH_DEVICE.getAsString().equals(schemeSpecificPart) && PARAM_TRUSTED_SKIS.equals(param)) {
             return knownSkisExcludingAlreadyTrusted(context);
         }
@@ -144,22 +153,31 @@ public class EEBusSkiOptionProvider implements ConfigOptionProvider {
      * @param context as passed to {@link #getParameterOptions} for an {@code eebus:oh-entity}'s
      *            {@code ski} parameter
      * @return the target Bridge's currently configured {@code trustedSkis}, labeled from a
-     *         matching {@code eebus:hw-device} Thing where one exists; empty if the target
-     *         Bridge cannot be determined (see class javadoc "Known limitation")
+     *         matching {@code eebus:hw-device} Thing or {@code eebus:oh-device} Bridge where one
+     *         exists; empty if the target Bridge cannot be determined (see class javadoc "Known limitation")
      */
     private Collection<ParameterOption> trustedSkisOfTargetBridge(@Nullable String context) {
         ThingUID targetBridgeUid = targetBridgeUid(context);
-        if (targetBridgeUid == null) {
-            return List.of();
+        Thing targetBridge = targetBridgeUid == null ? null : thingRegistry.get(targetBridgeUid);
+        // openHAB core passes the parameter's XML <context> (none here), never the Thing UID, so the
+        // target Bridge is usually unknown: fall back to the trusted SKIs of every oh-device Bridge.
+        List<Thing> bridges = new ArrayList<>();
+        if (targetBridge instanceof Bridge) {
+            bridges.add(targetBridge);
+        } else {
+            for (Thing candidate : thingRegistry.getAll()) {
+                if (THING_TYPE_OH_DEVICE.equals(candidate.getThingTypeUID())) {
+                    bridges.add(candidate);
+                }
+            }
         }
-        Thing bridgeThing = thingRegistry.get(targetBridgeUid);
-        if (!(bridgeThing instanceof Bridge)) {
-            return List.of();
-        }
+        Set<String> seen = new HashSet<>();
         List<ParameterOption> options = new ArrayList<>();
-        for (String ski : bridgeThing.getConfiguration().as(EEBusConfiguration.class).trustedSkis) {
-            if (!ski.isBlank()) {
-                options.add(new ParameterOption(ski, labelForSki(ski)));
+        for (Thing bridge : bridges) {
+            for (String ski : bridge.getConfiguration().as(EEBusConfiguration.class).trustedSkis) {
+                if (!ski.isBlank() && seen.add(ski)) {
+                    options.add(new ParameterOption(ski, labelForSki(ski)));
+                }
             }
         }
         return options;
@@ -167,20 +185,36 @@ public class EEBusSkiOptionProvider implements ConfigOptionProvider {
 
     /**
      * @param ski a SKI to find a friendly label for
-     * @return the label of a matching {@code eebus:hw-device} Thing (with the SKI appended), or
-     *         just {@code ski} itself if none is known
+     * @return the label of a matching {@code eebus:hw-device} Thing or of the {@code eebus:oh-device}
+     *         Bridge owning this SKI (with the SKI appended), or just {@code ski} itself if none is
+     *         known - same sources as {@link #knownSkisExcludingAlreadyTrusted}
      */
     private String labelForSki(String ski) {
         for (Thing candidate : thingRegistry.getAll()) {
-            if (THING_TYPE_HW_DEVICE.equals(candidate.getThingTypeUID())) {
-                String candidateSki = candidate.getConfiguration().as(EEBusHwDeviceConfiguration.class).ski;
-                if (ski.equals(candidateSki)) {
-                    String label = candidate.getLabel();
-                    return label == null || label.isBlank() ? ski : label + " (" + ski + ")";
-                }
+            if (ski.equals(skiOf(candidate))) {
+                return formatLabel(ski, candidate.getLabel());
             }
         }
         return ski;
+    }
+
+    /**
+     * @param thing any Thing from the registry
+     * @return the configured SKI of an {@code eebus:hw-device} Thing, the own SKI of an
+     *         {@code eebus:oh-device} Bridge, or {@code null} for any other Thing
+     */
+    private @Nullable String skiOf(Thing thing) {
+        if (THING_TYPE_HW_DEVICE.equals(thing.getThingTypeUID())) {
+            return thing.getConfiguration().as(EEBusHwDeviceConfiguration.class).ski;
+        }
+        if (THING_TYPE_OH_DEVICE.equals(thing.getThingTypeUID())) {
+            return thing.getProperties().get(PROPERTY_LOCAL_SKI);
+        }
+        return null;
+    }
+
+    private static String formatLabel(String ski, @Nullable String label) {
+        return label == null || label.isBlank() ? ski : label + " (" + ski + ")";
     }
 
     /**
@@ -213,8 +247,7 @@ public class EEBusSkiOptionProvider implements ConfigOptionProvider {
         if (ski == null || ski.isBlank() || excluded.contains(ski)) {
             return;
         }
-        String resolvedLabel = label == null || label.isBlank() ? ski : label + " (" + ski + ")";
-        options.add(new ParameterOption(ski, resolvedLabel));
+        options.add(new ParameterOption(ski, formatLabel(ski, label)));
     }
 
     /**
@@ -261,7 +294,8 @@ public class EEBusSkiOptionProvider implements ConfigOptionProvider {
                 return contextUid;
             }
             if (THING_TYPE_OH_ENTITY.equals(contextType) || THING_TYPE_OH_CS_ENTITY.equals(contextType)
-                    || THING_TYPE_OH_EG_ENTITY.equals(contextType) || THING_TYPE_OH_MPC_ENTITY.equals(contextType)) {
+                    || THING_TYPE_OH_EG_ENTITY.equals(contextType) || THING_TYPE_OH_MPC_ENTITY.equals(contextType)
+                    || THING_TYPE_OH_HEMS_ENTITY.equals(contextType)) {
                 return contextThing.getBridgeUID();
             }
         } catch (IllegalArgumentException e) {

@@ -27,6 +27,7 @@ Names follow the EEBUS/SHIP/SPINE vocabulary (ADR-024).
 | `oh-eg-entity`    | Thing   | Energy Guard (LPC/LPP Client). Writable `lpc`/`lpp` channels. |
 | `oh-cs-entity`    | Thing   | Controllable System (LPC/LPP Server). Read-only `lpc`/`lpp` channels, state, heartbeat. |
 | `oh-mpc-entity`   | Thing   | Monitoring Appliance (MPC Client). `mpc` channels. |
+| `oh-hems-entity`  | Thing   | Complete HEMS in one Thing (ADR-053): Controllable System for the CLS gateway plus one Energy Guard each for a wallbox and a heat pump, each with its own limit. At most one per Bridge. |
 | `oh-entity`       | Thing   | Generic entity. Use cases are selected by hand, channels are created dynamically once a use case is detected. |
 
 All `oh-*-entity` Things are children of an `oh-device` Bridge and are additive: they can be mixed freely under the same Bridge.
@@ -150,6 +151,24 @@ All channels are read-only.
 | `mgcp`        | `total-active-power`                               | `Number:Power`           | Total active power at the grid connection point, MGCP Scenario 2 only (`oh-entity`, dynamic, ADR-040). |
 
 `oh-entity` additionally creates dynamic `lpc`/`lpp` channels (`limit-active`, `limit-value`, `limit-duration`, `failsafe-*`) when it receives LPC/LPP as Controllable System.
+
+### HEMS: `oh-hems-entity` (ADR-053)
+
+One Thing that builds several local SPINE Entities: Monitoring (MPC/MGCP Client), Controllable System (LPC/LPP Server) and one Energy Guard (LPC Client) each for a wallbox and a heat pump. Configure the SKIs `gatewaySki`, `wallboxSki` and `heatPumpSki` (all must be trusted on the parent Bridge; both Energy Guard Entities always exist, a blank SKI just binds it to no device yet).
+
+| Group | Direction | Meaning |
+| ----- | --------- | ------- |
+| `lpc`, `lpp` | read-only | Limit received from the CLS gateway (Controllable System), failsafe, state, heartbeat. |
+| `wallbox-lpc` ("Wallbox - LPC") | writable | Limit sent **only** to the wallbox (`limit-active`, `limit-value`, `limit-duration`). |
+| `heatpump-lpc` ("Heat Pump - LPC") | writable | Limit sent **only** to the heat pump. |
+| `mpc` | read-only | Measurements of the gateway device. |
+| `wallbox-evse` ("Wallbox - EVSE") | read-only | Charging station data, EVSECC (ADR-054): manufacturer data, operating state, last error. |
+| `wallbox-ev` ("Wallbox - EV") | read-only | Connected vehicle, EVCC (ADR-054): connected, communication standard, identification, manufacturer data. |
+| `wallbox-evcem` ("Wallbox - EV charging measurement") | read-only | EVCEM (ADR-054): charging power, charged energy, current per phase. |
+
+The Thing goes `ONLINE` even without any SKI; the status description then reads `Energy Guard not configured` (no gateway SKI) and/or `Neither wallbox nor heatpump configured`. A configured SKI that the Bridge does not trust keeps it `OFFLINE`. The SKI fields offer the Bridge's trusted SKIs as a list.
+
+The binding does not split the gateway limit. A rule reads `lpc#limit-value` and commands the two Energy Guard groups, e.g. 4200 W from the gateway as 3000 W for the wallbox and 1200 W for the heat pump. The tagged-Item write path is not used by the HEMS Energy Guards.
 
 Item states in the openHAB UI are not live: press REFRESH to see the current value.
 

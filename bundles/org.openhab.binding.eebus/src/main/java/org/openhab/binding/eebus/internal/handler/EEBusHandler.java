@@ -43,6 +43,9 @@ import org.openhab.binding.eebus.internal.EEBusBindingConstants;
 import org.openhab.binding.eebus.internal.config.EEBusConfiguration;
 import org.openhab.binding.eebus.internal.config.EEBusOhEntityConfiguration;
 import org.openhab.binding.eebus.internal.transport.AbstractEEBusLimitControllableSystemUseCase;
+import org.openhab.binding.eebus.internal.transport.EEBusEvccClientUseCase;
+import org.openhab.binding.eebus.internal.transport.EEBusEvcemClientUseCase;
+import org.openhab.binding.eebus.internal.transport.EEBusEvseccClientUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusLpcClientUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusLpcServerUseCase;
 import org.openhab.binding.eebus.internal.transport.EEBusLppClientUseCase;
@@ -259,6 +262,21 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
     }
 
     private static final Map<ThingUID, Lifecycle> LIFECYCLES = new ConcurrentHashMap<>();
+
+    /**
+     * Bridges of this binding that currently have a live SHIP server in this JVM, keyed by Thing
+     * UID. Used by {@link #refreshLocalPeers} (docs/ADR/055-restart-local-peer-bridges.md).
+     */
+    private static final Map<ThingUID, EEBusHandler> RUNNING = new ConcurrentHashMap<>();
+
+    /** Do not refresh a local peer Bridge that itself (re)started less than this long ago. */
+    private static final long PEER_REFRESH_COOLDOWN_MILLIS = 30_000;
+
+    /** Wall-clock time this Bridge last finished binding its SHIP server; 0 if never. */
+    private volatile long lastBoundMillis;
+
+    /** SKI of this Bridge's own SHIP node, set when the SHIP server was bound; null before. */
+    private volatile @Nullable String ownSki;
 
     /**
      * How long {@link #onEntityChanged()} waits for further child-Entity change events before
@@ -742,6 +760,11 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
 
         for (Thing child : getThing().getThings()) {
             ThingTypeUID childType = child.getThingTypeUID();
+            if (EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY.equals(childType)) {
+                // docs/ADR/053: the HEMS child builds its own Entities, see deriveHemsEntities().
+                // Its entityType/seed config must not leak into the legacy shared Entity.
+                continue;
+            }
             // docs/ADR/042-configurable-entitytype.md: every child Thing type shares
             // EEBusOhEntityConfiguration, so this fetch is valid regardless of childType - all
             // Things allowed as children of eebus:oh-device declare it in their
@@ -835,6 +858,101 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         }
 
         return new LocalUseCaseDerivation(useCases, resolvedEntityType);
+    }
+
+    /**
+     * One local SPINE Entity to build next to (or instead of) the legacy shared Entity: its
+     * {@code entityType} and the use cases attached to it. See
+     * docs/ADR/053-hems-convenience-entity.md.
+     */
+    private record LocalEntitySpec(EntityTypeEnumType entityType, List<UseCase> useCases) {
+    }
+
+    /**
+     * Derives the additional local Entities an {@code eebus:oh-hems-entity} child asks for
+     * (docs/ADR/053-hems-convenience-entity.md): a Monitoring Entity (MPC/MGCP Client), a
+     * Controllable System Entity (LPC/LPP Server) and one Energy Guard Entity (LPC/LPP Client,
+     * scoped to one partner SKI) each for the configured wallbox and heat pump. Returns an empty
+     * list if this Bridge has no such child. If more than one exists, the first one found wins and a
+     * WARN is logged.
+     *
+     * @param ohServiceId this Bridge's Thing ID, passed to the Server-role use case constructors
+     * @return the HEMS Entities in build order, or an empty list
+     */
+    private List<LocalEntitySpec> deriveHemsEntities(String ohServiceId) {
+        List<Thing> hemsChildren = new ArrayList<>();
+        for (Thing child : getThing().getThings()) {
+            if (EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY.equals(child.getThingTypeUID())) {
+                hemsChildren.add(child);
+            }
+        }
+        if (hemsChildren.isEmpty()) {
+            return List.of();
+        }
+        if (hemsChildren.size() > 1) {
+            logger.warn(
+                    "{}: {} eebus:oh-hems-entity Things found - only the first one ('{}') is used "
+                            + "(docs/ADR/053-hems-convenience-entity.md)",
+                    thing.getUID(), hemsChildren.size(), hemsChildren.get(0).getUID());
+        }
+        EEBusOhEntityConfiguration hemsCfg = hemsChildren.get(0).getConfiguration()
+                .as(EEBusOhEntityConfiguration.class);
+
+        List<LocalEntitySpec> specs = new ArrayList<>();
+        specs.add(new LocalEntitySpec(EntityTypeEnumType.CEM,
+                List.of(new EEBusMpcClientUseCase(this::ohEntityHandlerForCommunicationAddress),
+                        new EEBusMgcpClientUseCase(this::ohEntityHandlerForCommunicationAddress))));
+        specs.add(new LocalEntitySpec(resolveEntityType(hemsCfg.entityType, EntityTypeEnumType.CEM), List.of(
+                new EEBusLpcServerUseCase(metadataService, ohServiceId, this::ohEntityHandlerForCommunicationAddress,
+                        hemsCfg.failsafeConsumptionLimitSeedWatts, hemsCfg.failsafeDurationMinimumSeedSeconds),
+                new EEBusLppServerUseCase(metadataService, ohServiceId, this::ohEntityHandlerForCommunicationAddress,
+                        hemsCfg.failsafeProductionLimitSeedWatts, hemsCfg.failsafeDurationMinimumSeedSeconds))));
+        EntityTypeEnumType egType = resolveEntityType(hemsCfg.egEntityType, EntityTypeEnumType.GRID_GUARD);
+        // Both Energy Guard Entities are always built, even with a blank SKI (a blank SKI matches no partner), so a
+        // wallbox or heat pump sees the EnergyGuard use case in the discovery before its SKI is known/trusted.
+        {
+            // docs/ADR/054: read-only EV use cases (EVSECC, EVCC, EVCEM) on the Monitoring CEM entity, scoped to the
+            // wallbox
+            String prefix = EEBusBindingConstants.HEMS_PREFIX_WALLBOX;
+            List<UseCase> monitoringUseCases = new ArrayList<>(specs.get(0).useCases());
+            monitoringUseCases.add(new EEBusEvseccClientUseCase(this::hemsEntityHandler, hemsCfg.wallboxSki, prefix,
+                    this::skiForCommunicationAddress));
+            monitoringUseCases.add(new EEBusEvccClientUseCase(this::hemsEntityHandler, hemsCfg.wallboxSki, prefix,
+                    this::skiForCommunicationAddress));
+            monitoringUseCases.add(new EEBusEvcemClientUseCase(this::hemsEntityHandler, hemsCfg.wallboxSki, prefix,
+                    this::skiForCommunicationAddress));
+            specs.set(0, new LocalEntitySpec(specs.get(0).entityType(), monitoringUseCases));
+            specs.add(hemsEnergyGuardSpec(egType, hemsCfg.wallboxSki, EEBusBindingConstants.HEMS_PREFIX_WALLBOX));
+        }
+        specs.add(hemsEnergyGuardSpec(egType, hemsCfg.heatPumpSki, EEBusBindingConstants.HEMS_PREFIX_HEAT_PUMP));
+        return specs;
+    }
+
+    /**
+     * One Energy Guard Entity (LPC Client only - no LPP for wallbox/heat pump) scoped to a single partner SKI,
+     * docs/ADR/053.
+     */
+    private LocalEntitySpec hemsEnergyGuardSpec(EntityTypeEnumType entityType, String partnerSki, String prefix) {
+        return new LocalEntitySpec(entityType,
+                List.of(new EEBusLpcClientUseCase(this::ohEntityHandlerForCommunicationAddress, this::hemsEntityHandler,
+                        metadataService, partnerSki, prefix, this::skiForCommunicationAddress)));
+    }
+
+    /**
+     * @return {@code value} as {@link EntityTypeEnumType}, or {@code fallback} (with a WARN) if it
+     *         is blank or not a known constant
+     */
+    private EntityTypeEnumType resolveEntityType(String value, EntityTypeEnumType fallback) {
+        if (value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return EntityTypeEnumType.fromValue(value);
+        } catch (IllegalArgumentException e) {
+            logger.warn("{}: configured entityType '{}' is not a known SPINE EntityTypeEnumType constant - "
+                    + "falling back to {}", thing.getUID(), value, fallback.value());
+            return fallback;
+        }
     }
 
     /**
@@ -1086,6 +1204,9 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         // this Bridge's children - see deriveLocalUseCases().
         LocalUseCaseDerivation localDerivation = deriveLocalUseCases(ohServiceId);
         List<UseCase> allUseCases = localDerivation.useCases();
+        // docs/ADR/053-hems-convenience-entity.md: an eebus:oh-hems-entity child adds its own
+        // local Entities next to the legacy shared one.
+        List<LocalEntitySpec> hemsEntities = deriveHemsEntities(ohServiceId);
 
         // The actual network I/O - generates/loads the certificate and binds the SHIP server's
         // port - happens inside build() below: DeviceBuilder.build() calls
@@ -1111,9 +1232,22 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         logger.debug("{}: startShipSpine() about to bind (generation={}, handler={}, thread={})", thing.getUID(),
                 myGeneration, System.identityHashCode(this), Thread.currentThread().getName());
 
-        Device localDevice = Device.getBuilder().withDeviceType(resolveDeviceType(cfg)).withCommunication(communication)
-                .withId("d:_n:" + shipId).withDiscoverDevices(true).addEntity().setType(localDerivation.entityType())
-                .withUseCases(allUseCases.toArray(new UseCase[0])).applyToDevice().build();
+        // All local Entities are added before build() connects the Device, so the complete
+        // structure is delivered with the initial DetailedDiscovery/UseCaseDiscovery handshake
+        // (docs/ADR/027, docs/ADR/053) - the live NodeManagement notification path is never used.
+        // The legacy shared Entity is only built if some legacy child contributes a use case, or
+        // if there is no HEMS child at all (unchanged behaviour for every pre-ADR-053 setup).
+        var deviceBuilder = Device.getBuilder().withDeviceType(resolveDeviceType(cfg)).withCommunication(communication)
+                .withId("d:_n:" + shipId).withDiscoverDevices(true);
+        if (hemsEntities.isEmpty() || !allUseCases.isEmpty()) {
+            deviceBuilder = deviceBuilder.addEntity().setType(localDerivation.entityType())
+                    .withUseCases(allUseCases.toArray(new UseCase[0])).applyToDevice();
+        }
+        for (LocalEntitySpec hemsEntity : hemsEntities) {
+            deviceBuilder = deviceBuilder.addEntity().setType(hemsEntity.entityType())
+                    .withUseCases(hemsEntity.useCases().toArray(new UseCase[0])).applyToDevice();
+        }
+        Device localDevice = deviceBuilder.build();
 
         boolean supersededWhileConnecting;
         synchronized (lifecycle.lock) {
@@ -1133,6 +1267,13 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
                 logger.debug("{}: startShipSpine() bound and published successfully (generation={}, handler={})",
                         thing.getUID(), myGeneration, System.identityHashCode(this));
             }
+        }
+
+        if (!supersededWhileConnecting) {
+            this.ownSki = communication.getOwnSki();
+            this.lastBoundMillis = System.currentTimeMillis();
+            RUNNING.put(thing.getUID(), this);
+            refreshLocalPeers();
         }
 
         if (supersededWhileConnecting) {
@@ -1198,6 +1339,7 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         ScheduledFuture<?> pendingRebuild;
         synchronized (lifecycle.lock) {
             generation = ++lifecycle.generation;
+            RUNNING.remove(thing.getUID(), this);
             communication = this.shipCommunication;
             localDevice = this.device;
             browser = this.mdnsBrowser;
@@ -1257,8 +1399,8 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         if (communication != null) {
             try {
                 communication.disconnect();
-            } catch (Throwable t) { // NOSONAR - must never skip the remaining teardown steps
-                interrupted |= Thread.interrupted() || t instanceof InterruptedException;
+            } catch (RuntimeException t) { // must never skip the remaining teardown steps
+                interrupted |= Thread.interrupted();
                 logger.warn("{}: communication.disconnect() failed during teardown (generation={}); continuing", uid,
                         generation, t);
             }
@@ -1268,8 +1410,8 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
                 // Device extends Shutdownable (AutoCloseable with a no-throws close()) - see
                 // org.openmuc.jeebus.spine.api.Shutdownable.
                 localDevice.close();
-            } catch (Throwable t) { // NOSONAR
-                interrupted |= Thread.interrupted() || t instanceof InterruptedException;
+            } catch (RuntimeException t) {
+                interrupted |= Thread.interrupted();
                 logger.warn("{}: localDevice.close() failed during teardown (generation={}); continuing", uid,
                         generation, t);
             }
@@ -1277,8 +1419,8 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
         if (browser != null) {
             try {
                 browser.close();
-            } catch (Throwable t) { // NOSONAR
-                interrupted |= Thread.interrupted() || t instanceof InterruptedException;
+            } catch (RuntimeException t) {
+                interrupted |= Thread.interrupted();
                 logger.warn("{}: browser.close() failed during teardown (generation={}); continuing", uid, generation,
                         t);
             }
@@ -1433,6 +1575,40 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
     }
 
     /**
+     * After this Bridge (re)started, rebuilds every other Bridge of this binding in the same JVM
+     * that is paired with it (either side lists the other's SKI as trusted), so no half-open
+     * SHIP connection state of the previous session survives on the peer. Observed 2026-10-07:
+     * restarting only the HEMS Bridge left the Energy Guard Bridge unable to reconnect (handshake
+     * aborted, no further dial). A peer that itself started within
+     * {@link #PEER_REFRESH_COOLDOWN_MILLIS} is skipped, which also stops the refresh from
+     * ping-ponging between the two Bridges. See docs/ADR/055-restart-local-peer-bridges.md.
+     */
+    private void refreshLocalPeers() {
+        @Nullable
+        String mySki = this.ownSki;
+        if (mySki == null) {
+            return;
+        }
+        Set<String> myTrusted = currentTrustedSkis();
+        long now = System.currentTimeMillis();
+        for (EEBusHandler other : RUNNING.values()) {
+            if (this.equals(other)) {
+                continue;
+            }
+            @Nullable
+            String otherSki = other.ownSki;
+            boolean paired = other.currentTrustedSkis().contains(mySki)
+                    || (otherSki != null && myTrusted.contains(otherSki));
+            if (!paired || now - other.lastBoundMillis < PEER_REFRESH_COOLDOWN_MILLIS) {
+                continue;
+            }
+            logger.info("{}: restarted - also rebuilding paired local Bridge {} to drop stale SHIP connection state",
+                    thing.getUID(), other.getThing().getUID());
+            other.onEntityChanged();
+        }
+    }
+
+    /**
      * @return this Bridge's currently configured {@link EEBusConfiguration#trustedSkis}, minus
      *         any blank entries, as a {@link Set}. Empty if {@link #config} has not been resolved
      *         yet (before {@link #initialize()} finishes reading it).
@@ -1487,7 +1663,11 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
     Optional<EEBusOhEntityHandler> ohEntityHandlerForSki(String ski) {
         for (Thing child : getThing().getThings()) {
             EEBusOhEntityConfiguration ohEntityConfig = child.getConfiguration().as(EEBusOhEntityConfiguration.class);
-            if (ski.equals(ohEntityConfig.ski) && child.getHandler() instanceof EEBusOhEntityHandler ohEntityHandler) {
+            // docs/ADR/053: a HEMS child is the Energy Guard partner's Thing for its CLS gateway SKI.
+            boolean matches = ski.equals(ohEntityConfig.ski)
+                    || (EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY.equals(child.getThingTypeUID())
+                            && !ohEntityConfig.gatewaySki.isBlank() && ski.equals(ohEntityConfig.gatewaySki));
+            if (matches && child.getHandler() instanceof EEBusOhEntityHandler ohEntityHandler) {
                 return Optional.of(ohEntityHandler);
             }
         }
@@ -1517,6 +1697,33 @@ public class EEBusHandler extends BaseBridgeHandler implements EEBusEntityChange
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Resolves this Bridge's {@code eebus:oh-hems-entity} child Thing by Thing type
+     * (docs/ADR/053-hems-convenience-entity.md) - the write source of the target-scoped HEMS
+     * Energy Guard use cases.
+     *
+     * @return the first {@code eebus:oh-hems-entity} child's handler, if configured and initialized
+     */
+    Optional<EEBusOhEntityHandler> hemsEntityHandler() {
+        for (Thing child : getThing().getThings()) {
+            if (EEBusBindingConstants.THING_TYPE_OH_HEMS_ENTITY.equals(child.getThingTypeUID())
+                    && child.getHandler() instanceof EEBusOhEntityHandler ohEntityHandler) {
+                return Optional.of(ohEntityHandler);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * @param communicationAddress a SPINE {@code UseCasePartner#getCommunicationAddress()}
+     * @return the partner's SKI via the mDNS browser, or empty if the browser is not started yet or does not
+     *         know the address (docs/ADR/053: used to scope a HEMS Energy Guard to one device)
+     */
+    private Optional<String> skiForCommunicationAddress(String communicationAddress) {
+        EEBusMdnsBrowser browser = this.mdnsBrowser;
+        return browser == null ? Optional.empty() : browser.skiForCommunicationAddress(communicationAddress);
     }
 
     /**

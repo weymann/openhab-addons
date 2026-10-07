@@ -118,6 +118,41 @@ public class EEBusBindingConstants {
     public static final ThingTypeUID THING_TYPE_OH_MPC_ENTITY = new ThingTypeUID(BINDING_ID, "oh-mpc-entity");
 
     /**
+     * Convenience Thing for a complete HEMS (docs/ADR/053-hems-convenience-entity.md): under
+     * {@link #THING_TYPE_OH_DEVICE} it makes the Bridge build several local SPINE Entities - a
+     * Monitoring Entity (MPC/MGCP Client), a Controllable System Entity (LPC/LPP Server, limit
+     * received from the CLS gateway) and one Energy Guard Entity (LPC/LPP Client) each for a
+     * wallbox and a heat pump, so both can receive their own limit. At most one per Bridge.
+     * Served by the same {@code EEBusOhEntityHandler}/{@code EEBusOhEntityConfiguration} classes as
+     * the other Entity Thing types.
+     */
+    public static final ThingTypeUID THING_TYPE_OH_HEMS_ENTITY = new ThingTypeUID(BINDING_ID, "oh-hems-entity");
+
+    /**
+     * Channel Group prefix of the HEMS Energy Guard that feeds the wallbox
+     * (Channel Groups {@code wallbox-lpc}/{@code wallbox-lpp}), docs/ADR/053.
+     */
+    public static final String HEMS_PREFIX_WALLBOX = "wallbox";
+
+    /** Channel Group prefix of the HEMS Energy Guard that feeds the heat pump, docs/ADR/053. */
+    public static final String HEMS_PREFIX_HEAT_PUMP = "heatpump";
+
+    /** {@link ChannelTypeUID} of the read-only text Channels of the HEMS EV groups, docs/ADR/054. */
+    public static final ChannelTypeUID CHANNEL_TYPE_UID_EV_TEXT = new ChannelTypeUID(BINDING_ID, "ev-text");
+
+    /** {@link ChannelTypeUID} of the read-only switch Channels of the HEMS EV groups, docs/ADR/054. */
+    public static final ChannelTypeUID CHANNEL_TYPE_UID_EV_SWITCH = new ChannelTypeUID(BINDING_ID, "ev-switch");
+
+    /** {@link ChannelTypeUID} of the EV charging power Channel, docs/ADR/054. */
+    public static final ChannelTypeUID CHANNEL_TYPE_UID_EV_POWER = new ChannelTypeUID(BINDING_ID, "ev-power");
+
+    /** {@link ChannelTypeUID} of the EV charging current Channels, docs/ADR/054. */
+    public static final ChannelTypeUID CHANNEL_TYPE_UID_EV_CURRENT = new ChannelTypeUID(BINDING_ID, "ev-current");
+
+    /** {@link ChannelTypeUID} of the EV charged energy Channel, docs/ADR/054. */
+    public static final ChannelTypeUID CHANNEL_TYPE_UID_EV_ENERGY = new ChannelTypeUID(BINDING_ID, "ev-energy");
+
+    /**
      * mDNS service type for SHIP 7.3.2 device announcements. Shared between
      * {@code EEBusMdnsBrowser} (runtime session bookkeeping, scoped to an active
      * {@code eebus:oh-device}) and {@code EEBusMdnsDiscoveryParticipant} (Inbox population,
