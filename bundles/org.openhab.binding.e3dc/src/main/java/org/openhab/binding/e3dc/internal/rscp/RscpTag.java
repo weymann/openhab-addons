@@ -819,6 +819,9 @@ public final class RscpTag {
     private RscpTag() {
     }
 
+    /**
+     * The name of the tag, or its hex value when it is unknown.
+     */
     public static String nameOf(int tag) {
         String name = NAMES.get(tag);
         return name != null ? name : String.format("UNKNOWN_0x%08X", tag);
@@ -860,6 +863,9 @@ public final class RscpTag {
         return requestTag != 0 ? requestTag : tag;
     }
 
+    /**
+     * Whether the tag is a request the binding sends.
+     */
     public static boolean isRequestTag(int tag) {
         String name = NAMES.get(tag);
         return name != null && name.contains("REQ");
